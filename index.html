@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>ITAD Bid Watch™</title>
+<!-- v1.1 -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0f1e;font-family:system-ui,-apple-system,sans-serif;overflow:hidden}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:#0f172a}
+::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+select option{background:#1e293b;color:#f8fafc}
+input:focus,textarea:focus{border-color:#f59e0b !important}
+</style>
+
+<style>
+@media (max-width: 768px) {
+  nav[style] { display: none !important; }
+  main[style] { width: 100vw !important; }
+  header[style] { height: auto !important; flex-wrap: wrap !important; padding: 8px 12px !important; gap: 6px !important; }
+  header[style] > div:nth-child(4), header[style] > div:nth-child(5) { display: none !important; }
+  table { display: block !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
+  div[style*="padding:"28px""], div[style*="padding:28px"] { padding: 12px !important; }
+  #mobile-nav { display: flex !important; }
+  main[style] > div { padding-bottom: 70px !important; }
+}
+@media (min-width: 769px) { #mobile-nav { display: none !important; } }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+window._bidbotData = { ready: false, onReady: null };
+const _db = supabase.createClient(
+  "https://powcnxmsrxixufcqbxbw.supabase.co",
+  "sb_publishable_P_iPFer-s3i8zV8106O_zQ_McYNHXeJ"
+);
+Promise.all([
+  _db.from("leads").select("scan_date").order("scan_date",{ascending:false}).limit(1),
+  _db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500),
+  _db.from("sources").select("*").order("date_added",{ascending:false}),
+  _db.from("scans").select("*").order("started_at",{ascending:false}).limit(30)
+]).then(function(r) {
+  // Get most recent scan date and filter hot leads by it
+  var allLeads = r[1].data;
+  var latestDate = r[0].data && r[0].data.length ? r[0].data[0].scan_date : null;
+  if (latestDate && allLeads) {
+    window._LIVE_HOT = allLeads.filter(function(l){ return l.scan_date === latestDate && l.tier === "HOT"; });
+    window._LATEST_SCAN_DATE = latestDate;
+  }
+  if (allLeads && allLeads.length)   window._LIVE_LEADS   = allLeads;
+  if (r[2].data && r[2].data.length) window._LIVE_SOURCES = r[2].data;
+  if (r[3].data && r[3].data.length) window._LIVE_SCANS   = r[3].data;
+  console.log("ITAD Bid Watch: latest scan=", latestDate, "hot=", (window._LIVE_HOT||[]).length, "all=", (window._LIVE_LEADS||[]).length);
+}).catch(function(e){ console.warn("Supabase error", e); })
+.finally(function(){
+  window._bidbotData.ready = true;
+  if (window._bidbotData.onReady) window._bidbotData.onReady();
+});
+</script>
+</head>
+<body>
+<div id="root" style="height:100vh;display:flex;flex-direction:column"></div>
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+// ─── INLINE SVG ICONS (replaces lucide-react) ─────────────────────────────
+const svgProps = (size, rest={}) => ({
+  width: size||16, height: size||16, viewBox:"0 0 24 24",
+  fill:"none", stroke:"currentColor", strokeWidth:2,
+  strokeLinecap:"round", strokeLinejoin:"round", ...rest
+});
+const AlertCircle = ({size=16,...p}) => <svg {...svgProps(size,p)}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+const AlertTriangle = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>;
+const BarChart2 = ({size=16,...p}) => <svg {...svgProps(size,p)}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>;
+const Check = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="20 6 9 17 4 12"/></svg>;
+const CheckCircle = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+const CheckSquare = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>;
+const ChevronDown = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="6 9 12 15 18 9"/></svg>;
+const Clock = ({size=16,...p}) => <svg {...svgProps(size,p)}><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>;
+const Database = ({size=16,...p}) => <svg {...svgProps(size,p)}><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>;
+const Edit2 = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>;
+const ExternalLink = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
+const FileText = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>;
+const Filter = ({size=16,...p}) => <svg {...svgProps(size,p)}><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>;
+const Flame = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>;
+const Globe = ({size=16,...p}) => <svg {...svgProps(size,p)}><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>;
+const Home = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>;
+const Key = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 11-7.778 7.778 5.5 5.5 0 017.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>;
+const List = ({size=16,...p}) => <svg {...svgProps(size,p)}><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>;
+const Play = ({size=16,...p}) => <svg {...svgProps(size,p)}><polygon points="5 3 19 12 5 21 5 3"/></svg>;
+const Plus = ({size=16,...p}) => <svg {...svgProps(size,p)}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>;
+const RefreshCw = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>;
+const Search = ({size=16,...p}) => <svg {...svgProps(size,p)}><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
+const Settings = ({size=16,...p}) => <svg {...svgProps(size,p)}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>;
+const Square = ({size=16,...p}) => <svg {...svgProps(size,p)}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/></svg>;
+const Trash2 = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>;
+const TrendingUp = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>;
+const Upload = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>;
+const X = ({size=16,...p}) => <svg {...svgProps(size,p)}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+const Zap = ({size=16,...p}) => <svg {...svgProps(size,p)}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+
+
+
+// ─── MOCK DATA ───────────────────────────────────────────────────────────────
+const STATES_LIST = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"];
+
+const MOCK_HOT_LEADS = [
+  { id:1, title:"iPad Purchase for Student 1:1 Program", institution:"Goochland County Schools", state:"VA", due_date:"2026-03-18", score:88, tier:"HOT", keywords:"ipad, apple, student device, 1:1", link:"https://goochlandschools.org/bids/1234", memo:"Apple iPads for district-wide student device program refresh" },
+  { id:2, title:"Chromebook Refresh RFP – 2026 Fleet", institution:"Milwaukee Public Schools", state:"WI", due_date:"2026-03-20", score:76, tier:"HOT", keywords:"chromebook, refresh cycle, student devices", link:"https://mps.edu/bids/5678", memo:"Complete Chromebook fleet refresh, 4,200 units, trade-in accepted" },
+  { id:3, title:"MacBook Procurement for Staff", institution:"Niagara County", state:"NY", due_date:"2026-03-22", score:66, tier:"HOT", keywords:"macbook, apple, device program", link:"https://bidnetdirect.com/niagara/9012", memo:"MacBook Air units for county administrative staff replacement" },
+  { id:4, title:"IT Asset Disposition – Surplus Apple Devices", institution:"Hartford City Schools", state:"CT", due_date:"2026-03-25", score:94, tier:"HOT", keywords:"itad, apple, surplus, disposal, decommission", link:"https://hartford.gov/bids/3456", memo:"Decommissioning 800 iPads and 200 MacBooks, ITAD vendor needed" },
+  { id:5, title:"Chromebook Device Program – Take Home Initiative", institution:"Austin ISD", state:"TX", due_date:"2026-03-27", score:71, tier:"HOT", keywords:"chromebook, take home device, fleet", link:"https://austinisd.org/bids/7890", memo:"Take-home Chromebook program for middle school students, 6,000 units" },
+  { id:6, title:"Apple iMac Lab Refresh", institution:"Grand Rapids Community College", state:"MI", due_date:"2026-03-30", score:58, tier:"HOT", keywords:"apple, imac, refresh", link:"https://grcc.edu/bids/2345", memo:"Computer lab refresh with iMac units, 120 workstations" },
+  { id:7, title:"iPad Pro Bulk Purchase – Healthcare Training", institution:"Mercy Hospital System", state:"OH", due_date:"2026-04-02", score:62, tier:"HOT", keywords:"ipad, apple, device program", link:"https://mercy.org/procurement/6789", memo:"iPad Pro units for clinical training simulation program" },
+  { id:8, title:"Surplus Technology Disposition RFQ", institution:"Mansfield CT Public Works", state:"CT", due_date:"2026-04-05", score:55, tier:"HOT", keywords:"surplus, disposed, obsolete, itad", link:"https://mansfieldct.gov/bids/1011", memo:"Mixed surplus tech disposal including tablets, laptops, peripherals" },
+  { id:9, title:"Student Chromebook End-of-Life Replacement", institution:"Henrico County Schools", state:"VA", due_date:"2026-04-08", score:80, tier:"HOT", keywords:"chromebook, end of life, eol, replacement", link:"https://henrico.k12.va.us/bids/1213", memo:"EOL Chromebook replacement, 8,500 units with trade-in evaluation" },
+  { id:10, title:"Apple School Manager Deployment Support", institution:"Fairfax County Public Schools", state:"VA", due_date:"2026-04-10", score:73, tier:"HOT", keywords:"apple school manager, jamf, apple", link:"https://fcps.edu/bids/1415", memo:"JAMF Pro implementation and Apple School Manager rollout support" },
+  { id:11, title:"Chromebook Warranty & Repair Services", institution:"Jefferson Parish Schools", state:"LA", due_date:"2026-04-12", score:44, tier:"WARM", keywords:"chromebook, device program", link:"https://jpschools.org/bids/1617", memo:"Extended warranty and repair for existing Chromebook fleet" },
+  { id:12, title:"IT Equipment Trade-In Buyback Program", institution:"San Diego Unified", state:"CA", due_date:"2026-04-15", score:67, tier:"HOT", keywords:"trade-in, buyback, itad, surplus", link:"https://sandi.net/bids/1819", memo:"Buyback program for end-of-lease Apple devices and Chromebooks" },
+];
+
+const MOCK_SOURCES = [
+  { id:1, friendly_name:"Goochland County Public Schools", url:"https://goochlandschools.org/page/bids-and-proposals", state:"VA", site_type:"links_page", date_added:"2026-01-15", last_scanned:"2026-03-12 06:42 AM", status:"active" },
+  { id:2, friendly_name:"Niagara County – BidNet Direct", url:"https://bidnetdirect.com/niagara-county", state:"NY", site_type:"links_page", date_added:"2026-01-15", last_scanned:"2026-03-12 06:44 AM", status:"active" },
+  { id:3, friendly_name:"Mansfield CT – Bids", url:"https://mansfieldct.gov/bids", state:"CT", site_type:"links_page", date_added:"2026-01-20", last_scanned:"2026-03-12 06:47 AM", status:"active" },
+  { id:4, friendly_name:"Wisconsin VendorNet", url:"https://vendornet.wi.gov/Bids.aspx", state:"WI", site_type:"search_page", date_added:"2026-01-20", last_scanned:"2026-03-12 06:50 AM", status:"active" },
+  { id:5, friendly_name:"Texas SmartBuy", url:"https://www.txsmartbuy.com/sp", state:"TX", site_type:"generic_table", date_added:"2026-02-01", last_scanned:"2026-03-12 06:53 AM", status:"active" },
+  { id:6, friendly_name:"California DGS eProcure", url:"https://caleprocure.ca.gov/pages/PublicBrowser/public-browser.aspx", state:"CA", site_type:"search_page", date_added:"2026-02-05", last_scanned:"2026-03-12 06:55 AM", status:"error" },
+  { id:7, friendly_name:"Virginia eVA Procurement Portal", url:"https://eva.virginia.gov/pages/eva-vendor-resources.htm", state:"VA", site_type:"links_page", date_added:"2026-02-10", last_scanned:"2026-03-11 06:42 AM", status:"active" },
+  { id:8, friendly_name:"New York State Contract Reporter", url:"https://www.nyscr.ny.gov/", state:"NY", site_type:"generic_table", date_added:"2026-02-15", last_scanned:"2026-03-12 07:01 AM", status:"active" },
+  { id:9, friendly_name:"Michigan SIGMA Procurement", url:"https://sigma.michigan.gov/", state:"MI", site_type:"search_page", date_added:"2026-02-20", last_scanned:"never", status:"skipped" },
+  { id:10, friendly_name:"Florida MyFloridaMarketPlace", url:"https://vendor.myfloridamarketplace.com/", state:"FL", site_type:"links_page", date_added:"2026-03-01", last_scanned:"2026-03-12 07:04 AM", status:"active" },
+];
+
+const MOCK_SCAN_HISTORY = [
+  { id:1, date:"2026-03-12", time:"06:40 AM", status:"success", duration:"8m 14s", hot_leads:12, sources:10, errors:1 },
+  { id:2, date:"2026-03-11", time:"06:40 AM", status:"success", duration:"7m 52s", hot_leads:8, sources:10, errors:0 },
+  { id:3, date:"2026-03-10", time:"06:41 AM", status:"success", duration:"9m 03s", hot_leads:15, sources:10, errors:2 },
+  { id:4, date:"2026-03-09", time:"06:40 AM", status:"failed", duration:"3m 17s", hot_leads:0, sources:10, errors:10 },
+  { id:5, date:"2026-03-08", time:"06:40 AM", status:"success", duration:"7m 44s", hot_leads:6, sources:10, errors:0 },
+];
+
+const KEYWORD_PILLARS = [
+  { name:"Apple Terms", key:"apple_terms", weight:22, color:"#f59e0b", terms:["apple","apples","ipad","ipads","iphone","iphones","macbook","macbooks","imac","mac mini","apple school manager","apple business manager","jamf","jamf pro"] },
+  { name:"Chromebook Terms", key:"chromebook_terms", weight:20, color:"#3b82f6", terms:["chromebook","chromebooks","chrome os","chromeos","google workspace for education","g suite for education","google classroom","chrome device management"] },
+  { name:"Fleet Program Terms", key:"fleet_program_terms", weight:8, color:"#8b5cf6", terms:["1:1","one to one","student device","student devices","device program","fleet","take home device","device refresh","refresh cycle","end of life","eol"] },
+  { name:"Disposition Terms", key:"disposition_terms", weight:12, color:"#10b981", terms:["surplus","obsolete","refresh","replacement","trade-in","trade in","buyback","buy back","asset disposition","itad","decommission","decommissioning","retired equipment","dispose","disposal"] },
+  { name:"Soft Negatives", key:"soft_negative_terms", weight:-3, color:"#f97316", terms:["av","audio visual","copier","copiers","printer","printers","hvac","roof","roofing","floor","flooring"] },
+  { name:"Hard Negatives", key:"hard_negative_terms", weight:-999, color:"#ef4444", terms:["construction","asphalt","concrete","paving","roof replacement","re-roof","geotechnical","janitorial","lawn","landscaping","vehicle","vehicles","van","vans","gutter","plumbing","wastewater","diffuser","diffusers"] },
+];
+
+const FILTER_CATEGORIES = [
+  { value:"all", label:"All Hot Leads" },
+  { value:"apple", label:"Apple", keys:["apple","ipad","iphone","macbook","imac","mac mini","jamf","apple school manager"] },
+  { value:"chromebook", label:"Chromebook", keys:["chromebook","chromebooks","chrome os","chromeos","google classroom"] },
+  { value:"device_refresh", label:"Device Refresh", keys:["device refresh","refresh cycle","take home device","student device","1:1","eol","end of life"] },
+  { value:"surplus_tech", label:"Surplus Tech", keys:["surplus","obsolete","itad","decommission","disposal","buyback","trade-in"] },
+  { value:"network_gear", label:"Network Gear", keys:["network","networking","switch","switches","router","access point"] },
+];
+
+// ─── COMPONENTS ───────────────────────────────────────────────────────────────
+
+function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter }) {
+  return (
+    <header style={{
+      background:"#0f172a", borderBottom:"1px solid #1e293b",
+      display:"flex", alignItems:"center", gap:"16px",
+      padding:"0 24px", height:"56px", flexShrink:0, zIndex:10
+    }}>
+      {/* Logo */}
+      <div style={{ display:"flex", alignItems:"center", gap:"10px", marginRight:"8px" }}>
+        <div style={{ width:"32px", height:"32px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", borderRadius:"8px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <Zap size={18} color="#fff" />
+        </div>
+        <div>
+          <div style={{ fontFamily:"'Courier New',monospace", fontWeight:700, fontSize:"15px", color:"#f8fafc", letterSpacing:"0.08em" }}>ITAD</div>
+          <div style={{ fontFamily:"'Courier New',monospace", fontSize:"9px", color:"#f59e0b", letterSpacing:"0.15em" }}>BID WATCH™</div>
+        </div>
+      </div>
+
+      <div style={{ width:"1px", height:"28px", background:"#1e293b" }} />
+
+      {/* State filter */}
+      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+        <Filter size={13} color="#64748b" />
+        <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>State</label>
+        <select value={stateFilter} onChange={e=>setStateFilter(e.target.value)} style={{
+          background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"12px",
+          padding:"4px 28px 4px 10px", borderRadius:"6px", cursor:"pointer", outline:"none",
+          appearance:"none", minWidth:"80px"
+        }}>
+          <option value="all">All States</option>
+          {STATES_LIST.map(s=><option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {/* Entity type — placeholder */}
+      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+        <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Entity</label>
+        <select disabled style={{
+          background:"#1e293b", border:"1px solid #1e293b", color:"#475569", fontSize:"12px",
+          padding:"4px 10px", borderRadius:"6px", cursor:"not-allowed", outline:"none", opacity:0.5
+        }}>
+          <option>Coming Soon</option>
+        </select>
+      </div>
+
+      {/* Class — placeholder */}
+      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+        <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Class</label>
+        <select disabled style={{
+          background:"#1e293b", border:"1px solid #1e293b", color:"#475569", fontSize:"12px",
+          padding:"4px 10px", borderRadius:"6px", cursor:"not-allowed", outline:"none", opacity:0.5
+        }}>
+          <option>Coming Soon</option>
+        </select>
+      </div>
+
+      <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:"8px" }}>
+        <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:"#10b981", boxShadow:"0 0 6px #10b981" }} />
+        <span style={{ fontSize:"11px", color:"#64748b" }}>System Active</span>
+      </div>
+    </header>
+  );
+}
+
+function Sidebar({ active, setActive, onRunScan, scanning }) {
+  const nav = [
+    { key:"dashboard", label:"Dashboard", icon:Home },
+    { key:"hot_leads", label:"Daily Hot Leads", icon:Flame },
+    { key:"all_bids", label:"All Bids", icon:List },
+    { key:"sources", label:"Bid Scan Sources", icon:Globe },
+    { key:"keywords", label:"Keywords & Scoring", icon:Key },
+    { key:"history", label:"Scan History", icon:Clock },
+    { key:"settings", label:"Settings", icon:Settings },
+  ];
+
+  return (
+    <nav style={{
+      width:"240px", flexShrink:0, background:"#0f172a", borderRight:"1px solid #1e293b",
+      display:"flex", flexDirection:"column", padding:"16px 0", overflowY:"auto"
+    }}>
+      <div style={{ padding:"0 12px", marginBottom:"8px" }}>
+        <div style={{ fontSize:"9px", color:"#334155", fontWeight:700, letterSpacing:"0.15em", textTransform:"uppercase", padding:"0 8px 8px" }}>Navigation</div>
+      </div>
+
+      {nav.map(({ key, label, icon: Icon }) => {
+        const isActive = active === key;
+        return (
+          <button key={key} onClick={()=>setActive(key)} style={{
+            display:"flex", alignItems:"center", gap:"10px",
+            padding:"10px 20px", margin:"1px 12px", borderRadius:"8px",
+            background: isActive ? "linear-gradient(90deg,rgba(245,158,11,0.15),rgba(245,158,11,0.05))" : "transparent",
+            border: isActive ? "1px solid rgba(245,158,11,0.2)" : "1px solid transparent",
+            color: isActive ? "#f59e0b" : "#64748b",
+            cursor:"pointer", textAlign:"left", fontSize:"13px", fontWeight: isActive ? 600 : 400,
+            transition:"all 0.15s"
+          }}>
+            <Icon size={15} />
+            <span>{label}</span>
+            {key === "hot_leads" && (
+              <span style={{
+                marginLeft:"auto", background:"#ef4444", color:"#fff",
+                fontSize:"10px", fontWeight:700, padding:"1px 6px", borderRadius:"99px"
+              }}>12</span>
+            )}
+          </button>
+        );
+      })}
+
+      <div style={{ flex:1 }} />
+
+      <div style={{ padding:"12px 12px 0" }}>
+        <div style={{ width:"100%", height:"1px", background:"#1e293b", marginBottom:"12px" }} />
+        <button
+          onClick={onRunScan}
+          disabled={scanning}
+          style={{
+            width:"100%", padding:"11px 16px", borderRadius:"10px",
+            background: scanning ? "#1e293b" : "linear-gradient(135deg,#f59e0b,#f97316)",
+            border:"none", color: scanning ? "#64748b" : "#0f172a",
+            fontSize:"13px", fontWeight:700, cursor: scanning ? "not-allowed" : "pointer",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:"8px",
+            transition:"all 0.2s", letterSpacing:"0.03em",
+            boxShadow: scanning ? "none" : "0 4px 15px rgba(245,158,11,0.3)"
+          }}>
+          {scanning ? <><RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }} /> Scanning...</> : <><Play size={14} /> Scan Now</>}
+        </button>
+      </div>
+    </nav>
+  );
+}
+
+function ScoreBadge({ score }) {
+  const color = score >= 70 ? "#10b981" : score >= 50 ? "#f59e0b" : "#64748b";
+  return (
+    <span style={{
+      background:`${color}18`, border:`1px solid ${color}40`,
+      color, fontSize:"11px", fontWeight:700, padding:"2px 8px", borderRadius:"99px",
+      fontFamily:"'Courier New',monospace"
+    }}>{score}</span>
+  );
+}
+
+function TierBadge({ tier }) {
+  return (
+    <span style={{
+      background: tier==="HOT" ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.15)",
+      border: tier==="HOT" ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(245,158,11,0.3)",
+      color: tier==="HOT" ? "#ef4444" : "#f59e0b",
+      fontSize:"10px", fontWeight:700, padding:"2px 8px", borderRadius:"4px", letterSpacing:"0.05em"
+    }}>{tier}</span>
+  );
+}
+
+function StatusDot({ status }) {
+  const colors = { active:"#10b981", error:"#ef4444", skipped:"#64748b", success:"#10b981", failed:"#ef4444" };
+  const labels = { active:"Active", error:"Error", skipped:"Skipped", success:"Success", failed:"Failed" };
+  return (
+    <span style={{ display:"flex", alignItems:"center", gap:"5px" }}>
+      <span style={{ width:"6px", height:"6px", borderRadius:"50%", background:colors[status]||"#64748b", display:"inline-block" }} />
+      <span style={{ color:colors[status]||"#64748b", fontSize:"12px" }}>{labels[status]||status}</span>
+    </span>
+  );
+}
+
+// ─── VIEWS ────────────────────────────────────────────────────────────────────
+
+function DashboardView({ onNavigate, onRunScan, scanning }) {
+  const today = MOCK_HOT_LEADS.filter(l=>l.tier==="HOT");
+  const stats = [
+    { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan" },
+    { label:"Total Sources", value:MOCK_SOURCES.length, icon:Globe, color:"#3b82f6", sub:`${MOCK_SOURCES.filter(s=>s.status==="active").length} active` },
+    { label:"Hot Leads This Week", value:42, icon:TrendingUp, color:"#10b981", sub:"↑ 18% vs last week" },
+    { label:"Sources Added / Month", value:8, icon:Plus, color:"#8b5cf6", sub:"New this month" },
+  ];
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      {/* Hero */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" }}>
+        <div>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:0, letterSpacing:"-0.02em" }}>Dashboard</h1>
+          <p style={{ color:"#64748b", fontSize:"13px", margin:"4px 0 0" }}>{window._LATEST_SCAN_DATE || "Loading..."} · Last scan: {window._LIVE_SCANS && window._LIVE_SCANS[0] ? new Date(window._LIVE_SCANS[0].started_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) + " EDT" : ""}</p>
+        </div>
+        <button onClick={onRunScan} disabled={scanning} style={{
+          padding:"10px 20px", borderRadius:"10px",
+          background: scanning ? "#1e293b" : "linear-gradient(135deg,#f59e0b,#f97316)",
+          border:"none", color: scanning ? "#64748b" : "#0f172a",
+          fontSize:"13px", fontWeight:700, cursor: scanning ? "not-allowed" : "pointer",
+          display:"flex", alignItems:"center", gap:"8px",
+          boxShadow: scanning ? "none" : "0 4px 20px rgba(245,158,11,0.35)"
+        }}>
+          {scanning ? <><RefreshCw size={14} style={{animation:"spin 1s linear infinite"}} />Scanning…</> : <><Play size={14} />Scan Now</>}
+        </button>
+      </div>
+
+      {/* Stat cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"24px" }}>
+        {stats.map(({ label, value, icon:Icon, color, sub }) => (
+          <div key={label} style={{
+            background:"#1e293b", border:"1px solid #334155", borderRadius:"12px",
+            padding:"20px", display:"flex", flexDirection:"column", gap:"8px"
+          }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ fontSize:"12px", color:"#64748b", fontWeight:600, letterSpacing:"0.04em" }}>{label.toUpperCase()}</span>
+              <div style={{ padding:"6px", borderRadius:"8px", background:`${color}18` }}>
+                <Icon size={14} color={color} />
+              </div>
+            </div>
+            <div style={{ fontSize:"32px", fontWeight:800, color:"#f8fafc", lineHeight:1, fontFamily:"'Courier New',monospace" }}>{value}</div>
+            <div style={{ fontSize:"11px", color:"#64748b" }}>{sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Hot leads table */}
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden", marginBottom:"24px" }}>
+        <div style={{ padding:"16px 20px", borderBottom:"1px solid #334155", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+            <Flame size={15} color="#ef4444" />
+            <span style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px" }}>Today's Hot Leads</span>
+            <span style={{ background:"#ef4444", color:"#fff", fontSize:"10px", fontWeight:700, padding:"1px 7px", borderRadius:"99px" }}>{today.length}</span>
+          </div>
+          <button onClick={()=>onNavigate("hot_leads")} style={{
+            background:"transparent", border:"1px solid #334155", color:"#64748b",
+            fontSize:"12px", padding:"5px 12px", borderRadius:"6px", cursor:"pointer"
+          }}>View All →</button>
+        </div>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"#0f172a" }}>
+              {["Title","Institution","State","Due Date","Score","Link"].map(h=>(
+                <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {today.slice(0,7).map((lead,i)=>(
+              <tr key={lead.id} style={{ borderTop:"1px solid #1e293b", background: i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+                <td style={{ padding:"12px 16px", fontSize:"13px", color:"#cbd5e1", maxWidth:"280px" }}>
+                  <div style={{ fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
+                  <div style={{ fontSize:"11px", color:"#475569", marginTop:"2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.keywords}</div>
+                </td>
+                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", whiteSpace:"nowrap" }}>{lead.institution}</td>
+                <td style={{ padding:"12px 16px" }}><span style={{ background:"#334155", color:"#94a3b8", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
+                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>{lead.due_date}</td>
+                <td style={{ padding:"12px 16px" }}><ScoreBadge score={lead.score} /></td>
+                <td style={{ padding:"12px 16px" }}>
+                  <a href={lead.link} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}>
+                    <ExternalLink size={12} /> Open
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Scan history summary */}
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden" }}>
+        <div style={{ padding:"16px 20px", borderBottom:"1px solid #334155", display:"flex", alignItems:"center", gap:"8px" }}>
+          <Clock size={14} color="#8b5cf6" />
+          <span style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px" }}>Recent Scan History</span>
+        </div>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"#0f172a" }}>
+              {["Date","Time","Status","Duration","Hot Leads","Errors"].map(h=>(
+                <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {MOCK_SCAN_HISTORY.map((s,i)=>(
+              <tr key={s.id} style={{ borderTop:"1px solid #1e293b", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.date || (s.started_at ? s.started_at.split("T")[0] : "")}</td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "")}</td>
+                <td style={{ padding:"11px 16px" }}><StatusDot status={s.status} /></td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.duration}</td>
+                <td style={{ padding:"11px 16px", fontSize:"13px", color: s.hot_leads>0 ? "#10b981" : "#64748b", fontWeight:600 }}>{s.hot_leads}</td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color: s.errors>0 ? "#ef4444" : "#64748b" }}>{s.errors}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function HotLeadsView({ stateFilter, allBids=false }) {
+  const [category, setCategory] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const _src = (allBids && window._ALL_LEADS) ? window._ALL_LEADS : MOCK_HOT_LEADS;
+  const filtered = _src.filter(l=>{
+    if (!allBids && l.tier !== "HOT") return false;
+    if (stateFilter !== "all" && l.state !== stateFilter) return false;
+    if (search && !l.title.toLowerCase().includes(search.toLowerCase()) && !l.institution.toLowerCase().includes(search.toLowerCase())) return false;
+    if (category !== "all") {
+      const cat = FILTER_CATEGORIES.find(c=>c.value===category);
+      if (cat) {
+        const hit = cat.keys.some(k=>l.keywords.toLowerCase().includes(k) || l.title.toLowerCase().includes(k));
+        if (!hit) return false;
+      }
+    }
+    return true;
+  }).sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      <div style={{ marginBottom:"20px" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px", letterSpacing:"-0.02em" }}>
+          {allBids ? "All Bids" : "Daily Hot Leads"}
+        </h1>
+        <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>
+          {allBids ? "Historical master list · " : "Sorted by due date (soonest first) · "}
+          <span style={{ color:"#f59e0b" }}>{filtered.length} results</span>
+        </p>
+      </div>
+
+      {/* Filters */}
+      <div style={{ display:"flex", gap:"12px", marginBottom:"20px", flexWrap:"wrap" }}>
+        <div style={{ position:"relative", flex:1, minWidth:"200px" }}>
+          <Search size={13} style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)", color:"#475569" }} />
+          <input
+            value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Search bids…"
+            style={{
+              width:"100%", padding:"8px 12px 8px 32px", background:"#1e293b",
+              border:"1px solid #334155", borderRadius:"8px", color:"#cbd5e1",
+              fontSize:"13px", outline:"none", boxSizing:"border-box"
+            }}
+          />
+        </div>
+        <select value={category} onChange={e=>setCategory(e.target.value)} style={{
+          background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1",
+          fontSize:"13px", padding:"8px 14px", borderRadius:"8px", cursor:"pointer", outline:"none"
+        }}>
+          {FILTER_CATEGORIES.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+      </div>
+
+      {/* Table */}
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"#0f172a" }}>
+              {["Title / Bid Name","Institution","State","Due Date ↑","Score","Tier","Link"].map(h=>(
+                <th key={h} style={{ padding:"11px 16px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.length === 0 ? (
+              <tr><td colSpan={7} style={{ padding:"48px 20px", textAlign:"center" }}>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"10px" }}>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <div style={{ fontSize:"18px", fontWeight:700, color:"#f8fafc" }}>No Matches Found</div>
+                    <div style={{ fontSize:"13px", color:"#64748b", maxWidth:"240px", lineHeight:"1.5" }}>Try adjusting your state filter or search term</div>
+                  </div>
+                </td></tr>
+            ) : filtered.map((lead,i)=>(
+              <tr key={lead.id} style={{ borderTop:"1px solid #1e293b", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+                <td style={{ padding:"12px 16px", maxWidth:"300px" }}>
+                  <div style={{ fontSize:"13px", color:"#e2e8f0", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
+                  <div style={{ fontSize:"11px", color:"#475569", marginTop:"3px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.memo}</div>
+                  <div style={{ fontSize:"10px", color:"#334155", marginTop:"2px", fontFamily:"monospace" }}>Keywords: {lead.keywords || lead.matched_positive || ""}</div>
+                </td>
+                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", whiteSpace:"nowrap" }}>{lead.institution}</td>
+                <td style={{ padding:"12px 16px" }}><span style={{ background:"#334155", color:"#94a3b8", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
+                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>{lead.due_date}</td>
+                <td style={{ padding:"12px 16px" }}><ScoreBadge score={lead.score} /></td>
+                <td style={{ padding:"12px 16px" }}><TierBadge tier={lead.tier} /></td>
+                <td style={{ padding:"12px 16px" }}>
+                  <a href={lead.link} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}>
+                    <ExternalLink size={12} /> Open
+                  </a>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SourcesView() {
+  const [sources, setSources] = useState(MOCK_SOURCES);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState(new Set());
+  const [editingId, setEditingId] = useState(null);
+  const [editVal, setEditVal] = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showCsvModal, setShowCsvModal] = useState(false);
+  const [stateFilter, setStateFilter] = useState("all");
+
+  const filtered = sources.filter(s => {
+    const matchSearch = !search || s.friendly_name.toLowerCase().includes(search.toLowerCase()) ||
+      s.url.toLowerCase().includes(search.toLowerCase()) || (s.state||"").toLowerCase().includes(search.toLowerCase());
+    const matchState = stateFilter === "all" || s.state === stateFilter;
+    return matchSearch && matchState;
+  });
+  const sourceStates = ["all", ...Array.from(new Set(sources.map(s=>s.state).filter(Boolean))).sort()];
+
+  const allChecked = filtered.length > 0 && filtered.every(s=>selected.has(s.id));
+  const toggleAll = () => {
+    if (allChecked) setSelected(new Set());
+    else setSelected(new Set(filtered.map(s=>s.id)));
+  };
+  const toggleRow = (id) => {
+    const ns = new Set(selected);
+    ns.has(id) ? ns.delete(id) : ns.add(id);
+    setSelected(ns);
+  };
+
+  const startEdit = (s) => { setEditingId(s.id); setEditVal(s.friendly_name); };
+  const saveEdit = (id) => {
+    setSources(prev=>prev.map(s=>s.id===id?{...s,friendly_name:editVal}:s));
+    setEditingId(null);
+  };
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
+        <div>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Bid Scan Sources</h1>
+          <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>{sources.length} sources tracked · {sources.filter(s=>s.status==="active").length} active</p>
+        </div>
+        <div style={{ display:"flex", gap:"10px" }}>
+          <button onClick={()=>setShowCsvModal(true)} style={{
+            padding:"8px 16px", borderRadius:"8px", background:"transparent",
+            border:"1px solid #334155", color:"#94a3b8", fontSize:"13px", cursor:"pointer",
+            display:"flex", alignItems:"center", gap:"6px"
+          }}><Upload size={13} /> Upload CSV</button>
+          <button onClick={()=>setShowAddModal(true)} style={{
+            padding:"8px 16px", borderRadius:"8px",
+            background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none",
+            color:"#0f172a", fontSize:"13px", fontWeight:700, cursor:"pointer",
+            display:"flex", alignItems:"center", gap:"6px"
+          }}><Plus size={13} /> Add Source</button>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div style={{ position:"relative", marginBottom:"16px", maxWidth:"400px" }}>
+        <Search size={13} style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)", color:"#475569" }} />
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name, URL, state…"
+          style={{ width:"100%", padding:"8px 12px 8px 32px", background:"#1e293b", border:"1px solid #334155", borderRadius:"8px", color:"#cbd5e1", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
+      </div>
+
+      {/* Bulk action bar */}
+      {selected.size > 0 && (
+        <div style={{ padding:"10px 16px", background:"#1e3a5f", border:"1px solid #2563eb", borderRadius:"8px", marginBottom:"12px", display:"flex", alignItems:"center", gap:"12px" }}>
+          <span style={{ color:"#93c5fd", fontSize:"13px" }}>{selected.size} source{selected.size>1?"s":""} selected</span>
+          <button style={{ padding:"5px 12px", background:"#2563eb", border:"none", color:"#fff", fontSize:"12px", borderRadius:"6px", cursor:"pointer" }}>
+            <RefreshCw size={11} style={{ marginRight:"5px", verticalAlign:"middle" }} />Re-validate Selected
+          </button>
+          <button onClick={()=>setSelected(new Set())} style={{ marginLeft:"auto", background:"transparent", border:"none", color:"#64748b", cursor:"pointer", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px" }}>
+            <X size={12} /> Clear
+          </button>
+        </div>
+      )}
+
+      {/* Table */}
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"#0f172a" }}>
+              <th style={{ padding:"11px 12px", width:"36px" }}>
+                <div onClick={toggleAll} style={{ cursor:"pointer", color:"#475569" }}>
+                  {allChecked ? <CheckSquare size={14} color="#f59e0b" /> : <Square size={14} />}
+                </div>
+              </th>
+              {["Friendly Name","URL","State","Site Type","Date Added","Last Scanned","Status","Actions"].map(h=>(
+                <th key={h} style={{ padding:"11px 12px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((s,i)=>(
+              <tr key={s.id} style={{ borderTop:"1px solid #0f172a", background: selected.has(s.id) ? "rgba(37,99,235,0.08)" : i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+                <td style={{ padding:"10px 12px" }}>
+                  <div onClick={()=>toggleRow(s.id)} style={{ cursor:"pointer", color:"#475569" }}>
+                    {selected.has(s.id) ? <CheckSquare size={14} color="#f59e0b" /> : <Square size={14} />}
+                  </div>
+                </td>
+                <td style={{ padding:"10px 12px", maxWidth:"200px" }}>
+                  {editingId===s.id ? (
+                    <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
+                      <input value={editVal} onChange={e=>setEditVal(e.target.value)}
+                        onKeyDown={e=>{if(e.key==="Enter")saveEdit(s.id);if(e.key==="Escape")setEditingId(null);}}
+                        autoFocus
+                        style={{ flex:1, padding:"4px 8px", background:"#0f172a", border:"1px solid #f59e0b", borderRadius:"4px", color:"#f8fafc", fontSize:"12px", outline:"none" }}
+                      />
+                      <button onClick={()=>saveEdit(s.id)} style={{ background:"#10b981", border:"none", borderRadius:"4px", padding:"4px 6px", cursor:"pointer" }}><Check size={11} color="#fff" /></button>
+                      <button onClick={()=>setEditingId(null)} style={{ background:"transparent", border:"none", cursor:"pointer", color:"#64748b" }}><X size={11} /></button>
+                    </div>
+                  ) : (
+                    <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+                      <span style={{ fontSize:"13px", color:"#e2e8f0", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.friendly_name}</span>
+                      <button onClick={()=>startEdit(s)} style={{ background:"transparent", border:"none", cursor:"pointer", color:"#334155", padding:"2px", flexShrink:0 }}>
+                        <Edit2 size={11} />
+                      </button>
+                    </div>
+                  )}
+                </td>
+                <td style={{ padding:"10px 12px", maxWidth:"220px" }}>
+                  <a href={s.url} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px", textDecoration:"none", display:"block", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                    {s.url}
+                  </a>
+                </td>
+                <td style={{ padding:"10px 12px" }}>
+                  <span style={{ background:"#334155", color:"#94a3b8", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{s.state}</span>
+                </td>
+                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#64748b", fontFamily:"monospace" }}>{s.site_type}</td>
+                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#475569", fontFamily:"monospace" }}>{s.date_added}</td>
+                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#475569", fontFamily:"monospace" }}>{s.last_scanned}</td>
+                <td style={{ padding:"10px 12px" }}><StatusDot status={s.status} /></td>
+                <td style={{ padding:"10px 12px" }}>
+                  <button style={{ background:"transparent", border:"1px solid #334155", color:"#64748b", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer", display:"flex", alignItems:"center", gap:"4px" }}>
+                    <RefreshCw size={10} />Validate
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Add Modal */}
+      {showAddModal && <AddSourceModal onClose={()=>setShowAddModal(false)} onAdd={s=>{setSources(prev=>[...prev,{...s,id:prev.length+1,date_added:new Date().toISOString().slice(0,10),last_scanned:"never",status:"active"}]);setShowAddModal(false);}} />}
+      {showCsvModal && <CsvModal onClose={()=>setShowCsvModal(false)} />}
+    </div>
+  );
+}
+
+function AddSourceModal({ onClose, onAdd }) {
+  const [url, setUrl] = useState("");
+  const [name, setName] = useState("");
+  const [state, setState] = useState("");
+  const [stype, setStype] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [validating, setValidating] = useState(false);
+  const [error, setError] = useState("");
+  const urlValid = url.startsWith("https://") && url.length > 12;
+
+  const handleValidate = () => {
+    if (!urlValid || !state || !stype || !name.trim() || !instructions.trim()) {
+      setError("All fields are required. URL must start with https://.");
+      return;
+    }
+    if (!/^[A-Z]{2}$/.test(state)) {
+      setError("State must be exactly 2 uppercase letters (e.g. FL, TX).");
+      return;
+    }
+    setError("");
+    setValidating(true);
+    setTimeout(()=>{
+      setValidating(false);
+      onAdd({ url, friendly_name:name||url, state, site_type:stype, scan_instructions:instructions });
+    }, 1800);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999 }}>
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"520px", maxWidth:"95vw" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
+          <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#f8fafc" }}>Add New Source</h2>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", cursor:"pointer" }}><X size={18} /></button>
+        </div>
+        {[
+          { label:"URL *", val:url, set:setUrl, ph:"https://example.com/bids", type:"url", note: url && !urlValid ? "Must be a valid HTTPS URL" : "" },
+          { label:"Friendly Name *", val:name, set:setName, ph:"e.g. Goochland County Schools" },
+        ].map(({label,val,set,ph,note})=>(
+          <div key={label} style={{ marginBottom:"14px" }}>
+            <label style={{ fontSize:"11px", color:"#94a3b8", fontWeight:600, display:"block", marginBottom:"6px", letterSpacing:"0.06em" }}>{label.toUpperCase()}</label>
+            <input value={val} onChange={e=>set(e.target.value)} placeholder={ph}
+              style={{ width:"100%", padding:"9px 12px", background:"#0f172a", border:`1px solid ${note?"#ef4444":"#334155"}`, borderRadius:"8px", color:"#f8fafc", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
+            {note && <div style={{ fontSize:"11px", color:"#ef4444", marginTop:"4px" }}>{note}</div>}
+          </div>
+        ))}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px", marginBottom:"14px" }}>
+          <div>
+            <label style={{ fontSize:"11px", color:"#94a3b8", fontWeight:600, display:"block", marginBottom:"6px", letterSpacing:"0.06em" }}>STATE * (2-LETTER)</label>
+            <select value={state} onChange={e=>setState(e.target.value)}
+              style={{ width:"100%", padding:"9px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:state?"#f8fafc":"#64748b", fontSize:"13px", outline:"none" }}>
+              <option value="">Select state</option>
+              {STATES_LIST.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{ fontSize:"11px", color:"#94a3b8", fontWeight:600, display:"block", marginBottom:"6px", letterSpacing:"0.06em" }}>SITE TYPE *</label>
+            <select value={stype} onChange={e=>setStype(e.target.value)}
+              style={{ width:"100%", padding:"9px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:stype?"#f8fafc":"#64748b", fontSize:"13px", outline:"none" }}>
+              <option value="">Select type</option>
+              <option value="links_page">Links Page</option>
+              <option value="search_page">Search Page</option>
+              <option value="generic_table">Generic Table</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ marginBottom:"18px" }}>
+          <label style={{ fontSize:"11px", color:"#94a3b8", fontWeight:600, display:"block", marginBottom:"6px", letterSpacing:"0.06em" }}>SCAN INSTRUCTIONS *</label>
+          <textarea value={instructions} onChange={e=>setInstructions(e.target.value)}
+            placeholder="e.g. Scan bid title links on this page. Stop scanning when you reach Awarded Bids"
+            rows={3}
+            style={{ width:"100%", padding:"9px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc", fontSize:"13px", outline:"none", resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }} />
+        </div>
+        {error && <div style={{ color:"#ef4444", fontSize:"12px", marginBottom:"12px", padding:"8px 12px", background:"rgba(239,68,68,0.1)", borderRadius:"6px", border:"1px solid rgba(239,68,68,0.2)" }}>{error}</div>}
+        <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
+          <button onClick={onClose} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>Cancel</button>
+          <button onClick={handleValidate} disabled={validating}
+            style={{ padding:"9px 18px", background: validating ? "#334155" : "linear-gradient(135deg,#f59e0b,#f97316)", border:"none", borderRadius:"8px", color: validating ? "#64748b" : "#0f172a", fontSize:"13px", fontWeight:700, cursor: validating ? "not-allowed" : "pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            {validating ? <><RefreshCw size={12} style={{animation:"spin 1s linear infinite"}} />Validating…</> : "Validate & Add"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CsvModal({ onClose }) {
+  const headers = "url,friendly_name,state,site_type,scan_instructions";
+  const example = "https://www.goochlandschools.org/bids,Goochland County Schools,VA,links_page,Scan bid links\nhttps://vendornet.wi.gov/Bids.aspx,Wisconsin VendorNet,WI,search_page,Search for bids";
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999 }}>
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"560px", maxWidth:"92vw", maxHeight:"90vh", overflowY:"auto" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
+          <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#f8fafc" }}>Upload Sources via CSV</h2>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", cursor:"pointer" }}><X size={18} /></button>
+        </div>
+        <div style={{ marginBottom:"16px" }}>
+          <p style={{ color:"#94a3b8", fontSize:"13px", margin:"0 0 12px" }}>All 5 columns are required. CSV must use these exact headers:</p>
+          <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", padding:"12px 14px", fontFamily:"'Courier New',monospace", fontSize:"12px", color:"#10b981", marginBottom:"12px" }}>{headers}</div>
+          <p style={{ color:"#64748b", fontSize:"12px", margin:"0 0 6px" }}>Example rows:</p>
+          <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", padding:"12px 14px", fontFamily:"'Courier New',monospace", fontSize:"11px", color:"#94a3b8", whiteSpace:"pre-wrap", lineHeight:1.6 }}>{example}</div>
+        </div>
+        <div style={{ border:"2px dashed #334155", borderRadius:"10px", padding:"32px", textAlign:"center", marginBottom:"16px", cursor:"pointer" }}
+          onDragOver={e=>e.preventDefault()}>
+          <Upload size={24} color="#475569" style={{ marginBottom:"8px" }} />
+          <div style={{ color:"#64748b", fontSize:"13px" }}>Drag & drop your CSV here, or</div>
+          <button style={{ marginTop:"8px", padding:"7px 16px", background:"#334155", border:"none", borderRadius:"6px", color:"#94a3b8", fontSize:"12px", cursor:"pointer" }}>Browse File</button>
+        </div>
+        <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"8px", padding:"10px 14px", fontSize:"12px", color:"#f59e0b", marginBottom:"16px" }}>
+          <strong>Validation rules:</strong> url must start with https:// · state must be 2 uppercase letters · site_type must be links_page, search_page, or generic_table · all fields required
+        </div>
+        <div style={{ display:"flex", justifyContent:"flex-end" }}>
+          <button onClick={onClose} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>Close</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PRICING PLANS ────────────────────────────────────────────────────────────
+const PLANS = [
+  { key:"starter", label:"Starter", price:"$9.99", period:"/mo", maxCustom:3,  color:"#64748b", desc:"Up to 3 custom pillars" },
+  { key:"pro",     label:"Pro",     price:"$19.99", period:"/mo", maxCustom:10, color:"#3b82f6", desc:"Up to 10 custom pillars" },
+  { key:"unlimited",label:"Unlimited",price:"$49", period:"/mo", maxCustom:Infinity, color:"#f59e0b", desc:"Unlimited custom pillars" },
+];
+
+const PILLAR_COLORS = ["#f59e0b","#3b82f6","#8b5cf6","#10b981","#ec4899","#06b6d4","#f97316","#84cc16"];
+
+function Toggle({ enabled, onChange }) {
+  return (
+    <div onClick={onChange} style={{
+      width:"40px", height:"22px", borderRadius:"99px", cursor:"pointer",
+      background: enabled ? "#f59e0b" : "#334155",
+      position:"relative", transition:"background 0.2s", flexShrink:0
+    }}>
+      <div style={{
+        position:"absolute", top:"3px",
+        left: enabled ? "21px" : "3px",
+        width:"16px", height:"16px", borderRadius:"50%",
+        background:"#fff", transition:"left 0.2s",
+        boxShadow:"0 1px 3px rgba(0,0,0,0.3)"
+      }} />
+    </div>
+  );
+}
+
+function KeywordsView() {
+  const [pillars, setPillars] = useState(() =>
+    KEYWORD_PILLARS.map(p => ({ ...p, enabled: true, custom: false }))
+  );
+  const [currentPlan, setCurrentPlan] = useState("starter");
+  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [showAddPillar, setShowAddPillar] = useState(false);
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [newPillar, setNewPillar] = useState({ name:"", weight:10, terms:"", color:"#06b6d4", negative: false });
+  const [addTermInput, setAddTermInput] = useState({});
+  const [editingTerms, setEditingTerms] = useState(null);
+  const [toast, setToast] = useState(null);
+
+  const plan = PLANS.find(p => p.key === currentPlan);
+  const customPillars = pillars.filter(p => p.custom);
+  const atLimit = customPillars.length >= plan.maxCustom;
+
+  const showToast = (msg, color="#10b981") => {
+    setToast({ msg, color });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const togglePillar = (key) => {
+    setPillars(prev => prev.map(p => p.key === key ? { ...p, enabled: !p.enabled } : p));
+  };
+
+  const deletePillar = (key) => {
+    setPillars(prev => prev.filter(p => p.key !== key));
+    showToast("Pillar removed", "#ef4444");
+  };
+
+  const addTerm = (pillarKey, term) => {
+    const t = term.trim().toLowerCase();
+    if (!t) return;
+    setPillars(prev => prev.map(p =>
+      p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x=>x!==t), t] } : p
+    ));
+    setAddTermInput(prev => ({ ...prev, [pillarKey]: "" }));
+  };
+
+  const removeTerm = (pillarKey, term) => {
+    setPillars(prev => prev.map(p =>
+      p.key === pillarKey ? { ...p, terms: p.terms.filter(t => t !== term) } : p
+    ));
+  };
+
+  const handleAddPillar = () => {
+    if (!newPillar.name.trim()) return;
+    const terms = newPillar.terms.split(",").map(t=>t.trim().toLowerCase()).filter(Boolean);
+    const key = "custom_" + newPillar.name.toLowerCase().replace(/\s+/g,"_") + "_" + Date.now();
+    const weight = newPillar.negative ? -Math.abs(newPillar.weight) : Math.abs(newPillar.weight);
+    setPillars(prev => [...prev, {
+      name: newPillar.name.trim(), key, weight,
+      color: newPillar.color, terms, enabled: true, custom: true
+    }]);
+    setNewPillar({ name:"", weight:10, terms:"", color:"#06b6d4", negative:false });
+    setShowAddPillar(false);
+    showToast(`"${newPillar.name.trim()}" pillar added!`);
+  };
+
+  const enabledCount = pillars.filter(p => p.enabled).length;
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1, position:"relative" }}>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position:"fixed", bottom:"28px", right:"28px", zIndex:999,
+          background: toast.color, color:"#fff", padding:"12px 20px",
+          borderRadius:"10px", fontSize:"13px", fontWeight:600,
+          boxShadow:"0 4px 20px rgba(0,0,0,0.4)"
+        }}>{toast.msg}</div>
+      )}
+
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:"24px" }}>
+        <div>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Keywords & Scoring</h1>
+          <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>
+            {enabledCount} of {pillars.length} pillars active
+          </p>
+        </div>
+        <div style={{ display:"flex", gap:"10px", alignItems:"center" }}>
+          <button onClick={() => setShowPricingModal(true)} style={{
+            padding:"8px 14px", background:"transparent", border:"1px solid #334155",
+            borderRadius:"8px", color:"#94a3b8", fontSize:"12px", cursor:"pointer",
+            display:"flex", alignItems:"center", gap:"6px"
+          }}>
+            <span style={{ fontSize:"10px" }}>⭐</span> {plan.label} Plan
+          </button>
+          <button
+            onClick={() => { if (atLimit) { setShowUpgrade(true); } else { setShowAddPillar(true); } }}
+            style={{
+              padding:"8px 16px", borderRadius:"8px", fontSize:"13px", fontWeight:600,
+              cursor:"pointer", display:"flex", alignItems:"center", gap:"7px",
+              background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", color:"#0f172a",
+              boxShadow:"0 3px 12px rgba(245,158,11,0.35)"
+            }}>
+            <Plus size={14} /> Add Custom Pillar
+          </button>
+        </div>
+      </div>
+
+      {/* Plan usage bar */}
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"16px 20px", marginBottom:"20px" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"10px" }}>
+          <div style={{ fontSize:"12px", color:"#94a3b8", fontWeight:600 }}>
+            CUSTOM PILLAR USAGE — <span style={{ color: plan.color }}>{plan.label.toUpperCase()} PLAN</span>
+          </div>
+          <span style={{ fontSize:"12px", color:"#64748b" }}>
+            {customPillars.length} / {plan.maxCustom === Infinity ? "∞" : plan.maxCustom} custom pillars
+          </span>
+        </div>
+        <div style={{ height:"6px", background:"#0f172a", borderRadius:"99px", overflow:"hidden" }}>
+          <div style={{
+            height:"100%", borderRadius:"99px", transition:"width 0.4s",
+            background: atLimit ? "#ef4444" : plan.color,
+            width: plan.maxCustom === Infinity ? "30%" : `${Math.min(100, (customPillars.length / plan.maxCustom) * 100)}%`
+          }} />
+        </div>
+        {atLimit && (
+          <div style={{ marginTop:"10px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <span style={{ fontSize:"12px", color:"#ef4444" }}>⚠ Pillar limit reached on {plan.label} plan</span>
+            <button onClick={() => setShowPricingModal(true)} style={{
+              padding:"5px 12px", background:"#3b82f6", border:"none", borderRadius:"6px",
+              color:"#fff", fontSize:"12px", fontWeight:600, cursor:"pointer"
+            }}>Upgrade Plan →</button>
+          </div>
+        )}
+      </div>
+
+      {/* Pillars grid */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
+        {pillars.map(pillar => (
+          <div key={pillar.key} style={{
+            background:"#1e293b",
+            border:`1px solid ${pillar.enabled ? pillar.color + "40" : "#1e293b"}`,
+            borderLeft:`3px solid ${pillar.enabled ? pillar.color : "#334155"}`,
+            borderRadius:"12px", padding:"18px",
+            opacity: pillar.enabled ? 1 : 0.5,
+            transition:"all 0.2s"
+          }}>
+            {/* Pillar header */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px" }}>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+                  <div style={{ fontWeight:700, color: pillar.enabled ? "#f8fafc" : "#475569", fontSize:"14px" }}>{pillar.name}</div>
+                  {pillar.custom && (
+                    <span style={{ fontSize:"9px", padding:"1px 6px", borderRadius:"99px", background:"#f59e0b20", color:"#f59e0b", border:"1px solid #f59e0b30", fontWeight:700, letterSpacing:"0.05em" }}>CUSTOM</span>
+                  )}
+                </div>
+                <div style={{ fontSize:"11px", color:"#475569", marginTop:"2px", fontFamily:"monospace" }}>{pillar.key}</div>
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
+                <div style={{
+                  padding:"3px 10px", borderRadius:"99px", fontSize:"11px", fontWeight:700, fontFamily:"monospace",
+                  background: pillar.enabled ? `${pillar.color}18` : "#0f172a",
+                  color: pillar.enabled ? pillar.color : "#475569",
+                  border:`1px solid ${pillar.enabled ? pillar.color + "30" : "#334155"}`
+                }}>
+                  {pillar.weight > 0 ? `+${pillar.weight}` : pillar.weight} pts
+                </div>
+                <Toggle enabled={pillar.enabled} onChange={() => togglePillar(pillar.key)} />
+              </div>
+            </div>
+
+            {/* Terms */}
+            <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom: editingTerms === pillar.key ? "10px" : "0" }}>
+              {pillar.terms.map(t => (
+                <span key={t} style={{
+                  background:"#0f172a", border:"1px solid #334155", color:"#94a3b8",
+                  fontSize:"11px", padding:"3px 8px", borderRadius:"4px", fontFamily:"monospace",
+                  display:"flex", alignItems:"center", gap:"4px", cursor: editingTerms === pillar.key ? "pointer" : "default"
+                }}>
+                  {t}
+                  {editingTerms === pillar.key && (
+                    <span onClick={() => removeTerm(pillar.key, t)} style={{ color:"#ef4444", fontWeight:700, lineHeight:1, marginLeft:"2px" }}>×</span>
+                  )}
+                </span>
+              ))}
+            </div>
+
+            {/* Edit terms mode */}
+            {editingTerms === pillar.key && (
+              <div style={{ marginTop:"10px", display:"flex", gap:"6px" }}>
+                <input
+                  placeholder="add term, press Enter"
+                  value={addTermInput[pillar.key] || ""}
+                  onChange={e => setAddTermInput(prev => ({ ...prev, [pillar.key]: e.target.value }))}
+                  onKeyDown={e => { if (e.key === "Enter") addTerm(pillar.key, addTermInput[pillar.key] || ""); }}
+                  style={{
+                    flex:1, background:"#0f172a", border:"1px solid #334155", borderRadius:"6px",
+                    color:"#f8fafc", fontSize:"12px", padding:"6px 10px", outline:"none", fontFamily:"monospace"
+                  }}
+                  autoFocus
+                />
+                <button onClick={() => addTerm(pillar.key, addTermInput[pillar.key] || "")} style={{
+                  padding:"6px 12px", background:"#10b981", border:"none", borderRadius:"6px",
+                  color:"#fff", fontSize:"12px", fontWeight:600, cursor:"pointer"
+                }}>Add</button>
+              </div>
+            )}
+
+            {/* Footer actions */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:"12px", paddingTop:"10px", borderTop:"1px solid #0f172a" }}>
+              <button
+                onClick={() => setEditingTerms(editingTerms === pillar.key ? null : pillar.key)}
+                style={{
+                  padding:"4px 10px", background:"transparent", border:"1px solid #334155",
+                  borderRadius:"6px", color:"#64748b", fontSize:"11px", cursor:"pointer"
+                }}>
+                {editingTerms === pillar.key ? "✓ Done editing" : "✏ Edit terms"}
+              </button>
+              {pillar.custom && (
+                <button onClick={() => deletePillar(pillar.key)} style={{
+                  padding:"4px 10px", background:"transparent", border:"1px solid #ef444430",
+                  borderRadius:"6px", color:"#ef4444", fontSize:"11px", cursor:"pointer"
+                }}>🗑 Remove</button>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {/* Add pillar placeholder */}
+        <div
+          onClick={() => { if (atLimit) setShowUpgrade(true); else setShowAddPillar(true); }}
+          style={{
+            background:"transparent", border:"2px dashed #334155", borderRadius:"12px",
+            padding:"18px", display:"flex", flexDirection:"column", alignItems:"center",
+            justifyContent:"center", gap:"8px", cursor:"pointer", minHeight:"120px",
+            transition:"all 0.15s"
+          }}
+          onMouseEnter={e => e.currentTarget.style.borderColor="#f59e0b"}
+          onMouseLeave={e => e.currentTarget.style.borderColor="#334155"}
+        >
+          <div style={{ width:"36px", height:"36px", borderRadius:"50%", background:"#1e293b", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Plus size={18} color="#64748b" />
+          </div>
+          <div style={{ fontSize:"13px", color:"#64748b", fontWeight:600 }}>Add Custom Pillar</div>
+          <div style={{ fontSize:"11px", color:"#475569", textAlign:"center" }}>
+            {atLimit ? `Upgrade to add more (${plan.label} limit: ${plan.maxCustom})` : `${plan.maxCustom === Infinity ? "Unlimited" : plan.maxCustom - customPillars.length + " more"} available on ${plan.label}`}
+          </div>
+        </div>
+      </div>
+
+      {/* Scoring rules */}
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"20px", marginTop:"20px" }}>
+        <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px", marginBottom:"12px" }}>Scoring Rules</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
+          <div style={{ background:"#0f172a", borderRadius:"8px", padding:"14px" }}>
+            <div style={{ color:"#10b981", fontSize:"11px", fontWeight:700, letterSpacing:"0.08em", marginBottom:"6px" }}>GATE (must match one)</div>
+            <div style={{ fontFamily:"monospace", fontSize:"12px", color:"#94a3b8" }}>apple_terms<br/>chromebook_terms<br/>disposition_terms</div>
+          </div>
+          <div style={{ background:"#0f172a", borderRadius:"8px", padding:"14px" }}>
+            <div style={{ color:"#ef4444", fontSize:"11px", fontWeight:700, letterSpacing:"0.08em", marginBottom:"6px" }}>DROP (any match = drop)</div>
+            <div style={{ fontFamily:"monospace", fontSize:"12px", color:"#94a3b8" }}>hard_negative_terms</div>
+          </div>
+          <div style={{ background:"#0f172a", borderRadius:"8px", padding:"14px" }}>
+            <div style={{ color:"#f59e0b", fontSize:"11px", fontWeight:700, letterSpacing:"0.08em", marginBottom:"6px" }}>TIER LOGIC</div>
+            <div style={{ fontFamily:"monospace", fontSize:"12px", color:"#94a3b8" }}>HOT: gate pass, no soft neg<br/>WARM: soft neg present</div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── ADD PILLAR MODAL ── */}
+      {showAddPillar && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"480px", maxWidth:"95vw" }}>
+            <div style={{ fontSize:"18px", fontWeight:700, color:"#f8fafc", marginBottom:"20px" }}>Create Custom Pillar</div>
+
+            <div style={{ display:"grid", gap:"14px" }}>
+              <div>
+                <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>PILLAR NAME *</label>
+                <input value={newPillar.name} onChange={e => setNewPillar(p=>({...p,name:e.target.value}))}
+                  placeholder="e.g. Network Equipment"
+                  style={{ width:"100%", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc", fontSize:"13px", padding:"9px 12px", outline:"none", boxSizing:"border-box" }} />
+              </div>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
+                <div>
+                  <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>SCORE WEIGHT</label>
+                  <input type="number" value={newPillar.weight} onChange={e => setNewPillar(p=>({...p,weight:Number(e.target.value)}))}
+                    style={{ width:"100%", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc", fontSize:"13px", padding:"9px 12px", outline:"none", boxSizing:"border-box" }} />
+                </div>
+                <div>
+                  <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>PILLAR COLOR</label>
+                  <div style={{ display:"flex", gap:"6px", flexWrap:"wrap" }}>
+                    {PILLAR_COLORS.map(c => (
+                      <div key={c} onClick={() => setNewPillar(p=>({...p,color:c}))} style={{
+                        width:"22px", height:"22px", borderRadius:"50%", background:c, cursor:"pointer",
+                        outline: newPillar.color === c ? `2px solid #fff` : "none", outlineOffset:"2px"
+                      }} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>PILLAR TYPE</label>
+                <div style={{ display:"flex", gap:"8px" }}>
+                  {[{val:false,label:"✅ Positive (adds score)"},{val:true,label:"🚫 Negative (reduces score)"}].map(opt => (
+                    <button key={String(opt.val)} onClick={() => setNewPillar(p=>({...p,negative:opt.val}))} style={{
+                      flex:1, padding:"8px", borderRadius:"8px", cursor:"pointer", fontSize:"12px", fontWeight:600,
+                      background: newPillar.negative === opt.val ? (opt.val ? "#ef444420" : "#10b98120") : "#0f172a",
+                      border: `1px solid ${newPillar.negative === opt.val ? (opt.val ? "#ef4444" : "#10b981") : "#334155"}`,
+                      color: newPillar.negative === opt.val ? (opt.val ? "#ef4444" : "#10b981") : "#64748b"
+                    }}>{opt.label}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>KEYWORDS (comma-separated) *</label>
+                <textarea value={newPillar.terms} onChange={e => setNewPillar(p=>({...p,terms:e.target.value}))}
+                  placeholder="e.g. switch, router, access point, network, networking, wifi"
+                  rows={3}
+                  style={{ width:"100%", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc", fontSize:"12px", padding:"9px 12px", outline:"none", resize:"vertical", fontFamily:"monospace", boxSizing:"border-box" }} />
+                <div style={{ fontSize:"11px", color:"#475569", marginTop:"4px" }}>
+                  {newPillar.terms.split(",").filter(t=>t.trim()).length} terms entered
+                </div>
+              </div>
+            </div>
+
+            {/* Preview */}
+            {(newPillar.name || newPillar.terms) && (
+              <div style={{ marginTop:"14px", background:"#0f172a", borderRadius:"8px", padding:"12px", borderLeft:`3px solid ${newPillar.color}` }}>
+                <div style={{ fontSize:"11px", color:"#475569", marginBottom:"6px", fontWeight:600 }}>PREVIEW</div>
+                <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"8px" }}>
+                  <span style={{ fontWeight:700, color:"#f8fafc", fontSize:"13px" }}>{newPillar.name || "Untitled"}</span>
+                  <span style={{ fontSize:"11px", padding:"2px 8px", borderRadius:"99px", background:`${newPillar.color}18`, color:newPillar.color, border:`1px solid ${newPillar.color}30`, fontFamily:"monospace" }}>
+                    {newPillar.negative ? "-" : "+"}{newPillar.weight} pts
+                  </span>
+                </div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:"4px" }}>
+                  {newPillar.terms.split(",").filter(t=>t.trim()).slice(0,8).map((t,i)=>(
+                    <span key={i} style={{ background:"#1e293b", border:"1px solid #334155", color:"#94a3b8", fontSize:"10px", padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{t.trim()}</span>
+                  ))}
+                  {newPillar.terms.split(",").filter(t=>t.trim()).length > 8 && <span style={{ color:"#475569", fontSize:"10px" }}>+{newPillar.terms.split(",").filter(t=>t.trim()).length - 8} more</span>}
+                </div>
+              </div>
+            )}
+
+            <div style={{ display:"flex", gap:"10px", marginTop:"20px" }}>
+              <button onClick={() => setShowAddPillar(false)} style={{ flex:1, padding:"10px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>Cancel</button>
+              <button
+                onClick={handleAddPillar}
+                disabled={!newPillar.name.trim() || !newPillar.terms.trim()}
+                style={{
+                  flex:2, padding:"10px", borderRadius:"8px", fontSize:"13px", fontWeight:700, cursor:"pointer", border:"none",
+                  background: newPillar.name && newPillar.terms ? "linear-gradient(135deg,#f59e0b,#f97316)" : "#334155",
+                  color: newPillar.name && newPillar.terms ? "#0f172a" : "#475569"
+                }}>
+                ✓ Create Pillar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── PRICING MODAL ── */}
+      {(showPricingModal || showUpgrade) && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"32px", width:"560px", maxWidth:"95vw" }}>
+            <div style={{ textAlign:"center", marginBottom:"24px" }}>
+              <div style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", marginBottom:"6px" }}>Keyword Pillar Plans</div>
+              <div style={{ fontSize:"13px", color:"#64748b" }}>Custom pillars let you target any device category, brand, or bid type</div>
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px", marginBottom:"24px" }}>
+              {PLANS.map(p => (
+                <div key={p.key} onClick={() => setCurrentPlan(p.key)} style={{
+                  background: currentPlan === p.key ? "#0f172a" : "#0f172a",
+                  border: `2px solid ${currentPlan === p.key ? p.color : "#334155"}`,
+                  borderRadius:"12px", padding:"20px", cursor:"pointer",
+                  transition:"all 0.15s", textAlign:"center",
+                  boxShadow: currentPlan === p.key ? `0 0 20px ${p.color}30` : "none"
+                }}>
+                  {p.key === "pro" && (
+                    <div style={{ fontSize:"9px", fontWeight:700, color:"#3b82f6", letterSpacing:"0.15em", marginBottom:"6px" }}>MOST POPULAR</div>
+                  )}
+                  {p.key === "unlimited" && (
+                    <div style={{ fontSize:"9px", fontWeight:700, color:"#f59e0b", letterSpacing:"0.15em", marginBottom:"6px" }}>BEST VALUE</div>
+                  )}
+                  <div style={{ fontSize:"22px", fontWeight:800, color: p.color }}>{p.price}</div>
+                  <div style={{ fontSize:"11px", color:"#64748b" }}>{p.period}</div>
+                  <div style={{ fontSize:"14px", fontWeight:700, color:"#f8fafc", margin:"8px 0 4px" }}>{p.label}</div>
+                  <div style={{ fontSize:"11px", color:"#64748b" }}>{p.desc}</div>
+                  {currentPlan === p.key && (
+                    <div style={{ marginTop:"10px", fontSize:"10px", fontWeight:700, color:p.color, letterSpacing:"0.08em" }}>✓ CURRENT PLAN</div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background:"#0f172a", borderRadius:"10px", padding:"14px", marginBottom:"20px", fontSize:"12px", color:"#64748b", lineHeight:"1.6" }}>
+              💡 <strong style={{ color:"#94a3b8" }}>How it works:</strong> System pillars (Apple, Chromebook, Fleet, Disposition, Negatives) are always included free. Custom pillars are your added-value targeting — create pillars for Network Gear, Solar, Microsoft Surface, or any niche you want to scan for.
+            </div>
+
+            <div style={{ display:"flex", gap:"10px" }}>
+              <button onClick={() => { setShowPricingModal(false); setShowUpgrade(false); }} style={{
+                flex:1, padding:"11px", background:"transparent", border:"1px solid #334155",
+                borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer"
+              }}>Close</button>
+              <button onClick={() => { setShowPricingModal(false); setShowUpgrade(false); showToast(`Switched to ${PLANS.find(p=>p.key===currentPlan).label} plan!`); }} style={{
+                flex:2, padding:"11px", background:"linear-gradient(135deg,#f59e0b,#f97316)",
+                border:"none", borderRadius:"8px", color:"#0f172a", fontSize:"13px", fontWeight:700, cursor:"pointer"
+              }}>
+                Confirm Plan → {PLANS.find(p=>p.key===currentPlan).price}/mo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ScanHistoryView() {
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      <div style={{ marginBottom:"24px" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Scan History</h1>
+        <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>All past scan runs and their results</p>
+      </div>
+
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden" }}>
+        <table style={{ width:"100%", borderCollapse:"collapse" }}>
+          <thead>
+            <tr style={{ background:"#0f172a" }}>
+              {["Date","Time","Status","Duration","Hot Leads Found","Sources","Errors","Log"].map(h=>(
+                <th key={h} style={{ padding:"11px 16px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {MOCK_SCAN_HISTORY.map((s,i)=>(
+              <tr key={s.id} style={{ borderTop:"1px solid #0f172a", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+                <td style={{ padding:"14px 16px", fontSize:"13px", color:"#e2e8f0", fontFamily:"monospace" }}>{s.date}</td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time}</td>
+                <td style={{ padding:"14px 16px" }}><StatusDot status={s.status} /></td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.duration}</td>
+                <td style={{ padding:"14px 16px" }}>
+                  <span style={{ fontSize:"14px", fontWeight:700, color: s.hot_leads>10?"#10b981":s.hot_leads>0?"#f59e0b":"#475569", fontFamily:"monospace" }}>{s.hot_leads}</span>
+                </td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b" }}>{s.sources}</td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color: s.errors>0?"#ef4444":"#64748b" }}>{s.errors}</td>
+                <td style={{ padding:"14px 16px" }}>
+                  <button style={{ background:"transparent", border:"1px solid #334155", color:"#64748b", fontSize:"11px", padding:"4px 10px", borderRadius:"6px", cursor:"pointer" }}>
+                    <FileText size={11} style={{ marginRight:"4px", verticalAlign:"middle" }} />View Log
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function SettingsView() {
+  const [emailEnabled, setEmailEnabled] = useState(true);
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      <div style={{ marginBottom:"24px" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Settings</h1>
+        <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>Configure email notifications and system preferences</p>
+      </div>
+
+      <div style={{ maxWidth:"600px" }}>
+        <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+          <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px", marginBottom:"16px", display:"flex", alignItems:"center", gap:"8px" }}>
+            <AlertCircle size={14} color="#f59e0b" /> Email Notifications
+          </div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
+            <span style={{ color:"#94a3b8", fontSize:"13px" }}>Enable email reports</span>
+            <div onClick={()=>setEmailEnabled(!emailEnabled)} style={{
+              width:"44px", height:"24px", borderRadius:"99px",
+              background: emailEnabled ? "#f59e0b" : "#334155", cursor:"pointer",
+              position:"relative", transition:"background 0.2s"
+            }}>
+              <div style={{
+                width:"18px", height:"18px", borderRadius:"50%", background:"#fff",
+                position:"absolute", top:"3px", transition:"left 0.2s",
+                left: emailEnabled ? "23px" : "3px"
+              }} />
+            </div>
+          </div>
+          {[
+            { label:"From Address", val:"itadbidbot@gmail.com" },
+            { label:"To Address", val:"mike@techrebootusa.com" },
+            { label:"SMTP Host", val:"smtp.gmail.com" },
+            { label:"SMTP Port", val:"587" },
+          ].map(({label,val})=>(
+            <div key={label} style={{ marginBottom:"12px" }}>
+              <label style={{ fontSize:"11px", color:"#64748b", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>{label.toUpperCase()}</label>
+              <input defaultValue={val} style={{ width:"100%", padding:"8px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
+            </div>
+          ))}
+          <div style={{ marginBottom:"12px" }}>
+            <label style={{ fontSize:"11px", color:"#64748b", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>SMTP PASSWORD</label>
+            <input type="password" defaultValue="••••••••••••••••" style={{ width:"100%", padding:"8px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
+            <div style={{ fontSize:"11px", color:"#475569", marginTop:"4px" }}>Stored as environment variable SMTP_PASSWORD</div>
+          </div>
+          <button style={{ padding:"9px 18px", background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", borderRadius:"8px", color:"#0f172a", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
+            Save Settings
+          </button>
+        </div>
+
+        <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"24px" }}>
+          <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px", marginBottom:"16px", display:"flex", alignItems:"center", gap:"8px" }}>
+            <Database size={14} color="#8b5cf6" /> Scan Configuration
+          </div>
+          <div style={{ marginBottom:"12px" }}>
+            <label style={{ fontSize:"11px", color:"#64748b", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>YEAR FILTER</label>
+            <select defaultValue="2026" style={{ padding:"8px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", outline:"none" }}>
+              <option>2026</option><option>2025</option><option>All Years</option>
+            </select>
+          </div>
+          <div style={{ marginBottom:"12px" }}>
+            <label style={{ fontSize:"11px", color:"#64748b", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>MAX DEEP LINKS PER SITE</label>
+            <input type="number" defaultValue={30} style={{ padding:"8px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", outline:"none", width:"80px" }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── APP ROOT ──────────────────────────────────────────────────────────────────
+function App() {
+  const [page, setPage] = useState("dashboard");
+  const [stateFilter, setStateFilter] = useState("all");
+  const [entityFilter, setEntityFilter] = useState("all");
+  const [scanning, setScanning] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  React.useEffect(() => { window._bidbotSetPage = setPage; }, []);
+
+  const [scanProgress, setScanProgress] = React.useState(0);
+  const [scanStatus, setScanStatus] = React.useState("");
+
+  const runScan = async () => {
+    setScanning(true);
+    setScanProgress(0);
+    setScanStatus("Connecting to scanner...");
+
+    // Progress simulation over 10 minutes
+    const steps = [
+      { pct:5,  msg:"Scan started — loading sources...",         delay:2000  },
+      { pct:15, msg:"Scanning Goochland, Niagara, Mansfield...", delay:15000 },
+      { pct:30, msg:"Scanning Wisconsin VendorNet...",           delay:30000 },
+      { pct:45, msg:"Scanning Georgia districts...",             delay:60000 },
+      { pct:60, msg:"Scoring and filtering leads...",            delay:90000 },
+      { pct:75, msg:"Checking for duplicates...",                delay:120000},
+      { pct:90, msg:"Writing results to database...",            delay:150000},
+      { pct:95, msg:"Sending email summary...",                  delay:180000},
+      { pct:100,msg:"Scan complete! Refresh to see new leads.",  delay:210000},
+    ];
+
+    // Trigger the actual scan
+    try {
+      await fetch(
+        "https://bidbot-api-378239271278.us-central1.run.app/scan/run",
+        { method:"POST", headers:{ "Content-Type":"application/json" } }
+      );
+    } catch(e) {
+      console.log("Scan trigger error:", e);
+    }
+
+    // Run progress steps
+    steps.forEach(({ pct, msg, delay }) => {
+      setTimeout(() => {
+        setScanProgress(pct);
+        setScanStatus(msg);
+        if (pct === 100) {
+          setTimeout(() => {
+            setScanning(false);
+            setScanProgress(0);
+            setScanStatus("");
+          }, 5000);
+        }
+      }, delay);
+    });
+  };
+
+  return (
+    <div style={{
+      display:"flex", flexDirection:"column", height:"100vh", width:"100%",
+      background:"#0a0f1e", color:"#f8fafc",
+      fontFamily:"'Segoe UI', system-ui, -apple-system, sans-serif"
+    }}>
+      <style>{`
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+        select option { background: #1e293b; color: #f8fafc; }
+      `}</style>
+
+      <TopBar stateFilter={stateFilter} setStateFilter={setStateFilter} entityFilter={entityFilter} setEntityFilter={setEntityFilter} />
+
+      <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
+        <Sidebar active={page} setActive={setPage} onRunScan={runScan} scanning={scanning} />
+
+        <main style={{ flex:1, display:"flex", overflow:"hidden", background:"#0a0f1e" }}>
+          {page==="dashboard"  && <DashboardView onNavigate={setPage} onRunScan={runScan} scanning={scanning} />}
+          {page==="hot_leads"  && <HotLeadsView stateFilter={stateFilter} />}
+          {page==="all_bids"   && <HotLeadsView stateFilter={stateFilter} allBids />}
+          {page==="sources"    && <SourcesView />}
+          {page==="keywords"   && <KeywordsView />}
+          {page==="history"    && <ScanHistoryView />}
+          {page==="settings"   && <SettingsView />}
+        </main>
+      </div>
+
+      {/* Scan Progress Overlay */}
+      {scanning && (
+        <div style={{
+          position:"fixed", bottom:"24px", left:"50%", transform:"translateX(-50%)",
+          background:"#1e293b", border:"1px solid #f59e0b",
+          borderRadius:"16px", padding:"20px 28px", zIndex:9999,
+          boxShadow:"0 8px 32px rgba(0,0,0,0.5)", minWidth:"320px", maxWidth:"90vw"
+        }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"12px" }}>
+            <div style={{ animation:"spin 1s linear infinite", flexShrink:0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px" }}>Scan Running</div>
+              <div style={{ fontSize:"12px", color:"#94a3b8", marginTop:"2px" }}>{scanStatus}</div>
+            </div>
+          </div>
+          <div style={{ background:"#0f172a", borderRadius:"99px", height:"6px", overflow:"hidden" }}>
+            <div style={{
+              height:"100%", borderRadius:"99px",
+              background:"linear-gradient(90deg,#f59e0b,#f97316)",
+              width:scanProgress + "%",
+              transition:"width 1s ease"
+            }} />
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", marginTop:"6px" }}>
+            <span style={{ fontSize:"11px", color:"#475569" }}>~10 min total</span>
+            <span style={{ fontSize:"11px", color:"#f59e0b", fontWeight:600 }}>{scanProgress}%</span>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position:"fixed", bottom:"24px", right:"24px",
+          background: toast.type==="success" ? "#10b981" : "#ef4444",
+          color:"#fff", padding:"12px 20px", borderRadius:"10px",
+          fontSize:"13px", fontWeight:600, boxShadow:"0 8px 24px rgba(0,0,0,0.4)",
+          display:"flex", alignItems:"center", gap:"8px", zIndex:9999,
+          animation:"slideIn 0.3s ease"
+        }}>
+          <CheckCircle size={15} /> {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function _mountBidBot() {
+  var hot=window._LIVE_HOT, all=window._LIVE_LEADS, src=window._LIVE_SOURCES, scn=window._LIVE_SCANS;
+  if (hot) { MOCK_HOT_LEADS.length=0; hot.forEach(function(x){MOCK_HOT_LEADS.push(x);}); }
+  if (all) { window._ALL_LEADS=all; }
+  if (src) { MOCK_SOURCES.length=0; src.forEach(function(x){MOCK_SOURCES.push(x);}); }
+  if (scn) { MOCK_SCAN_HISTORY.length=0; scn.forEach(function(x){MOCK_SCAN_HISTORY.push(x);}); }
+  ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+}
+if (window._bidbotData && window._bidbotData.ready) { _mountBidBot(); }
+else {
+  window._bidbotData.onReady = _mountBidBot;
+  setTimeout(function(){ if(window._bidbotData.onReady){window._bidbotData.onReady=null;_mountBidBot();} }, 8000);
+}
+</script>
+
+<div id="mobile-nav" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#0f172a;border-top:1px solid #1e293b;padding:6px 0 8px;z-index:9999;justify-content:space-around;align-items:center;">
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'dashboard'}))" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span style="font-size:9px;font-weight:600">HOME</span>
+  </button>
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'hot_leads'}))" style="background:none;border:none;color:#ef4444;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>
+    <span style="font-size:9px;font-weight:600">HOT</span>
+  </button>
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'all_bids'}))" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+    <span style="font-size:9px;font-weight:600">ALL BIDS</span>
+  </button>
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'sources'}))" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+    <span style="font-size:9px;font-weight:600">SOURCES</span>
+  </button>
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'settings'}))" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    <span style="font-size:9px;font-weight:600">SETTINGS</span>
+  </button>
+</div>
+<script>
+document.addEventListener("mobileNav", function(e) {
+  if (window._bidbotSetPage) window._bidbotSetPage(e.detail);
+});
+</script>
+
+</body>
+</html>
