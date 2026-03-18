@@ -345,7 +345,12 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" }}>
         <div>
           <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:0, letterSpacing:"-0.02em" }}>Dashboard</h1>
-          <p style={{ color:"#64748b", fontSize:"13px", margin:"4px 0 0" }}>Thursday, March 12, 2026 · Last scan: 06:40 AM EDT</p>
+          <p style={{ color:"#64748b", fontSize:"13px", margin:"4px 0 0" }}>
+            {window._LATEST_SCAN_DATE ? 
+              `Last scan: ${window._LATEST_SCAN_DATE}` : 
+              new Date().toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})
+            }
+          </p>
         </div>
         <button onClick={onRunScan} disabled={scanning} style={{
           padding:"10px 20px", borderRadius:"10px",
@@ -436,7 +441,7 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
             </tr>
           </thead>
           <tbody>
-            {MOCK_SCAN_HISTORY.map((s,i)=>(
+            {MOCK_SCAN_HISTORY.slice(0,3).map((s,i)=>(
               <tr key={s.id} style={{ borderTop:"1px solid #1e293b", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
                 <td style={{ padding:"11px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.date || (s.started_at ? s.started_at.split("T")[0] : "—")}</td>
                 <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "—")}</td>
@@ -447,7 +452,9 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
                     }
                   </td>
                 <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>
-                  {s.duration || (s.finished_at && s.started_at ? Math.floor((new Date(s.finished_at)-new Date(s.started_at))/60000)+"m" : "—")}
+                  {s.duration || 
+                   (s.finished_at && s.started_at ? Math.floor((new Date(s.finished_at)-new Date(s.started_at))/60000)+"m" : 
+                   (s.duration_seconds ? Math.floor(s.duration_seconds/60)+"m "+s.duration_seconds%60+"s" : "—"))}
                 </td>
                 <td style={{ padding:"11px 16px", fontSize:"13px", color: (s.hot_leads||s.hot_count||0)>0?"#10b981":"#64748b", fontWeight:600 }}>
                   {s.hot_leads ?? s.hot_count ?? s.leads_found ?? "—"}
@@ -693,7 +700,12 @@ function SourcesView() {
                 <td style={{ padding:"10px 12px", fontSize:"11px", color:"#64748b", fontFamily:"monospace" }}>{s.site_type}</td>
                 <td style={{ padding:"10px 12px", fontSize:"11px", color:"#475569", fontFamily:"monospace" }}>{s.date_added}</td>
                 <td style={{ padding:"10px 12px", fontSize:"11px", color:"#475569", fontFamily:"monospace" }}>{s.last_scanned}</td>
-                <td style={{ padding:"10px 12px" }}><StatusDot status={s.status} /></td>
+                <td style={{ padding:"10px 12px" }}>
+                  {(s.captcha_protected || s.captcha_protected === true)
+                    ? <span style={{ fontSize:"11px", padding:"3px 8px", borderRadius:"99px", background:"rgba(124,58,237,0.15)", color:"#a78bfa", border:"1px solid rgba(124,58,237,0.3)", fontWeight:600 }}>🔒 CAPTCHA</span>
+                    : <StatusDot status={s.status || "active"} />
+                  }
+                </td>
                 <td style={{ padding:"10px 12px" }}>
                   <button style={{ background:"transparent", border:"1px solid #334155", color:"#64748b", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer", display:"flex", alignItems:"center", gap:"4px" }}>
                     <RefreshCw size={10} />Validate
@@ -1277,6 +1289,8 @@ function KeywordsView() {
 }
 
 function ScanHistoryView() {
+  const [expanded, setExpanded] = React.useState(false);
+  const rows = expanded ? MOCK_SCAN_HISTORY : MOCK_SCAN_HISTORY.slice(0,3);
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <div style={{ marginBottom:"24px" }}>
@@ -1294,13 +1308,15 @@ function ScanHistoryView() {
             </tr>
           </thead>
           <tbody>
-            {MOCK_SCAN_HISTORY.map((s,i)=>(
+            {rows.map((s,i)=>(
               <tr key={s.id} style={{ borderTop:"1px solid #0f172a", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
                 <td style={{ padding:"14px 16px", fontSize:"13px", color:"#e2e8f0", fontFamily:"monospace" }}>{s.date}</td>
                 <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time}</td>
                 <td style={{ padding:"14px 16px" }}><StatusDot status={s.status} /></td>
                 <td style={{ padding:"14px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>
-                  {s.duration || (s.duration_seconds ? Math.floor(s.duration_seconds/60)+"m "+(s.duration_seconds%60)+"s" : (s.finished_at && s.started_at ? Math.floor((new Date(s.finished_at)-new Date(s.started_at))/60000)+"m" : "—"))}
+                  {s.duration ||
+                   (s.finished_at && s.started_at ? Math.floor((new Date(s.finished_at)-new Date(s.started_at))/60000)+"m "+Math.floor(((new Date(s.finished_at)-new Date(s.started_at))%60000)/1000)+"s" :
+                   (s.duration_seconds ? Math.floor(s.duration_seconds/60)+"m "+s.duration_seconds%60+"s" : "—"))}
                 </td>
                 <td style={{ padding:"14px 16px" }}>
                   <span style={{ fontSize:"14px", fontWeight:700, color: (s.hot_leads||s.hot_count||0)>10?"#10b981":(s.hot_leads||s.hot_count||0)>0?"#f59e0b":"#475569", fontFamily:"monospace" }}>
@@ -1318,6 +1334,16 @@ function ScanHistoryView() {
             ))}
           </tbody>
         </table>
+        {MOCK_SCAN_HISTORY.length > 3 && (
+          <div style={{ padding:"12px 16px", borderTop:"1px solid #0f172a", textAlign:"center" }}>
+            <button onClick={()=>setExpanded(!expanded)} style={{
+              background:"transparent", border:"1px solid #334155", color:"#64748b",
+              fontSize:"12px", padding:"6px 18px", borderRadius:"6px", cursor:"pointer"
+            }}>
+              {expanded ? "▲ Show Less" : `▼ Show All ${MOCK_SCAN_HISTORY.length} Scans`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1484,13 +1510,17 @@ function App() {
 }
 
 
+var _bidbotRoot = null;
 function _mountBidBot() {
   var hot=window._LIVE_HOT, all=window._LIVE_LEADS, src=window._LIVE_SOURCES, scn=window._LIVE_SCANS;
   if (hot) { MOCK_HOT_LEADS.length=0; hot.forEach(function(x){MOCK_HOT_LEADS.push(x);}); }
   if (all) { window._ALL_LEADS=all; }
   if (src) { MOCK_SOURCES.length=0; src.forEach(function(x){MOCK_SOURCES.push(x);}); }
   if (scn) { MOCK_SCAN_HISTORY.length=0; scn.forEach(function(x){MOCK_SCAN_HISTORY.push(x);}); }
-  ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App));
+  if (!_bidbotRoot) {
+    _bidbotRoot = ReactDOM.createRoot(document.getElementById("root"));
+  }
+  _bidbotRoot.render(React.createElement(App));
 }
 if (window._bidbotData && window._bidbotData.ready) { _mountBidBot(); }
 else {
