@@ -331,10 +331,13 @@ function StatusDot({ status }) {
 // ─── VIEWS ────────────────────────────────────────────────────────────────────
 
 function DashboardView({ onNavigate, onRunScan, scanning }) {
-  const today = MOCK_HOT_LEADS.filter(l=>l.tier==="HOT");
+  // Match sidebar badge — only show leads from the latest scan date
+  const today = (window._LIVE_HOT && window._LIVE_HOT.length > 0)
+    ? window._LIVE_HOT
+    : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT");
   const stats = [
     { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan" },
-    { label:"Total Sources", value:MOCK_SOURCES.length, icon:Globe, color:"#3b82f6", sub:`${MOCK_SOURCES.filter(s=>s.status==="active").length} active` },
+    { label:"Total Sources", value:MOCK_SOURCES.length, icon:Globe, color:"#3b82f6", sub:`${MOCK_SOURCES.filter(s=>!s.captcha_protected).length} active · ${MOCK_SOURCES.filter(s=>s.captcha_protected).length} CAPTCHA` },
     { label:"Hot Leads This Week", value:42, icon:TrendingUp, color:"#10b981", sub:"↑ 18% vs last week" },
     { label:"Sources Added / Month", value:8, icon:Plus, color:"#8b5cf6", sub:"New this month" },
   ];
