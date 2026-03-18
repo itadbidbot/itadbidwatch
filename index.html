@@ -108,20 +108,7 @@ const Zap = ({size=16,...p}) => <svg {...svgProps(size,p)}><polygon points="13 2
 // ─── MOCK DATA ───────────────────────────────────────────────────────────────
 const STATES_LIST = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA","KS","KY","LA","ME","MD","MA","MI","MN","MS","MO","MT","NE","NV","NH","NJ","NM","NY","NC","ND","OH","OK","OR","PA","RI","SC","SD","TN","TX","UT","VT","VA","WA","WV","WI","WY","DC"];
 
-const MOCK_HOT_LEADS = [
-  { id:1, title:"iPad Purchase for Student 1:1 Program", institution:"Goochland County Schools", state:"VA", due_date:"2026-03-18", score:88, tier:"HOT", keywords:"ipad, apple, student device, 1:1", link:"https://goochlandschools.org/bids/1234", memo:"Apple iPads for district-wide student device program refresh" },
-  { id:2, title:"Chromebook Refresh RFP – 2026 Fleet", institution:"Milwaukee Public Schools", state:"WI", due_date:"2026-03-20", score:76, tier:"HOT", keywords:"chromebook, refresh cycle, student devices", link:"https://mps.edu/bids/5678", memo:"Complete Chromebook fleet refresh, 4,200 units, trade-in accepted" },
-  { id:3, title:"MacBook Procurement for Staff", institution:"Niagara County", state:"NY", due_date:"2026-03-22", score:66, tier:"HOT", keywords:"macbook, apple, device program", link:"https://bidnetdirect.com/niagara/9012", memo:"MacBook Air units for county administrative staff replacement" },
-  { id:4, title:"IT Asset Disposition – Surplus Apple Devices", institution:"Hartford City Schools", state:"CT", due_date:"2026-03-25", score:94, tier:"HOT", keywords:"itad, apple, surplus, disposal, decommission", link:"https://hartford.gov/bids/3456", memo:"Decommissioning 800 iPads and 200 MacBooks, ITAD vendor needed" },
-  { id:5, title:"Chromebook Device Program – Take Home Initiative", institution:"Austin ISD", state:"TX", due_date:"2026-03-27", score:71, tier:"HOT", keywords:"chromebook, take home device, fleet", link:"https://austinisd.org/bids/7890", memo:"Take-home Chromebook program for middle school students, 6,000 units" },
-  { id:6, title:"Apple iMac Lab Refresh", institution:"Grand Rapids Community College", state:"MI", due_date:"2026-03-30", score:58, tier:"HOT", keywords:"apple, imac, refresh", link:"https://grcc.edu/bids/2345", memo:"Computer lab refresh with iMac units, 120 workstations" },
-  { id:7, title:"iPad Pro Bulk Purchase – Healthcare Training", institution:"Mercy Hospital System", state:"OH", due_date:"2026-04-02", score:62, tier:"HOT", keywords:"ipad, apple, device program", link:"https://mercy.org/procurement/6789", memo:"iPad Pro units for clinical training simulation program" },
-  { id:8, title:"Surplus Technology Disposition RFQ", institution:"Mansfield CT Public Works", state:"CT", due_date:"2026-04-05", score:55, tier:"HOT", keywords:"surplus, disposed, obsolete, itad", link:"https://mansfieldct.gov/bids/1011", memo:"Mixed surplus tech disposal including tablets, laptops, peripherals" },
-  { id:9, title:"Student Chromebook End-of-Life Replacement", institution:"Henrico County Schools", state:"VA", due_date:"2026-04-08", score:80, tier:"HOT", keywords:"chromebook, end of life, eol, replacement", link:"https://henrico.k12.va.us/bids/1213", memo:"EOL Chromebook replacement, 8,500 units with trade-in evaluation" },
-  { id:10, title:"Apple School Manager Deployment Support", institution:"Fairfax County Public Schools", state:"VA", due_date:"2026-04-10", score:73, tier:"HOT", keywords:"apple school manager, jamf, apple", link:"https://fcps.edu/bids/1415", memo:"JAMF Pro implementation and Apple School Manager rollout support" },
-  { id:11, title:"Chromebook Warranty & Repair Services", institution:"Jefferson Parish Schools", state:"LA", due_date:"2026-04-12", score:44, tier:"WARM", keywords:"chromebook, device program", link:"https://jpschools.org/bids/1617", memo:"Extended warranty and repair for existing Chromebook fleet" },
-  { id:12, title:"IT Equipment Trade-In Buyback Program", institution:"San Diego Unified", state:"CA", due_date:"2026-04-15", score:67, tier:"HOT", keywords:"trade-in, buyback, itad, surplus", link:"https://sandi.net/bids/1819", memo:"Buyback program for end-of-lease Apple devices and Chromebooks" },
-];
+const MOCK_HOT_LEADS = []; // Replaced by Supabase data
 
 const MOCK_SOURCES = [
   { id:1, friendly_name:"Goochland County Public Schools", url:"https://goochlandschools.org/page/bids-and-proposals", state:"VA", site_type:"links_page", date_added:"2026-01-15", last_scanned:"2026-03-12 06:42 AM", status:"active" },
@@ -266,7 +253,7 @@ function Sidebar({ active, setActive, onRunScan, scanning }) {
               <span style={{
                 marginLeft:"auto", background:"#ef4444", color:"#fff",
                 fontSize:"10px", fontWeight:700, padding:"1px 6px", borderRadius:"99px"
-              }}>{(window._LIVE_HOT||[]).length || 0}</span>
+              }}>{window._bidbotData && window._bidbotData.ready ? (window._LIVE_HOT||[]).length : 0}</span>
             )}
           </button>
         );
@@ -331,9 +318,9 @@ function StatusDot({ status }) {
 // ─── VIEWS ────────────────────────────────────────────────────────────────────
 
 function DashboardView({ onNavigate, onRunScan, scanning }) {
-  // Match sidebar badge — only show leads from the latest scan date
-  const today = (window._LIVE_HOT && window._LIVE_HOT.length > 0)
-    ? window._LIVE_HOT
+  // Always use live data once Supabase has loaded (even if 0 results)
+  const today = window._bidbotData && window._bidbotData.ready
+    ? (window._LIVE_HOT || [])
     : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT");
   const stats = [
     { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan" },
@@ -478,7 +465,11 @@ function HotLeadsView({ stateFilter, allBids=false }) {
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
 
-  const _src = (allBids && window._ALL_LEADS) ? window._ALL_LEADS : MOCK_HOT_LEADS;
+  // Use live data when loaded, mock only before Supabase responds
+  const _loaded = window._bidbotData && window._bidbotData.ready;
+  const _src = _loaded
+    ? (allBids ? (window._ALL_LEADS || []) : (window._LIVE_HOT || []))
+    : (allBids ? MOCK_HOT_LEADS : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT"));
   const filtered = _src.filter(l=>{
     if (!allBids && l.tier !== "HOT") return false;
     if (stateFilter !== "all" && l.state !== stateFilter) return false;
