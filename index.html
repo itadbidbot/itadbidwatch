@@ -1440,35 +1440,119 @@ function App() {
 
   const [scanProgress, setScanProgress] = React.useState(0);
   const [scanStatus, setScanStatus] = React.useState("");
+  const [scanComplete, setScanComplete] = React.useState(null); // { newLeads: 0 }
+  const scanStartRef = React.useRef(null);
+  const pollRef = React.useRef(null);
+  const progressRef = React.useRef(null);
 
   const runScan = async () => {
     setScanning(true);
     setScanProgress(0);
+    setScanComplete(null);
     setScanStatus("Connecting to scanner...");
-    const steps = [
-      { pct:5,  msg:"Scan started — loading sources...",         delay:3000   },
-      { pct:15, msg:"Scanning Georgia districts...",             delay:30000  },
-      { pct:30, msg:"Scanning Wisconsin VendorNet...",           delay:60000  },
-      { pct:50, msg:"Scanning Florida & Texas sources...",       delay:90000  },
-      { pct:65, msg:"Scoring and filtering leads...",            delay:150000 },
-      { pct:80, msg:"Checking for duplicates...",                delay:180000 },
-      { pct:90, msg:"Writing results to database...",            delay:210000 },
-      { pct:95, msg:"Sending your email summary...",             delay:240000 },
-      { pct:100,msg:"Scan complete! Refresh to see new leads.",  delay:270000 },
-    ];
+    scanStartRef.current = Date.now();
+
+    // Trigger real scan
     try {
       await fetch("https://bidbot-api-378239271278.us-central1.run.app/scan/run",
         { method:"POST", headers:{ "Content-Type":"application/json" } });
-    } catch(e) { console.log("Scan trigger:", e); }
-    steps.forEach(({ pct, msg, delay }) => {
-      setTimeout(() => {
-        setScanProgress(pct);
-        setScanStatus(msg);
-        if (pct === 100) {
-          setTimeout(() => { setScanning(false); setScanProgress(0); setScanStatus(""); }, 10000);
+      setScanStatus("Scan started — scanning sources...");
+    } catch(e) {
+      setScanStatus("Scan triggered — monitoring for completion...");
+    }
+
+    // Real-time progress bar based on elapsed time (avg 15 min = 900s)
+    const AVG_SCAN_MS = 900000;
+    const statusMessages = [
+      [0,    "Scan started — loading sources..."],
+      [5,    "Scanning Georgia districts..."],
+      [20,   "Scanning Forsyth, Franklin, Marietta..."],
+      [35,   "Scanning Effingham, Wilkes, Warren..."],
+      [50,   "Scanning Jefferson, Walton, Lowndes..."],
+      [65,   "Scoring and filtering leads..."],
+      [75,   "Checking for duplicates..."],
+      [85,   "Saving leads to database..."],
+      [92,   "Sending email summary..."],
+      [97,   "Finishing up..."],
+    ];
+
+    progressRef.current = setInterval(() => {
+      const elapsed = Date.now() - scanStartRef.current;
+      const pct = Math.min(97, Math.floor((elapsed / AVG_SCAN_MS) * 100));
+      setScanProgress(pct);
+      // Pick status message based on progress
+      const msg = statusMessages.reduce((acc, [threshold, text]) =>
+        pct >= threshold ? text : acc, statusMessages[0][1]);
+      setScanStatus(msg);
+    }, 2000);
+
+    // Poll Supabase every 12 seconds for scan completion
+    const preLeadCount = (window._LIVE_LEADS || []).length;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await window._db.from("scans")
+          .select("id, started_at, hot_count, leads_found")
+          .order("started_at", { ascending: false })
+          .limit(1);
+
+        if (res.data && res.data.length > 0) {
+          const latestScan = res.data[0];
+          const scanTime = new Date(latestScan.started_at).getTime();
+          // If latest scan started after we triggered
+          if (scanTime >= scanStartRef.current - 30000) {
+            // Check if new leads were added
+            const leadsRes = await window._db.from("leads")
+              .select("id", { count: "exact" })
+              .gte("scan_date", new Date(scanStartRef.current - 60000).toISOString().slice(0,10));
+
+            const newCount = leadsRes.count || latestScan.hot_count || 0;
+
+            clearInterval(pollRef.current);
+            clearInterval(progressRef.current);
+            setScanProgress(100);
+            setScanStatus("Scan complete!");
+            setScanComplete({ newLeads: newCount });
+          }
         }
-      }, delay);
-    });
+      } catch(e) { console.log("Poll error:", e); }
+    }, 12000);
+
+    // Safety timeout after 25 minutes
+    setTimeout(() => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        clearInterval(progressRef.current);
+        setScanProgress(100);
+        setScanStatus("Scan complete!");
+        setScanComplete({ newLeads: 0 });
+      }
+    }, 1500000);
+  };
+
+  const handleRefreshAfterScan = () => {
+    setScanning(false);
+    setScanComplete(null);
+    setScanProgress(0);
+    setScanStatus("");
+    // Reload live data from Supabase
+    if (window._db) {
+      Promise.all([
+        window._db.from("leads").select("scan_date").order("scan_date",{ascending:false}).limit(1),
+        window._db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500),
+        window._db.from("scans").select("*").order("started_at",{ascending:false}).limit(30)
+      ]).then(([dateRes, leadsRes, scansRes]) => {
+        const latestDate = dateRes.data?.[0]?.scan_date || null;
+        if (latestDate && leadsRes.data) {
+          window._LIVE_HOT = leadsRes.data.filter(l => l.scan_date === latestDate && l.tier === "HOT");
+          window._LATEST_SCAN_DATE = latestDate;
+          window._LIVE_LEADS = leadsRes.data;
+          window._ALL_LEADS = leadsRes.data;
+        }
+        if (scansRes.data) window._LIVE_SCANS = scansRes.data;
+        // Force re-render
+        window._bidbotSetPage && window._bidbotSetPage("dashboard");
+      });
+    }
   };
 
   return (
@@ -1480,6 +1564,7 @@ function App() {
       <style>{`
         * { box-sizing: border-box; margin: 0; padding: 0; }
         @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes pulse { 0%,100% { box-shadow: 0 4px 15px rgba(16,185,129,0.4); } 50% { box-shadow: 0 4px 25px rgba(16,185,129,0.8); } }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #0f172a; }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
