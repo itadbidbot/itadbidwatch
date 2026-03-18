@@ -4,7 +4,6 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>ITAD Bid Watch™</title>
-<!-- v1.1 -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
@@ -25,8 +24,8 @@ input:focus,textarea:focus{border-color:#f59e0b !important}
   main[style] { width: 100vw !important; }
   header[style] { height: auto !important; flex-wrap: wrap !important; padding: 8px 12px !important; gap: 6px !important; }
   header[style] > div:nth-child(4), header[style] > div:nth-child(5) { display: none !important; }
-  table { display: block !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch !important; }
-  div[style*="padding:"28px""], div[style*="padding:28px"] { padding: 12px !important; }
+  table { display: block !important; overflow-x: auto !important; }
+  div[style*="gridTemplateColumns"] { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
   #mobile-nav { display: flex !important; }
   main[style] > div { padding-bottom: 70px !important; }
 }
@@ -46,7 +45,6 @@ Promise.all([
   _db.from("sources").select("*").order("date_added",{ascending:false}),
   _db.from("scans").select("*").order("started_at",{ascending:false}).limit(30)
 ]).then(function(r) {
-  // Get most recent scan date and filter hot leads by it
   var allLeads = r[1].data;
   var latestDate = r[0].data && r[0].data.length ? r[0].data[0].scan_date : null;
   if (latestDate && allLeads) {
@@ -56,7 +54,7 @@ Promise.all([
   if (allLeads && allLeads.length)   window._LIVE_LEADS   = allLeads;
   if (r[2].data && r[2].data.length) window._LIVE_SOURCES = r[2].data;
   if (r[3].data && r[3].data.length) window._LIVE_SCANS   = r[3].data;
-  console.log("ITAD Bid Watch: latest scan=", latestDate, "hot=", (window._LIVE_HOT||[]).length, "all=", (window._LIVE_LEADS||[]).length);
+  console.log("ITAD Bid Watch: latest=", latestDate, "hot=", (window._LIVE_HOT||[]).length);
 }).catch(function(e){ console.warn("Supabase error", e); })
 .finally(function(){
   window._bidbotData.ready = true;
@@ -179,8 +177,8 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter }) 
           <Zap size={18} color="#fff" />
         </div>
         <div>
-          <div style={{ fontFamily:"'Courier New',monospace", fontWeight:700, fontSize:"15px", color:"#f8fafc", letterSpacing:"0.08em" }}>ITAD</div>
-          <div style={{ fontFamily:"'Courier New',monospace", fontSize:"9px", color:"#f59e0b", letterSpacing:"0.15em" }}>BID WATCH™</div>
+          <div style={{ fontFamily:"'Courier New',monospace", fontWeight:700, fontSize:"13px", color:"#f8fafc", letterSpacing:"0.05em" }}>ITAD</div>
+          <div style={{ fontFamily:"'Courier New',monospace", fontSize:"9px", color:"#f59e0b", letterSpacing:"0.15em" }}>WATCH™</div>
         </div>
       </div>
 
@@ -268,7 +266,7 @@ function Sidebar({ active, setActive, onRunScan, scanning }) {
               <span style={{
                 marginLeft:"auto", background:"#ef4444", color:"#fff",
                 fontSize:"10px", fontWeight:700, padding:"1px 6px", borderRadius:"99px"
-              }}>12</span>
+              }}>{(window._LIVE_HOT||[]).length || 0}</span>
             )}
           </button>
         );
@@ -347,7 +345,7 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" }}>
         <div>
           <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:0, letterSpacing:"-0.02em" }}>Dashboard</h1>
-          <p style={{ color:"#64748b", fontSize:"13px", margin:"4px 0 0" }}>{window._LATEST_SCAN_DATE || "Loading..."} · Last scan: {window._LIVE_SCANS && window._LIVE_SCANS[0] ? new Date(window._LIVE_SCANS[0].started_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) + " EDT" : ""}</p>
+          <p style={{ color:"#64748b", fontSize:"13px", margin:"4px 0 0" }}>Thursday, March 12, 2026 · Last scan: 06:40 AM EDT</p>
         </div>
         <button onClick={onRunScan} disabled={scanning} style={{
           padding:"10px 20px", borderRadius:"10px",
@@ -440,11 +438,16 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
           <tbody>
             {MOCK_SCAN_HISTORY.map((s,i)=>(
               <tr key={s.id} style={{ borderTop:"1px solid #1e293b", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.date || (s.started_at ? s.started_at.split("T")[0] : "")}</td>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "")}</td>
-                <td style={{ padding:"11px 16px" }}><StatusDot status={s.status} /></td>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.duration}</td>
-                <td style={{ padding:"11px 16px", fontSize:"13px", color: s.hot_leads>0 ? "#10b981" : "#64748b", fontWeight:600 }}>{s.hot_leads}</td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.date || (s.started_at ? s.started_at.split("T")[0] : "—")}</td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit"}) : "—")}</td>
+                <td style={{ padding:"11px 16px" }}>
+                    {s.captcha_protected
+                      ? <span style={{ fontSize:"11px", padding:"3px 8px", borderRadius:"99px", background:"rgba(124,58,237,0.15)", color:"#a78bfa", border:"1px solid rgba(124,58,237,0.3)", fontWeight:600 }}>🔒 CAPTCHA</span>
+                      : <StatusDot status={s.status || "active"} />
+                    }
+                  </td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.duration || (s.duration_seconds ? Math.floor(s.duration_seconds/60) + "m " + (s.duration_seconds%60) + "s" : "—")}</td>
+                <td style={{ padding:"11px 16px", fontSize:"13px", color: s.hot_leads>0 ? "#10b981" : "#64748b", fontWeight:600 }}>{s.hot_leads !== undefined ? s.hot_leads : (s.hot_count !== undefined ? s.hot_count : "—")}</td>
                 <td style={{ padding:"11px 16px", fontSize:"12px", color: s.errors>0 ? "#ef4444" : "#64748b" }}>{s.errors}</td>
               </tr>
             ))}
@@ -521,10 +524,10 @@ function HotLeadsView({ stateFilter, allBids=false }) {
           <tbody>
             {filtered.length === 0 ? (
               <tr><td colSpan={7} style={{ padding:"48px 20px", textAlign:"center" }}>
-                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"10px" }}>
+                  <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"10px" }}>
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                     <div style={{ fontSize:"18px", fontWeight:700, color:"#f8fafc" }}>No Matches Found</div>
-                    <div style={{ fontSize:"13px", color:"#64748b", maxWidth:"240px", lineHeight:"1.5" }}>Try adjusting your state filter or search term</div>
+                    <div style={{ fontSize:"13px", color:"#64748b" }}>Try adjusting your state filter or search term</div>
                   </div>
                 </td></tr>
             ) : filtered.map((lead,i)=>(
@@ -532,7 +535,7 @@ function HotLeadsView({ stateFilter, allBids=false }) {
                 <td style={{ padding:"12px 16px", maxWidth:"300px" }}>
                   <div style={{ fontSize:"13px", color:"#e2e8f0", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
                   <div style={{ fontSize:"11px", color:"#475569", marginTop:"3px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.memo}</div>
-                  <div style={{ fontSize:"10px", color:"#334155", marginTop:"2px", fontFamily:"monospace" }}>Keywords: {lead.keywords || lead.matched_positive || ""}</div>
+                  <div style={{ fontSize:"10px", color:"#334155", marginTop:"2px", fontFamily:"monospace" }}>Keywords: {lead.keywords}</div>
                 </td>
                 <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", whiteSpace:"nowrap" }}>{lead.institution}</td>
                 <td style={{ padding:"12px 16px" }}><span style={{ background:"#334155", color:"#94a3b8", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
@@ -563,13 +566,13 @@ function SourcesView() {
   const [showCsvModal, setShowCsvModal] = useState(false);
   const [stateFilter, setStateFilter] = useState("all");
 
+  const sourceStates = ["all", ...Array.from(new Set(sources.map(s=>s.state).filter(Boolean))).sort()];
   const filtered = sources.filter(s => {
-    const matchSearch = !search || s.friendly_name.toLowerCase().includes(search.toLowerCase()) ||
-      s.url.toLowerCase().includes(search.toLowerCase()) || (s.state||"").toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !search || (s.friendly_name||"").toLowerCase().includes(search.toLowerCase()) ||
+      (s.url||"").toLowerCase().includes(search.toLowerCase()) || (s.state||"").toLowerCase().includes(search.toLowerCase());
     const matchState = stateFilter === "all" || s.state === stateFilter;
     return matchSearch && matchState;
   });
-  const sourceStates = ["all", ...Array.from(new Set(sources.map(s=>s.state).filter(Boolean))).sort()];
 
   const allChecked = filtered.length > 0 && filtered.every(s=>selected.has(s.id));
   const toggleAll = () => {
@@ -790,10 +793,11 @@ function AddSourceModal({ onClose, onAdd }) {
 
 function CsvModal({ onClose }) {
   const headers = "url,friendly_name,state,site_type,scan_instructions";
-  const example = "https://www.goochlandschools.org/bids,Goochland County Schools,VA,links_page,Scan bid links\nhttps://vendornet.wi.gov/Bids.aspx,Wisconsin VendorNet,WI,search_page,Search for bids";
+  const example = `https://www.goochlandschools.org/page/bids-and-proposals,Goochland County Schools,VA,links_page,Scan bid title links. Stop when you reach Awarded Bids
+https://vendornet.wi.gov/Bids.aspx,Wisconsin VendorNet,WI,search_page,Search for bids using keyword terms`;
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999 }}>
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"560px", maxWidth:"92vw", maxHeight:"90vh", overflowY:"auto" }}>
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"640px", maxWidth:"95vw" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
           <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#f8fafc" }}>Upload Sources via CSV</h2>
           <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", cursor:"pointer" }}><X size={18} /></button>
@@ -912,6 +916,39 @@ function KeywordsView() {
 
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1, position:"relative" }}>
+
+      {scanning && (
+        <div style={{
+          position:"fixed", bottom:"24px", left:"50%", transform:"translateX(-50%)",
+          background:"#1e293b", border:"1px solid #f59e0b",
+          borderRadius:"16px", padding:"20px 28px", zIndex:9999,
+          boxShadow:"0 8px 32px rgba(0,0,0,0.5)", minWidth:"320px", maxWidth:"90vw"
+        }}>
+          <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"12px" }}>
+            <div style={{ animation:"spin 1s linear infinite", flexShrink:0 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2">
+                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px" }}>Scan Running</div>
+              <div style={{ fontSize:"12px", color:"#94a3b8", marginTop:"2px" }}>{scanStatus}</div>
+            </div>
+          </div>
+          <div style={{ background:"#0f172a", borderRadius:"99px", height:"6px", overflow:"hidden" }}>
+            <div style={{
+              height:"100%", borderRadius:"99px",
+              background:"linear-gradient(90deg,#f59e0b,#f97316)",
+              width:scanProgress + "%",
+              transition:"width 1s ease"
+            }} />
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", marginTop:"6px" }}>
+            <span style={{ fontSize:"11px", color:"#475569" }}>~8 min total</span>
+            <span style={{ fontSize:"11px", color:"#f59e0b", fontWeight:600 }}>{scanProgress}%</span>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (
@@ -1289,9 +1326,9 @@ function ScanHistoryView() {
                 <td style={{ padding:"14px 16px", fontSize:"13px", color:"#e2e8f0", fontFamily:"monospace" }}>{s.date}</td>
                 <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time}</td>
                 <td style={{ padding:"14px 16px" }}><StatusDot status={s.status} /></td>
-                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.duration}</td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.duration || (s.duration_seconds ? Math.floor(s.duration_seconds/60) + "m " + (s.duration_seconds%60) + "s" : "—")}</td>
                 <td style={{ padding:"14px 16px" }}>
-                  <span style={{ fontSize:"14px", fontWeight:700, color: s.hot_leads>10?"#10b981":s.hot_leads>0?"#f59e0b":"#475569", fontFamily:"monospace" }}>{s.hot_leads}</span>
+                  <span style={{ fontSize:"14px", fontWeight:700, color: s.hot_leads>10?"#10b981":s.hot_leads>0?"#f59e0b":"#475569", fontFamily:"monospace" }}>{s.hot_leads !== undefined ? s.hot_leads : (s.hot_count !== undefined ? s.hot_count : "—")}</span>
                 </td>
                 <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b" }}>{s.sources}</td>
                 <td style={{ padding:"14px 16px", fontSize:"12px", color: s.errors>0?"#ef4444":"#64748b" }}>{s.errors}</td>
@@ -1395,41 +1432,27 @@ function App() {
     setScanning(true);
     setScanProgress(0);
     setScanStatus("Connecting to scanner...");
-
-    // Progress simulation over 10 minutes
     const steps = [
-      { pct:5,  msg:"Scan started — loading sources...",         delay:2000  },
-      { pct:15, msg:"Scanning Goochland, Niagara, Mansfield...", delay:15000 },
-      { pct:30, msg:"Scanning Wisconsin VendorNet...",           delay:30000 },
-      { pct:45, msg:"Scanning Georgia districts...",             delay:60000 },
-      { pct:60, msg:"Scoring and filtering leads...",            delay:90000 },
-      { pct:75, msg:"Checking for duplicates...",                delay:120000},
-      { pct:90, msg:"Writing results to database...",            delay:150000},
-      { pct:95, msg:"Sending email summary...",                  delay:180000},
-      { pct:100,msg:"Scan complete! Refresh to see new leads.",  delay:210000},
+      { pct:5,  msg:"Scan started — loading sources...",         delay:3000   },
+      { pct:15, msg:"Scanning Georgia districts...",             delay:30000  },
+      { pct:30, msg:"Scanning Wisconsin VendorNet...",           delay:60000  },
+      { pct:50, msg:"Scanning Florida & Texas sources...",       delay:90000  },
+      { pct:65, msg:"Scoring and filtering leads...",            delay:150000 },
+      { pct:80, msg:"Checking for duplicates...",                delay:180000 },
+      { pct:90, msg:"Writing results to database...",            delay:210000 },
+      { pct:95, msg:"Sending your email summary...",             delay:240000 },
+      { pct:100,msg:"Scan complete! Refresh to see new leads.",  delay:270000 },
     ];
-
-    // Trigger the actual scan
     try {
-      await fetch(
-        "https://bidbot-api-378239271278.us-central1.run.app/scan/run",
-        { method:"POST", headers:{ "Content-Type":"application/json" } }
-      );
-    } catch(e) {
-      console.log("Scan trigger error:", e);
-    }
-
-    // Run progress steps
+      await fetch("https://bidbot-api-378239271278.us-central1.run.app/scan/run",
+        { method:"POST", headers:{ "Content-Type":"application/json" } });
+    } catch(e) { console.log("Scan trigger:", e); }
     steps.forEach(({ pct, msg, delay }) => {
       setTimeout(() => {
         setScanProgress(pct);
         setScanStatus(msg);
         if (pct === 100) {
-          setTimeout(() => {
-            setScanning(false);
-            setScanProgress(0);
-            setScanStatus("");
-          }, 5000);
+          setTimeout(() => { setScanning(false); setScanProgress(0); setScanStatus(""); }, 10000);
         }
       }, delay);
     });
@@ -1466,7 +1489,6 @@ function App() {
         </main>
       </div>
 
-      {/* Scan Progress Overlay */}
       {scanning && (
         <div style={{
           position:"fixed", bottom:"24px", left:"50%", transform:"translateX(-50%)",
@@ -1494,7 +1516,7 @@ function App() {
             }} />
           </div>
           <div style={{ display:"flex", justifyContent:"space-between", marginTop:"6px" }}>
-            <span style={{ fontSize:"11px", color:"#475569" }}>~10 min total</span>
+            <span style={{ fontSize:"11px", color:"#475569" }}>~8 min total</span>
             <span style={{ fontSize:"11px", color:"#f59e0b", fontWeight:600 }}>{scanProgress}%</span>
           </div>
         </div>
