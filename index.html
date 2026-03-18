@@ -39,6 +39,7 @@ const _db = supabase.createClient(
   "https://powcnxmsrxixufcqbxbw.supabase.co",
   "sb_publishable_P_iPFer-s3i8zV8106O_zQ_McYNHXeJ"
 );
+window._db = _db;
 Promise.all([
   _db.from("leads").select("scan_date").order("scan_date",{ascending:false}).limit(1),
   _db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500),
@@ -728,7 +729,7 @@ function AddSourceModal({ onClose, onAdd }) {
   const [error, setError] = useState("");
   const urlValid = url.startsWith("https://") && url.length > 12;
 
-  const handleValidate = () => {
+  const handleValidate = async () => {
     if (!urlValid || !state || !stype || !name.trim() || !instructions.trim()) {
       setError("All fields are required. URL must start with https://.");
       return;
@@ -739,10 +740,25 @@ function AddSourceModal({ onClose, onAdd }) {
     }
     setError("");
     setValidating(true);
-    setTimeout(()=>{
+    // Save to Supabase
+    const newSource = { 
+      url, friendly_name: name||url, state, 
+      site_type: stype, scan_instructions: instructions,
+      captcha_protected: false,
+      date_added: new Date().toISOString(),
+      status: "active"
+    };
+    try {
+      const res = await window._db.from("sources").insert([newSource]).select();
+      if (res.error) throw res.error;
       setValidating(false);
-      onAdd({ url, friendly_name:name||url, state, site_type:stype, scan_instructions:instructions });
-    }, 1800);
+      onAdd(res.data ? res.data[0] : newSource);
+    } catch(err) {
+      console.error("Supabase insert error:", err);
+      // Fall back to local state if Supabase fails
+      setValidating(false);
+      onAdd(newSource);
+    }
   };
 
   return (
