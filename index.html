@@ -142,7 +142,7 @@ const KEYWORD_PILLARS = [
 ];
 
 const FILTER_CATEGORIES = [
-  { value:"all", label:"All Hot Leads" },
+  { value:"all", label:"All Results" },
   { value:"apple", label:"Apple", keys:["apple","ipad","iphone","macbook","imac","mac mini","jamf","apple school manager"] },
   { value:"chromebook", label:"Chromebook", keys:["chromebook","chromebooks","chrome os","chromeos","google classroom"] },
   { value:"device_refresh", label:"Device Refresh", keys:["device refresh","refresh cycle","take home device","student device","1:1","eol","end of life"] },
@@ -473,6 +473,7 @@ function HotLeadsView({ stateFilter, allBids=false }) {
     : (allBids ? MOCK_HOT_LEADS : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT"));
   const filtered = _src.filter(l=>{
     if (!allBids && l.tier !== "HOT") return false;
+    if (allBids && category === "all") {} // show everything in All Bids
     if (stateFilter !== "all" && l.state !== stateFilter) return false;
     if (search && !l.title.toLowerCase().includes(search.toLowerCase()) && !l.institution.toLowerCase().includes(search.toLowerCase())) return false;
     if (category !== "all") {
@@ -515,7 +516,7 @@ function HotLeadsView({ stateFilter, allBids=false }) {
           background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1",
           fontSize:"13px", padding:"8px 14px", borderRadius:"8px", cursor:"pointer", outline:"none"
         }}>
-          {FILTER_CATEGORIES.map(c=><option key={c.value} value={c.value}>{c.label}</option>)}
+          {FILTER_CATEGORIES.map(c=><option key={c.value} value={c.value}>{allBids && c.value==="all" ? "All Results" : c.label}</option>)}
         </select>
       </div>
 
@@ -549,7 +550,9 @@ function HotLeadsView({ stateFilter, allBids=false }) {
                 <td style={{ padding:"12px 16px" }}><span style={{ background:"#334155", color:"#94a3b8", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
                 <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>{lead.due_date}</td>
                 <td style={{ padding:"12px 16px" }}><ScoreBadge score={lead.score} /></td>
-                <td style={{ padding:"12px 16px" }}><TierBadge tier={lead.tier} /></td>
+                <td style={{ padding:"12px 16px" }}>
+                  <TierBadge tier={lead.tier || "WARM"} />
+                </td>
                 <td style={{ padding:"12px 16px" }}>
                   <a href={lead.direct_link || lead.link || "#"} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}>
                     <ExternalLink size={12} /> Open
