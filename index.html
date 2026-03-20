@@ -360,9 +360,9 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
         <div>
           <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:0, letterSpacing:"-0.02em" }}>Dashboard</h1>
           <p style={{ color:"#64748b", fontSize:"13px", margin:"4px 0 0" }}>
-            {window._LATEST_SCAN_DATE ? 
-              `Last scan: ${window._LATEST_SCAN_DATE}` : 
-              new Date().toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})
+            {window._LIVE_SCANS && window._LIVE_SCANS.length > 0
+              ? `Last scan: ${new Date((window._LIVE_SCANS[0].started_at||"").endsWith("Z") ? window._LIVE_SCANS[0].started_at : (window._LIVE_SCANS[0].started_at||"")+"Z").toLocaleDateString("en-CA",{timeZone:"America/New_York"})} · ${new Date((window._LIVE_SCANS[0].started_at||"").endsWith("Z") ? window._LIVE_SCANS[0].started_at : (window._LIVE_SCANS[0].started_at||"")+"Z").toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"})}`
+              : new Date().toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})
             }
           </p>
         </div>
@@ -457,8 +457,8 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
           <tbody>
             {MOCK_SCAN_HISTORY.slice(0,3).map((s,i)=>(
               <tr key={s.id} style={{ borderTop:"1px solid #1e293b", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.date || (s.started_at ? new Date(s.started_at).toLocaleDateString("en-CA",{timeZone:"America/New_York"}) : "—")}</td>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"}) : "—")}</td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.date || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleDateString("en-CA",{timeZone:"America/New_York"}) : "—")}</td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"}) : "—")}</td>
                 <td style={{ padding:"11px 16px" }}>
                     {s.captcha_protected
                       ? <span style={{ fontSize:"11px", padding:"3px 8px", borderRadius:"99px", background:"rgba(124,58,237,0.15)", color:"#a78bfa", border:"1px solid rgba(124,58,237,0.3)", fontWeight:600 }}>🔒 CAPTCHA</span>
@@ -1632,8 +1632,8 @@ function ScanHistoryView() {
           <tbody>
             {rows.map((s,i)=>(
               <tr key={s.id} style={{ borderTop:"1px solid #0f172a", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
-                <td style={{ padding:"14px 16px", fontSize:"13px", color:"#e2e8f0", fontFamily:"monospace" }}>{s.date || (s.started_at ? new Date(s.started_at).toLocaleDateString("en-CA",{timeZone:"America/New_York"}) : "—")}</td>
-                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at).toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"}) : "—")}</td>
+                <td style={{ padding:"14px 16px", fontSize:"13px", color:"#e2e8f0", fontFamily:"monospace" }}>{s.date || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleDateString("en-CA",{timeZone:"America/New_York"}) : "—")}</td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"}) : "—")}</td>
                 <td style={{ padding:"14px 16px" }}><StatusDot status={s.status} /></td>
                 <td style={{ padding:"14px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>
                   {s.duration ||
@@ -1839,6 +1839,26 @@ function App() {
         setScanComplete({ newLeads: 0 });
       }
     }, 1500000);
+
+    // Also poll more aggressively in first 2 minutes
+    const quickPoll = setInterval(async () => {
+      try {
+        const r = await window._db.from("scans").select("id,started_at,hot_count")
+          .order("started_at",{ascending:false}).limit(1);
+        if (r.data && r.data[0]) {
+          const t = new Date(r.data[0].started_at.endsWith("Z") ? r.data[0].started_at : r.data[0].started_at+"Z").getTime();
+          if (t >= scanStartRef.current - 60000) {
+            clearInterval(quickPoll);
+            clearInterval(pollRef.current);
+            clearInterval(progressRef.current);
+            setScanProgress(100);
+            setScanStatus("Scan complete!");
+            setScanComplete({ newLeads: r.data[0].hot_count || 0 });
+          }
+        }
+      } catch(e) {}
+    }, 5000);
+    setTimeout(() => clearInterval(quickPoll), 120000);
   };
 
   const handleRefreshAfterScan = () => {
