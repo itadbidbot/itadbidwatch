@@ -1051,7 +1051,7 @@ function AddSourceModal({ onClose, onAdd }) {
               </div>
             </div>
             <div style={{ background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.2)", borderRadius:"8px", padding:"12px", fontSize:"12px", color:"#10b981", lineHeight:"1.6" }}>
-              ✓ This source will be added to your database and included in the next scan automatically.
+              Ready to save. Click "Save Source" below to add this to your database.
               The scanner will use your keyword pillars to determine what qualifies as a lead.
             </div>
           </div>
@@ -1098,7 +1098,7 @@ function AddSourceModal({ onClose, onAdd }) {
               display:"flex", alignItems:"center", gap:"6px",
               transition:"all 0.3s"
             }}>
-              {submitSuccess ? "✓ Saved Successfully!" : validating ? "Saving..." : "✓ Add Source"}
+              {submitSuccess ? "✓ Saved Successfully!" : validating ? "Saving..." : "Save Source →"}
             </button>
           )}
         </div>
