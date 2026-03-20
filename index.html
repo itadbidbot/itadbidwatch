@@ -792,24 +792,34 @@ function AddSourceModal({ onClose, onAdd }) {
     }
   };
 
+  const [submitError, setSubmitError] = React.useState("");
+  const [submitSuccess, setSubmitSuccess] = React.useState(false);
+
   const handleSubmit = async () => {
     setValidating(true);
+    setSubmitError("");
     const instructions = buildInstructions();
     const newSource = {
-      url, friendly_name: name||url, state,
-      site_type: stype, scan_instructions: instructions,
+      url,
+      friendly_name: name || url,
+      state,
+      site_type: stype,
+      scan_instructions: instructions,
       captcha_protected: false,
-      date_added: new Date().toISOString(),
-      status: "active"
     };
     try {
+      if (!window._db) throw new Error("Database connection not ready. Please refresh and try again.");
       const res = await window._db.from("sources").insert([newSource]).select();
-      if (res.error) throw res.error;
+      if (res.error) throw new Error(res.error.message || "Database error");
       setValidating(false);
-      onAdd(res.data ? res.data[0] : newSource);
+      setSubmitSuccess(true);
+      // Show success for 1.5s then close
+      setTimeout(() => {
+        onAdd(res.data ? res.data[0] : newSource);
+      }, 1500);
     } catch(err) {
       setValidating(false);
-      onAdd(newSource);
+      setSubmitError(err.message || "Failed to save. Please try again.");
     }
   };
 
@@ -1044,9 +1054,19 @@ function AddSourceModal({ onClose, onAdd }) {
           </div>
         )}
 
-        {/* Error */}
+        {/* Errors */}
         {error && (
-          <div style={{ color:"#ef4444", fontSize:"12px", marginBottom:"12px", padding:"8px 12px", background:"rgba(239,68,68,0.1)", borderRadius:"6px" }}>{error}</div>
+          <div style={{ color:"#ef4444", fontSize:"12px", marginBottom:"12px", padding:"8px 12px", background:"rgba(239,68,68,0.1)", borderRadius:"6px", border:"1px solid rgba(239,68,68,0.2)" }}>{error}</div>
+        )}
+        {submitError && (
+          <div style={{ color:"#ef4444", fontSize:"12px", marginBottom:"12px", padding:"10px 14px", background:"rgba(239,68,68,0.1)", borderRadius:"6px", border:"1px solid rgba(239,68,68,0.3)" }}>
+            <strong>Save failed:</strong> {submitError}
+          </div>
+        )}
+        {submitSuccess && (
+          <div style={{ color:"#10b981", fontSize:"12px", marginBottom:"12px", padding:"10px 14px", background:"rgba(16,185,129,0.1)", borderRadius:"6px", border:"1px solid rgba(16,185,129,0.3)" }}>
+            ✓ Source saved successfully! It will be included in your next scan.
+          </div>
         )}
 
         {/* Footer buttons */}
@@ -1064,13 +1084,18 @@ function AddSourceModal({ onClose, onAdd }) {
               Next →
             </button>
           ) : (
-            <button onClick={handleSubmit} disabled={validating} style={{
-              padding:"9px 18px", background: validating?"#334155":"linear-gradient(135deg,#f59e0b,#f97316)",
-              border:"none", borderRadius:"8px", color: validating?"#64748b":"#0f172a",
-              fontSize:"13px", fontWeight:700, cursor: validating?"not-allowed":"pointer",
-              display:"flex", alignItems:"center", gap:"6px"
+            <button onClick={handleSubmit} disabled={validating || submitSuccess} style={{
+              padding:"9px 18px",
+              background: submitSuccess ? "linear-gradient(135deg,#10b981,#059669)" :
+                          validating ? "#334155" : "linear-gradient(135deg,#f59e0b,#f97316)",
+              border:"none", borderRadius:"8px",
+              color: validating ? "#64748b" : "#0f172a",
+              fontSize:"13px", fontWeight:700,
+              cursor: validating || submitSuccess ? "not-allowed" : "pointer",
+              display:"flex", alignItems:"center", gap:"6px",
+              transition:"all 0.3s"
             }}>
-              {validating ? "Adding..." : "✓ Add Source"}
+              {submitSuccess ? "✓ Saved Successfully!" : validating ? "Saving..." : "✓ Add Source"}
             </button>
           )}
         </div>
