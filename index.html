@@ -723,29 +723,80 @@ function SourcesView() {
 }
 
 function AddSourceModal({ onClose, onAdd }) {
-  const [url, setUrl] = useState("");
-  const [name, setName] = useState("");
-  const [state, setState] = useState("");
-  const [stype, setStype] = useState("");
-  const [instructions, setInstructions] = useState("");
-  const [validating, setValidating] = useState(false);
-  const [error, setError] = useState("");
+  const [step, setStep] = React.useState(1); // 1=basics, 2=type-specific questions, 3=confirm
+  const [url, setUrl] = React.useState("");
+  const [name, setName] = React.useState("");
+  const [state, setState] = React.useState("");
+  const [stype, setStype] = React.useState("");
+  const [validating, setValidating] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  // Links Page questions
+  const [lp_startText, setLpStartText] = React.useState("");
+  const [lp_stopText, setLpStopText] = React.useState("");
+  const [lp_preClick, setLpPreClick] = React.useState("");
+  const [lp_hasExpand, setLpHasExpand] = React.useState("");
+  const [lp_docType, setLpDocType] = React.useState("");
+  const [lp_hasPagination, setLpHasPagination] = React.useState("");
+
+  // Search Page questions
+  const [sp_inputLabel, setSpInputLabel] = React.useState("");
+  const [sp_resultsFormat, setSpResultsFormat] = React.useState("");
+
+  // Generic Table questions
+  const [gt_titleCol, setGtTitleCol] = React.useState("");
+  const [gt_stopText, setGtStopText] = React.useState("");
+
   const urlValid = url.startsWith("https://") && url.length > 12;
 
-  const handleValidate = async () => {
-    if (!urlValid || !state || !stype || !name.trim() || !instructions.trim()) {
-      setError("All fields are required. URL must start with https://.");
-      return;
+  const buildInstructions = () => {
+    if (stype === "links_page") {
+      let parts = [];
+      if (lp_preClick) parts.push(`Click link containing ${lp_preClick} first`);
+      if (lp_startText) parts.push(`Scan starts just below text beginning with ${lp_startText}`);
+      parts.push("Scan bid title links on this page");
+      if (lp_hasExpand === "yes") parts.push("Click each heading or expand button to reveal bid document links");
+      if (lp_docType) parts.push(`Bid documents are ${lp_docType}`);
+      if (lp_hasPagination === "yes") parts.push("Check all pages for additional bids");
+      if (lp_stopText) parts.push(`Stop scanning when you reach ${lp_stopText}`);
+      parts.push("Score content against keyword pillars only");
+      return parts.join(". ") + ".";
     }
-    if (!/^[A-Z]{2}$/.test(state)) {
-      setError("State must be exactly 2 uppercase letters (e.g. FL, TX).");
-      return;
+    if (stype === "search_page") {
+      let parts = ["Search for bids using keyword terms"];
+      if (sp_inputLabel) parts.push(`Search input is labeled ${sp_inputLabel}`);
+      if (sp_resultsFormat) parts.push(`Results appear as ${sp_resultsFormat}`);
+      parts.push("Score each result against keyword pillars");
+      return parts.join(". ") + ".";
     }
-    setError("");
+    if (stype === "generic_table") {
+      let parts = ["Scan all visible bid rows in the table"];
+      if (gt_titleCol) parts.push(`Bid title is in the ${gt_titleCol} column`);
+      if (gt_stopText) parts.push(`Stop scanning when you reach ${gt_stopText}`);
+      parts.push("Score content against keyword pillars only");
+      return parts.join(". ") + ".";
+    }
+    return "Scan bid links on this page. Score content against keyword pillars.";
+  };
+
+  const handleNext = () => {
+    if (step === 1) {
+      if (!urlValid || !state || !stype || !name.trim()) {
+        setError("All fields are required. URL must start with https://");
+        return;
+      }
+      setError("");
+      setStep(2);
+    } else if (step === 2) {
+      setStep(3);
+    }
+  };
+
+  const handleSubmit = async () => {
     setValidating(true);
-    // Save to Supabase
-    const newSource = { 
-      url, friendly_name: name||url, state, 
+    const instructions = buildInstructions();
+    const newSource = {
+      url, friendly_name: name||url, state,
       site_type: stype, scan_instructions: instructions,
       captcha_protected: false,
       date_added: new Date().toISOString(),
@@ -757,70 +808,277 @@ function AddSourceModal({ onClose, onAdd }) {
       setValidating(false);
       onAdd(res.data ? res.data[0] : newSource);
     } catch(err) {
-      console.error("Supabase insert error:", err);
-      // Fall back to local state if Supabase fails
       setValidating(false);
       onAdd(newSource);
     }
   };
 
+  const inputStyle = {
+    width:"100%", padding:"9px 12px", background:"#0f172a",
+    border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc",
+    fontSize:"13px", outline:"none", boxSizing:"border-box"
+  };
+  const labelStyle = {
+    fontSize:"11px", color:"#94a3b8", fontWeight:600,
+    display:"block", marginBottom:"6px", letterSpacing:"0.06em"
+  };
+  const fieldStyle = { marginBottom:"14px" };
+  const hintStyle = { fontSize:"11px", color:"#475569", marginTop:"4px", lineHeight:"1.5" };
+
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999 }}>
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"520px", maxWidth:"95vw" }}>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, padding:"20px" }}>
+      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"580px", maxWidth:"100%", maxHeight:"90vh", overflowY:"auto" }}>
+
+        {/* Header */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
-          <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#f8fafc" }}>Add New Source</h2>
-          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", cursor:"pointer" }}><X size={18} /></button>
-        </div>
-        {[
-          { label:"URL *", val:url, set:setUrl, ph:"https://example.com/bids", type:"url", note: url && !urlValid ? "Must be a valid HTTPS URL" : "" },
-          { label:"Friendly Name *", val:name, set:setName, ph:"e.g. Goochland County Schools" },
-        ].map(({label,val,set,ph,note})=>(
-          <div key={label} style={{ marginBottom:"14px" }}>
-            <label style={{ fontSize:"11px", color:"#94a3b8", fontWeight:600, display:"block", marginBottom:"6px", letterSpacing:"0.06em" }}>{label.toUpperCase()}</label>
-            <input value={val} onChange={e=>set(e.target.value)} placeholder={ph}
-              style={{ width:"100%", padding:"9px 12px", background:"#0f172a", border:`1px solid ${note?"#ef4444":"#334155"}`, borderRadius:"8px", color:"#f8fafc", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
-            {note && <div style={{ fontSize:"11px", color:"#ef4444", marginTop:"4px" }}>{note}</div>}
-          </div>
-        ))}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px", marginBottom:"14px" }}>
           <div>
-            <label style={{ fontSize:"11px", color:"#94a3b8", fontWeight:600, display:"block", marginBottom:"6px", letterSpacing:"0.06em" }}>STATE * (2-LETTER)</label>
-            <select value={state} onChange={e=>setState(e.target.value)}
-              style={{ width:"100%", padding:"9px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:state?"#f8fafc":"#64748b", fontSize:"13px", outline:"none" }}>
-              <option value="">Select state</option>
-              {STATES_LIST.map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
+            <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#f8fafc" }}>Add New Source</h2>
+            <div style={{ fontSize:"11px", color:"#475569", marginTop:"4px" }}>
+              Step {step} of 3 — {step===1?"Basic Info":step===2?"Page Configuration":"Review & Add"}
+            </div>
           </div>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", cursor:"pointer", fontSize:"20px" }}>×</button>
+        </div>
+
+        {/* Progress */}
+        <div style={{ display:"flex", gap:"4px", marginBottom:"24px" }}>
+          {[1,2,3].map(s => (
+            <div key={s} style={{
+              flex:1, height:"3px", borderRadius:"99px",
+              background: s <= step ? "#f59e0b" : "#334155",
+              transition:"background 0.3s"
+            }} />
+          ))}
+        </div>
+
+        {/* Step 1 — Basic Info */}
+        {step === 1 && (
           <div>
-            <label style={{ fontSize:"11px", color:"#94a3b8", fontWeight:600, display:"block", marginBottom:"6px", letterSpacing:"0.06em" }}>SITE TYPE *</label>
-            <select value={stype} onChange={e=>setStype(e.target.value)}
-              style={{ width:"100%", padding:"9px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:stype?"#f8fafc":"#64748b", fontSize:"13px", outline:"none" }}>
-              <option value="">Select type</option>
-              <option value="links_page">Links Page</option>
-              <option value="search_page">Search Page</option>
-              <option value="generic_table">Generic Table</option>
-            </select>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>URL *</label>
+              <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/bids" style={{...inputStyle, borderColor: url && !urlValid ? "#ef4444" : "#334155"}} />
+              {url && !urlValid && <div style={{ fontSize:"11px", color:"#ef4444", marginTop:"4px" }}>Must be a valid HTTPS URL</div>}
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>FRIENDLY NAME *</label>
+              <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Lowndes County Schools - Bids" style={inputStyle} />
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px", marginBottom:"14px" }}>
+              <div>
+                <label style={labelStyle}>STATE *</label>
+                <select value={state} onChange={e=>setState(e.target.value)} style={{...inputStyle, color: state?"#f8fafc":"#64748b"}}>
+                  <option value="">Select state</option>
+                  {STATES_LIST.map(s=><option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>PAGE TYPE *</label>
+                <select value={stype} onChange={e=>setStype(e.target.value)} style={{...inputStyle, color: stype?"#f8fafc":"#64748b"}}>
+                  <option value="">Select type</option>
+                  <option value="links_page">Links Page — list of bid title links</option>
+                  <option value="search_page">Search Page — has a search box</option>
+                  <option value="generic_table">Table Page — bids in a table/grid</option>
+                </select>
+              </div>
+            </div>
+            {stype && (
+              <div style={{ background:"#0f172a", borderRadius:"8px", padding:"12px", marginBottom:"14px", fontSize:"12px", color:"#64748b", lineHeight:"1.6" }}>
+                {stype === "links_page" && "📋 Links Page: The page shows a list of bid titles. Each title is a clickable link leading to bid details or documents."}
+                {stype === "search_page" && "🔍 Search Page: The page has a search input. The scanner will type keywords and score the results."}
+                {stype === "generic_table" && "📊 Table Page: Bids are displayed in a table or structured grid. The scanner reads each row directly."}
+              </div>
+            )}
           </div>
-        </div>
-        <div style={{ marginBottom:"18px" }}>
-          <label style={{ fontSize:"11px", color:"#94a3b8", fontWeight:600, display:"block", marginBottom:"6px", letterSpacing:"0.06em" }}>SCAN INSTRUCTIONS *</label>
-          <textarea value={instructions} onChange={e=>setInstructions(e.target.value)}
-            placeholder="e.g. Scan bid title links on this page. Stop scanning when you reach Awarded Bids"
-            rows={3}
-            style={{ width:"100%", padding:"9px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc", fontSize:"13px", outline:"none", resize:"vertical", boxSizing:"border-box", fontFamily:"inherit" }} />
-        </div>
-        {error && <div style={{ color:"#ef4444", fontSize:"12px", marginBottom:"12px", padding:"8px 12px", background:"rgba(239,68,68,0.1)", borderRadius:"6px", border:"1px solid rgba(239,68,68,0.2)" }}>{error}</div>}
-        <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
-          <button onClick={onClose} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>Cancel</button>
-          <button onClick={handleValidate} disabled={validating}
-            style={{ padding:"9px 18px", background: validating ? "#334155" : "linear-gradient(135deg,#f59e0b,#f97316)", border:"none", borderRadius:"8px", color: validating ? "#64748b" : "#0f172a", fontSize:"13px", fontWeight:700, cursor: validating ? "not-allowed" : "pointer", display:"flex", alignItems:"center", gap:"6px" }}>
-            {validating ? <><RefreshCw size={12} style={{animation:"spin 1s linear infinite"}} />Validating…</> : "Validate & Add"}
+        )}
+
+        {/* Step 2 — Type-specific questions */}
+        {step === 2 && stype === "links_page" && (
+          <div>
+            <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#f59e0b", lineHeight:"1.6" }}>
+              <strong>Beta Note:</strong> Please answer these questions carefully. Accurate answers ensure the scanner finds the right bids.
+              In a future Pro release, AI will determine this automatically.
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>STARTING SECTION HEADING</label>
+              <input value={lp_startText} onChange={e=>setLpStartText(e.target.value)}
+                placeholder="e.g. Current Open Bids, Active Solicitations, Purchasing"
+                style={inputStyle} />
+              <div style={hintStyle}>What is the exact heading text above where the bids begin? Leave blank if bids start at the top of the page.</div>
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>STOPPING SECTION HEADING</label>
+              <input value={lp_stopText} onChange={e=>setLpStopText(e.target.value)}
+                placeholder="e.g. Awarded Bids, Closed Solicitations, Past Bids"
+                style={inputStyle} />
+              <div style={hintStyle}>What heading marks where bids end? The scanner will stop here to avoid picking up awarded or closed bids. Leave blank if there is no end section.</div>
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>PRE-NAVIGATION CLICK</label>
+              <input value={lp_preClick} onChange={e=>setLpPreClick(e.target.value)}
+                placeholder="e.g. Open Solicitations, Current Bids, Active RFPs"
+                style={inputStyle} />
+              <div style={hintStyle}>Does the scanner need to click a tab, button, or link BEFORE bids appear? If yes, enter the exact text of that button/link. Leave blank if bids are visible immediately.</div>
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>DO BID TITLES EXPAND WHEN CLICKED?</label>
+              <div style={{ display:"flex", gap:"8px" }}>
+                {[["yes","Yes — clicking a title reveals more info or a document link"],["no","No — each title is a direct link to the bid"]].map(([val,label])=>(
+                  <button key={val} onClick={()=>setLpHasExpand(val)} style={{
+                    flex:1, padding:"8px 12px", borderRadius:"8px", cursor:"pointer", fontSize:"12px",
+                    background: lp_hasExpand===val ? "rgba(245,158,11,0.15)" : "#0f172a",
+                    border: `1px solid ${lp_hasExpand===val ? "#f59e0b" : "#334155"}`,
+                    color: lp_hasExpand===val ? "#f59e0b" : "#64748b", textAlign:"left"
+                  }}>{label}</button>
+                ))}
+              </div>
+              <div style={hintStyle}>Some pages show bid titles that expand (accordion style) to reveal a "Full Bid Information" or document download button. Does this page work that way?</div>
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>BID DOCUMENT TYPE</label>
+              <select value={lp_docType} onChange={e=>setLpDocType(e.target.value)} style={{...inputStyle, color: lp_docType?"#f8fafc":"#64748b"}}>
+                <option value="">Select document type</option>
+                <option value="PDF files">PDF files (.pdf)</option>
+                <option value="Google Drive documents">Google Drive documents</option>
+                <option value="Word documents">Word documents (.doc/.docx)</option>
+                <option value="links to a detail page">Links to a detail page</option>
+                <option value="mixed types">Mixed types</option>
+                <option value="unknown">Not sure</option>
+              </select>
+              <div style={hintStyle}>When you click a bid link, what type of document or page opens?</div>
+            </div>
+
+            <div style={fieldStyle}>
+              <label style={labelStyle}>DOES THE PAGE HAVE MULTIPLE PAGES OF BIDS?</label>
+              <div style={{ display:"flex", gap:"8px" }}>
+                {[["yes","Yes — has Next/Previous page navigation"],["no","No — all bids on one page"]].map(([val,label])=>(
+                  <button key={val} onClick={()=>setLpHasPagination(val)} style={{
+                    flex:1, padding:"8px 12px", borderRadius:"8px", cursor:"pointer", fontSize:"12px",
+                    background: lp_hasPagination===val ? "rgba(245,158,11,0.15)" : "#0f172a",
+                    border: `1px solid ${lp_hasPagination===val ? "#f59e0b" : "#334155"}`,
+                    color: lp_hasPagination===val ? "#f59e0b" : "#64748b", textAlign:"left"
+                  }}>{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && stype === "search_page" && (
+          <div>
+            <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#f59e0b" }}>
+              <strong>Beta Note:</strong> The scanner will type each keyword from your active pillars into the search box and score the results.
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>SEARCH INPUT LABEL OR PLACEHOLDER</label>
+              <input value={sp_inputLabel} onChange={e=>setSpInputLabel(e.target.value)}
+                placeholder="e.g. Search by keyword, Search bids, Enter search term"
+                style={inputStyle} />
+              <div style={hintStyle}>What text appears inside or next to the search box on the page? This helps the scanner find the right input field.</div>
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>HOW DO RESULTS APPEAR?</label>
+              <select value={sp_resultsFormat} onChange={e=>setSpResultsFormat(e.target.value)} style={{...inputStyle, color:sp_resultsFormat?"#f8fafc":"#64748b"}}>
+                <option value="">Select format</option>
+                <option value="a list of linked titles">A list of linked titles</option>
+                <option value="a table with columns">A table with columns</option>
+                <option value="cards or tiles">Cards or tiles</option>
+                <option value="a numbered list">A numbered list</option>
+              </select>
+              <div style={hintStyle}>After you search, how are the results displayed on the page?</div>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && stype === "generic_table" && (
+          <div>
+            <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#f59e0b" }}>
+              <strong>Beta Note:</strong> The scanner reads all visible rows. Be specific about where bids start and end.
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>WHICH COLUMN CONTAINS THE BID TITLE?</label>
+              <input value={gt_titleCol} onChange={e=>setGtTitleCol(e.target.value)}
+                placeholder="e.g. Description, Bid Title, Project Name, first column"
+                style={inputStyle} />
+              <div style={hintStyle}>What is the column header that contains the bid name or title?</div>
+            </div>
+            <div style={fieldStyle}>
+              <label style={labelStyle}>STOPPING ROW OR SECTION</label>
+              <input value={gt_stopText} onChange={e=>setGtStopText(e.target.value)}
+                placeholder="e.g. Awarded, Closed, Past Solicitations"
+                style={inputStyle} />
+              <div style={hintStyle}>Is there a row header or section title where the scanner should stop reading? This prevents picking up awarded or closed bids.</div>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3 — Review */}
+        {step === 3 && (
+          <div>
+            <div style={{ background:"#0f172a", borderRadius:"10px", padding:"16px", marginBottom:"20px" }}>
+              <div style={{ fontSize:"12px", color:"#475569", fontWeight:600, marginBottom:"12px", letterSpacing:"0.06em" }}>REVIEW SOURCE CONFIGURATION</div>
+              {[
+                ["Friendly Name", name],
+                ["URL", url],
+                ["State", state],
+                ["Page Type", stype],
+              ].map(([label, val]) => (
+                <div key={label} style={{ display:"flex", gap:"12px", marginBottom:"8px" }}>
+                  <span style={{ fontSize:"12px", color:"#64748b", minWidth:"100px" }}>{label}:</span>
+                  <span style={{ fontSize:"12px", color:"#e2e8f0" }}>{val}</span>
+                </div>
+              ))}
+              <div style={{ marginTop:"12px", paddingTop:"12px", borderTop:"1px solid #1e293b" }}>
+                <div style={{ fontSize:"12px", color:"#64748b", marginBottom:"6px" }}>Generated Scan Instructions:</div>
+                <div style={{ fontSize:"12px", color:"#94a3b8", lineHeight:"1.6", fontStyle:"italic" }}>{buildInstructions()}</div>
+              </div>
+            </div>
+            <div style={{ background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.2)", borderRadius:"8px", padding:"12px", fontSize:"12px", color:"#10b981", lineHeight:"1.6" }}>
+              ✓ This source will be added to your database and included in the next scan automatically.
+              The scanner will use your keyword pillars to determine what qualifies as a lead.
+            </div>
+          </div>
+        )}
+
+        {/* Error */}
+        {error && (
+          <div style={{ color:"#ef4444", fontSize:"12px", marginBottom:"12px", padding:"8px 12px", background:"rgba(239,68,68,0.1)", borderRadius:"6px" }}>{error}</div>
+        )}
+
+        {/* Footer buttons */}
+        <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end", marginTop:"20px" }}>
+          {step > 1 && (
+            <button onClick={()=>setStep(step-1)} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>
+              ← Back
+            </button>
+          )}
+          <button onClick={onClose} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>
+            Cancel
           </button>
+          {step < 3 ? (
+            <button onClick={handleNext} style={{ padding:"9px 18px", background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", borderRadius:"8px", color:"#0f172a", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
+              Next →
+            </button>
+          ) : (
+            <button onClick={handleSubmit} disabled={validating} style={{
+              padding:"9px 18px", background: validating?"#334155":"linear-gradient(135deg,#f59e0b,#f97316)",
+              border:"none", borderRadius:"8px", color: validating?"#64748b":"#0f172a",
+              fontSize:"13px", fontWeight:700, cursor: validating?"not-allowed":"pointer",
+              display:"flex", alignItems:"center", gap:"6px"
+            }}>
+              {validating ? "Adding..." : "✓ Add Source"}
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
 
 function CsvModal({ onClose }) {
   const headers = "url,friendly_name,state,site_type,scan_instructions";
