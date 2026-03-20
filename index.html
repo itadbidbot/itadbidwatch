@@ -809,15 +809,18 @@ function AddSourceModal({ onClose, onAdd }) {
     };
     try {
       if (!window._db) throw new Error("Database connection not ready. Please refresh and try again.");
+      console.log("Inserting source:", newSource);
       const res = await window._db.from("sources").insert([newSource]).select();
-      if (res.error) throw new Error(res.error.message || "Database error");
+      console.log("Insert result:", JSON.stringify(res));
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      if (!res.data || res.data.length === 0) throw new Error("Insert returned no data. Row may not have been created.");
       setValidating(false);
       setSubmitSuccess(true);
-      // Show success for 1.5s then close
       setTimeout(() => {
-        onAdd(res.data ? res.data[0] : newSource);
+        onAdd(res.data[0]);
       }, 1500);
     } catch(err) {
+      console.error("Save error:", err);
       setValidating(false);
       setSubmitError(err.message || "Failed to save. Please try again.");
     }
