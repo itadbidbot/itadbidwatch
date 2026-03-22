@@ -346,11 +346,19 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
   const today = window._bidbotData && window._bidbotData.ready
     ? (window._LIVE_HOT || []).filter(l => (l.score || 0) >= 50)
     : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT" && (l.score||0) >= 50);
+  const totalSources = window._bidbotData && window._bidbotData.ready ? (window._ALL_SOURCES||[]).length : MOCK_SOURCES.length;
+  const activeSources = window._bidbotData && window._bidbotData.ready ? (window._ALL_SOURCES||[]).filter(s=>!s.captcha_protected).length : MOCK_SOURCES.filter(s=>!s.captcha_protected).length;
+  const captchaSources = window._bidbotData && window._bidbotData.ready ? (window._ALL_SOURCES||[]).filter(s=>s.captcha_protected).length : MOCK_SOURCES.filter(s=>s.captcha_protected).length;
+  const weekLeads = window._bidbotData && window._bidbotData.ready ? (window._ALL_LEADS||[]).filter(l=>{
+    const d = new Date(l.scan_date); const now = new Date();
+    const diff = (now - d) / (1000*60*60*24);
+    return diff <= 7 && (l.score||0) >= 50 && l.tier === "HOT";
+  }).length : 42;
   const stats = [
-    { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan" },
-    { label:"Total Sources", value:MOCK_SOURCES.length, icon:Globe, color:"#3b82f6", sub:`${MOCK_SOURCES.filter(s=>!s.captcha_protected).length} active · ${MOCK_SOURCES.filter(s=>s.captcha_protected).length} CAPTCHA` },
-    { label:"Hot Leads This Week", value:42, icon:TrendingUp, color:"#10b981", sub:"↑ 18% vs last week" },
-    { label:"Sources Added / Month", value:8, icon:Plus, color:"#8b5cf6", sub:"New this month" },
+    { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan", page:"hot" },
+    { label:"Total Sources", value:totalSources, icon:Globe, color:"#3b82f6", sub:`${activeSources} active · ${captchaSources} CAPTCHA`, page:"sources" },
+    { label:"Hot Leads This Week", value:weekLeads, icon:TrendingUp, color:"#10b981", sub:"Last 7 days", page:"hot" },
+    { label:"Sources Added / Month", value:activeSources, icon:Plus, color:"#8b5cf6", sub:"Active sources", page:"sources" },
   ];
 
   return (
@@ -380,11 +388,15 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
 
       {/* Stat cards */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"24px" }}>
-        {stats.map(({ label, value, icon:Icon, color, sub }) => (
-          <div key={label} style={{
+        {stats.map(({ label, value, icon:Icon, color, sub, page }) => (
+          <div key={label} onClick={()=>page && onNavigate(page)} style={{
             background:"#1e293b", border:"1px solid #334155", borderRadius:"12px",
-            padding:"20px", display:"flex", flexDirection:"column", gap:"8px"
-          }}>
+            padding:"20px", display:"flex", flexDirection:"column", gap:"8px",
+            cursor: page ? "pointer" : "default",
+            transition:"border-color 0.2s, transform 0.1s",
+          }}
+          onMouseEnter={e=>{if(page){e.currentTarget.style.borderColor=color;e.currentTarget.style.transform="translateY(-2px)";}}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="#334155";e.currentTarget.style.transform="translateY(0)";}}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span style={{ fontSize:"12px", color:"#64748b", fontWeight:600, letterSpacing:"0.04em" }}>{label.toUpperCase()}</span>
               <div style={{ padding:"6px", borderRadius:"8px", background:`${color}18` }}>
@@ -430,9 +442,14 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
                 <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>{lead.due_date}</td>
                 <td style={{ padding:"12px 16px" }}><ScoreBadge score={lead.score} /></td>
                 <td style={{ padding:"12px 16px" }}>
-                  <a href={lead.direct_link || lead.link || "#"} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}>
+                  <a href={lead.pdf_url || lead.document_url || lead.direct_link || lead.link || lead.source_url || "#"} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}>
                     <ExternalLink size={12} /> Open
                   </a>
+                  {(lead.source_url && lead.source_url !== (lead.pdf_url || lead.document_url)) && (
+                    <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color:"#64748b", display:"flex", alignItems:"center", gap:"4px", fontSize:"11px", textDecoration:"none", marginTop:"4px" }}>
+                      <ExternalLink size={10} /> Bid Page
+                    </a>
+                  )}
                 </td>
               </tr>
             ))}
@@ -577,9 +594,14 @@ function HotLeadsView({ stateFilter, allBids=false }) {
                   <TierBadge tier={lead.tier || "WARM"} />
                 </td>
                 <td style={{ padding:"12px 16px" }}>
-                  <a href={lead.direct_link || lead.link || "#"} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}>
+                  <a href={lead.pdf_url || lead.document_url || lead.direct_link || lead.link || lead.source_url || "#"} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}>
                     <ExternalLink size={12} /> Open
                   </a>
+                  {(lead.source_url && lead.source_url !== (lead.pdf_url || lead.document_url)) && (
+                    <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color:"#64748b", display:"flex", alignItems:"center", gap:"4px", fontSize:"11px", textDecoration:"none", marginTop:"4px" }}>
+                      <ExternalLink size={10} /> Bid Page
+                    </a>
+                  )}
                 </td>
               </tr>
             ))}
