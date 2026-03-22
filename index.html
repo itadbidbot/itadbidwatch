@@ -262,9 +262,13 @@ function Sidebar({ active, setActive, onRunScan, scanning }) {
       {nav.map(({ key, label, icon: Icon }) => {
         const isActive = active === key;
         return (
-          <button key={key} onClick={()=>setActive(key)} style={{
+          <button key={key} 
+            onClick={()=>setActive(key)}
+            onTouchEnd={(e)=>{e.preventDefault(); setActive(key);}}
+            style={{
             display:"flex", alignItems:"center", gap:"10px",
             padding:"10px 20px", margin:"1px 12px", borderRadius:"8px",
+            WebkitTapHighlightColor:"transparent", touchAction:"manipulation",
             background: isActive ? "linear-gradient(90deg,rgba(245,158,11,0.15),rgba(245,158,11,0.05))" : "transparent",
             border: isActive ? "1px solid rgba(245,158,11,0.2)" : "1px solid transparent",
             color: isActive ? "#f59e0b" : "#64748b",
@@ -355,9 +359,9 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
     return diff <= 7 && (l.score||0) >= 50 && l.tier === "HOT";
   }).length : 42;
   const stats = [
-    { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan", page:"hot" },
+    { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan", page:"hot_leads" },
     { label:"Total Sources", value:totalSources, icon:Globe, color:"#3b82f6", sub:`${activeSources} active · ${captchaSources} CAPTCHA`, page:"sources" },
-    { label:"Hot Leads This Week", value:weekLeads, icon:TrendingUp, color:"#10b981", sub:"Last 7 days", page:"hot" },
+    { label:"Hot Leads This Week", value:weekLeads, icon:TrendingUp, color:"#10b981", sub:"Last 7 days", page:"hot_leads" },
     { label:"Sources Added / Month", value:activeSources, icon:Plus, color:"#8b5cf6", sub:"Active sources", page:"sources" },
   ];
 
@@ -389,11 +393,14 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
       {/* Stat cards */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"24px" }}>
         {stats.map(({ label, value, icon:Icon, color, sub, page }) => (
-          <div key={label} onClick={()=>page && onNavigate(page)} style={{
+          <div key={label} onClick={()=>page && onNavigate(page)}
+          onTouchEnd={(e)=>{e.preventDefault(); page && onNavigate(page);}}
+          style={{
             background:"#1e293b", border:"1px solid #334155", borderRadius:"12px",
             padding:"20px", display:"flex", flexDirection:"column", gap:"8px",
             cursor: page ? "pointer" : "default",
             transition:"border-color 0.2s, transform 0.1s",
+            WebkitTapHighlightColor:"transparent",
           }}
           onMouseEnter={e=>{if(page){e.currentTarget.style.borderColor=color;e.currentTarget.style.transform="translateY(-2px)";}}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor="#334155";e.currentTarget.style.transform="translateY(0)";}}>
