@@ -43,7 +43,7 @@ window._db = _db;
 Promise.all([
   _db.from("leads").select("scan_date").order("scan_date",{ascending:false}).limit(1),
   _db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500),
-  _db.from("sources").select("*").order("date_added",{ascending:false}),
+  _db.from("sources").select("*"),
   _db.from("scans").select("*").order("started_at",{ascending:false}).limit(30)
 ]).then(function(r) {
   var allLeads = r[1].data;
@@ -347,12 +347,15 @@ function StatusDot({ status }) {
 
 function DashboardView({ onNavigate, onRunScan, scanning }) {
   // Always use live data once Supabase has loaded (even if 0 results)
-  const today = window._bidbotData && window._bidbotData.ready
-    ? (window._LIVE_HOT || []).filter(l => (l.score || 0) >= 50)
-    : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT" && (l.score||0) >= 50);
-  const totalSources = window._bidbotData && window._bidbotData.ready ? (window._ALL_SOURCES||[]).length : MOCK_SOURCES.length;
-  const activeSources = window._bidbotData && window._bidbotData.ready ? (window._ALL_SOURCES||[]).filter(s=>!s.captcha_protected).length : MOCK_SOURCES.filter(s=>!s.captcha_protected).length;
-  const captchaSources = window._bidbotData && window._bidbotData.ready ? (window._ALL_SOURCES||[]).filter(s=>s.captcha_protected).length : MOCK_SOURCES.filter(s=>s.captcha_protected).length;
+  const today = scanning
+    ? []  // Reset to 0 while scan is running
+    : window._bidbotData && window._bidbotData.ready
+      ? (window._LIVE_HOT || []).filter(l => (l.score || 0) >= 50)
+      : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT" && (l.score||0) >= 50);
+  const liveSources = window._LIVE_SOURCES || [];
+  const totalSources = window._bidbotData && window._bidbotData.ready ? liveSources.length : MOCK_SOURCES.length;
+  const activeSources = window._bidbotData && window._bidbotData.ready ? liveSources.filter(s=>!s.captcha_protected).length : MOCK_SOURCES.filter(s=>!s.captcha_protected).length;
+  const captchaSources = window._bidbotData && window._bidbotData.ready ? liveSources.filter(s=>s.captcha_protected).length : MOCK_SOURCES.filter(s=>s.captcha_protected).length;
   const weekLeads = window._bidbotData && window._bidbotData.ready ? (window._ALL_LEADS||[]).filter(l=>{
     const d = new Date(l.scan_date); const now = new Date();
     const diff = (now - d) / (1000*60*60*24);
