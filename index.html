@@ -1843,13 +1843,20 @@ function SettingsView() {
 
 // ─── APP ROOT ──────────────────────────────────────────────────────────────────
 function App() {
-  const [page, setPage] = useState("dashboard");
+  const [page, setPage] = useState(() => {
+    const hash = window.location.hash.replace("#", "");
+    const valid = ["dashboard","hot_leads","all_bids","sources","keywords","history","settings"];
+    return valid.includes(hash) ? hash : "dashboard";
+  });
   const [stateFilter, setStateFilter] = useState("all");
   const [entityFilter, setEntityFilter] = useState("all");
   const [scanning, setScanning] = useState(false);
   const [toast, setToast] = useState(null);
 
   React.useEffect(() => { window._bidbotSetPage = setPage; }, []);
+
+  // Sync page to URL hash so refresh stays on same page
+  React.useEffect(() => { window.location.hash = page; }, [page]);
 
   const [scanProgress, setScanProgress] = React.useState(0);
   const [scanStatus, setScanStatus] = React.useState("");
