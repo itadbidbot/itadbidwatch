@@ -1427,7 +1427,7 @@ function KeywordsView() {
 
       {/* Pillars grid */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
-        {pillars.map(pillar => (
+        {[...pillars].sort((a,b) => (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0)).map(pillar => (
           <div key={pillar.key} style={{
             background:"#1e293b",
             border:`1px solid ${pillar.enabled ? pillar.color + "40" : "#1e293b"}`,
