@@ -1228,6 +1228,9 @@ function KeywordsView() {
   const [pillars, setPillars] = useState(() =>
     KEYWORD_PILLARS.map(p => ({ ...p, enabled: true, custom: false }))
   );
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const [currentPlan, setCurrentPlan] = useState("starter");
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [showAddPillar, setShowAddPillar] = useState(false);
@@ -1246,8 +1249,55 @@ function KeywordsView() {
     setTimeout(() => setToast(null), 3000);
   };
 
+  // Load pillars from Supabase on mount
+  React.useEffect(() => {
+    if (!window._db) { setLoading(false); return; }
+    window._db.from("keywords").select("*").order("weight", { ascending: false })
+      .then(({ data, error }) => {
+        if (error || !data || data.length === 0) { setLoading(false); return; }
+        const loaded = data.map(row => ({
+          key: row.pillar_key,
+          name: row.pillar_name,
+          weight: row.weight,
+          terms: Array.isArray(row.terms) ? row.terms : JSON.parse(row.terms || "[]"),
+          enabled: row.enabled !== false,
+          color: row.color || "#f59e0b",
+          custom: row.pillar_key.startsWith("custom_"),
+        }));
+        setPillars(loaded);
+        setLoading(false);
+        setHasChanges(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  // Save all pillars to Supabase
+  const saveToSupabase = async () => {
+    if (!window._db) { showToast("Database not connected", "#ef4444"); return; }
+    setSaving(true);
+    try {
+      for (const p of pillars) {
+        await window._db.from("keywords").upsert({
+          pillar_key: p.key,
+          pillar_name: p.name,
+          weight: p.weight,
+          terms: p.terms,
+          enabled: p.enabled,
+          color: p.color,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "pillar_key" });
+      }
+      setHasChanges(false);
+      showToast("Keywords saved! Changes apply on next scan.", "#10b981");
+    } catch(e) {
+      showToast("Save failed: " + e.message, "#ef4444");
+    }
+    setSaving(false);
+  };
+
   const togglePillar = (key) => {
     setPillars(prev => prev.map(p => p.key === key ? { ...p, enabled: !p.enabled } : p));
+    setHasChanges(true);
   };
 
   const deletePillar = (key) => {
@@ -1262,12 +1312,14 @@ function KeywordsView() {
       p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x=>x!==t), t] } : p
     ));
     setAddTermInput(prev => ({ ...prev, [pillarKey]: "" }));
+    setHasChanges(true);
   };
 
   const removeTerm = (pillarKey, term) => {
     setPillars(prev => prev.map(p =>
       p.key === pillarKey ? { ...p, terms: p.terms.filter(t => t !== term) } : p
     ));
+    setHasChanges(true);
   };
 
   const handleAddPillar = () => {
@@ -1282,9 +1334,14 @@ function KeywordsView() {
     setNewPillar({ name:"", weight:10, terms:"", color:"#06b6d4", negative:false });
     setShowAddPillar(false);
     showToast(`"${newPillar.name.trim()}" pillar added!`);
+    setHasChanges(true);
   };
 
   const enabledCount = pillars.filter(p => p.enabled).length;
+
+  if (loading) return (
+    <div style={{ padding:"28px", color:"#64748b", fontSize:"14px" }}>Loading keywords from database...</div>
+  );
 
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1, position:"relative" }}>
@@ -1315,6 +1372,18 @@ function KeywordsView() {
           }}>
             <span style={{ fontSize:"10px" }}>⭐</span> {plan.label} Plan
           </button>
+          {hasChanges && (
+            <button onClick={saveToSupabase} disabled={saving} style={{
+              padding:"8px 16px", borderRadius:"8px", fontSize:"13px", fontWeight:600,
+              cursor: saving ? "not-allowed" : "pointer",
+              background: saving ? "#1e293b" : "linear-gradient(135deg,#10b981,#059669)",
+              border:"none", color: saving ? "#64748b" : "#fff",
+              boxShadow: saving ? "none" : "0 3px 12px rgba(16,185,129,0.35)",
+              display:"flex", alignItems:"center", gap:"7px"
+            }}>
+              {saving ? "Saving..." : "💾 Save Changes"}
+            </button>
+          )}
           <button
             onClick={() => { if (atLimit) { setShowUpgrade(true); } else { setShowAddPillar(true); } }}
             style={{
