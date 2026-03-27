@@ -1298,7 +1298,17 @@ function KeywordsView() {
     setHasChanges(true);
   };
 
-  const deletePillar = (key) => {
+  const deletePillar = async (key) => {
+    // Remove from Supabase first
+    if (window._db) {
+      try {
+        await window._db.from("keywords").delete().eq("pillar_key", key);
+      } catch(e) {
+        showToast("Delete failed: " + e.message, "#ef4444");
+        return;
+      }
+    }
+    // Then remove from local state
     setPillars(prev => prev.filter(p => p.key !== key));
     showToast("Pillar removed", "#ef4444");
   };
