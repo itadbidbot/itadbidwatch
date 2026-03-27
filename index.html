@@ -1225,9 +1225,7 @@ function Toggle({ enabled, onChange }) {
 }
 
 function KeywordsView() {
-  const [pillars, setPillars] = useState(() =>
-    KEYWORD_PILLARS.map(p => ({ ...p, enabled: true, custom: false }))
-  );
+  const [pillars, setPillars] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
