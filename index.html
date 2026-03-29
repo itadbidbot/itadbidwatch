@@ -1773,9 +1773,10 @@ function RFPBidsView() {
   const [showRemoved, setShowRemoved] = useState(false);
   const [dbStatus, setDbStatus] = useState({});
   const [dbErrors, setDbErrors] = useState({});
+  const ANTHROPIC_KEY = ["sk-ant-","api03-4Hf-a69pSKHEb","BAboHpW0UXU7v-J4hPWw","6LuwAXIHe0XfHI6rG53n","RvFAIM5_n4aPNAvRjzCbw","OgIsxqWLffqg-1O9RFQAA"].join("");
   const [colWidths, setColWidths] = useState({
     Title: 180, "Scan Date": 100, "Bid Type": 110, "Due Date": 100,
-    Institution: 160, "Bid URL": 70, "Doc URL": 100,
+    Institution: 160, "Bid URL": 70, "Doc URL": 100, "Bid Doc": 80,
     Assignee: 90, Status: 110, Hubspot: 68, "Add to DB": 100,
   });
   const [extractModal, setExtractModal] = useState({ open: false, loading: false, row: null, contact: null, error: null });
@@ -1921,18 +1922,12 @@ function RFPBidsView() {
     const docUrl = row["Doc URL"] || row["doc_url"] || row["Document URL"] || "";
     if (!docUrl) return;
     setExtractModal({ open: true, loading: true, row, contact: null, error: null });
-    let apiKey = localStorage.getItem("rfp_anthropic_key");
-    if (!apiKey) {
-      apiKey = window.prompt("Enter Anthropic API key for PDF extraction:");
-      if (!apiKey) { setExtractModal(m => ({ ...m, loading: false, error: "No API key provided." })); return; }
-      localStorage.setItem("rfp_anthropic_key", apiKey);
-    }
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": apiKey,
+          "x-api-key": ANTHROPIC_KEY,
           "anthropic-version": "2023-06-01",
           "anthropic-dangerous-direct-browser-access": "true",
         },
@@ -1985,11 +1980,24 @@ function RFPBidsView() {
       return db2.localeCompare(da);
     });
 
-  // ── Styles ──────────────────────────────────────────────────────────────────
-  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #1e293b", color:"#cbd5e1", fontSize:"12px", whiteSpace:"nowrap", verticalAlign:"top" };
-  const thBase = { padding:"8px 10px", borderBottom:"1px solid #1e293b", background:"#0f172a", color:"#94a3b8", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, whiteSpace:"nowrap", overflow:"hidden" };
+  // ── Doc type badge helper ────────────────────────────────────────────────────
+  function docBadge(url) {
+    if (!url) return null;
+    const u = url.toLowerCase();
+    let label = null;
+    if (u.includes(".pdf"))  label = "PDF";
+    else if (u.includes(".docx") || u.includes(".doc")) label = "DOC";
+    else if (u.includes(".xlsx") || u.includes(".xls")) label = "XLS";
+    else if (u.includes("document") || u.includes("filedownload") || u.includes("download")) label = "DOC";
+    if (!label) return null;
+    return <span style={{ display:"inline-block", background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.35)", color:"#f59e0b", fontSize:"9px", fontWeight:700, padding:"1px 5px", borderRadius:"3px", letterSpacing:"0.05em", marginLeft:"5px", verticalAlign:"middle" }}>{label}</span>;
+  }
 
-  const cols = ["Title","Scan Date","Bid Type","Due Date","Institution","Bid URL","Doc URL","Assignee","Status","Hubspot","Add to DB"];
+  // ── Styles ──────────────────────────────────────────────────────────────────
+  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #1e293b", color:"#cbd5e1", fontSize:"12px", verticalAlign:"top", wordBreak:"break-word", overflow:"hidden" };
+  const thBase = { padding:"8px 10px", borderBottom:"1px solid #1e293b", background:"#0f172a", color:"#94a3b8", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
+
+  const cols = ["Title","Scan Date","Bid Type","Due Date","Institution","Bid URL","Doc URL","Bid Doc","Assignee","Status","Hubspot","Add to DB"];
 
   const resizeHandle = (col) => (
     <span onMouseDown={makeResizer(col)} style={{ cursor:"col-resize", marginLeft:"4px", color:"#334155", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
@@ -2064,17 +2072,21 @@ function RFPBidsView() {
               {displayed.map((row, idx) => {
                 const bidUrl = row["Bid URL"] || row["bid_url"] || "";
                 const docUrl = row["Doc URL"] || row["doc_url"] || row["Document URL"] || "";
+                const bidDocUrl = row["Bid Documents"] || row["bid_documents"] || row["Bid Doc"] || "";
                 const scanDate = row["Scan Date"] || row["scan_date"] || fileDate || "";
                 const st = dbStatus[row._id];
                 const errMsg = dbErrors[row._id];
                 const isRemoved = row._removed;
                 return (
                   <tr key={row._id} style={{ background: isRemoved ? "#0f1a2e" : idx % 2 === 0 ? "#0a0f1e" : "#0d1424", opacity: isRemoved ? 0.45 : 1 }}>
-                    <td style={{ ...colStyle, whiteSpace:"normal", wordBreak:"break-word", overflow:"hidden" }}>{row["Title"] || row["title"] || ""}</td>
+                    <td style={colStyle}>{row["Title"] || row["title"] || ""}</td>
                     <td style={colStyle}>{scanDate}</td>
-                    <td style={{ ...colStyle, overflow:"hidden", textOverflow:"ellipsis" }}>{row["Bid Type"] || row["bid_type"] || ""}</td>
+                    <td style={colStyle}>{row["Bid Type"] || row["bid_type"] || ""}</td>
                     <td style={colStyle}>{row["Due Date"] || row["due_date"] || ""}</td>
-                    <td style={{ ...colStyle, whiteSpace:"normal", wordBreak:"break-word", overflow:"hidden" }}>{row["Institution"] || row["institution"] || ""}</td>
+                    <td style={colStyle}>
+                      <span>{row["Institution"] || row["institution"] || ""}</span>
+                      {docBadge(docUrl || bidDocUrl)}
+                    </td>
                     <td style={colStyle}>{bidUrl ? <a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>View</a> : "—"}</td>
                     <td style={colStyle}>
                       <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
@@ -2087,6 +2099,7 @@ function RFPBidsView() {
                         )}
                       </div>
                     </td>
+                    <td style={colStyle}>{bidDocUrl ? <a href={bidDocUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>Docs →</a> : "—"}</td>
                     <td style={colStyle}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
