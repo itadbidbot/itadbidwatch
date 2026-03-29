@@ -1277,12 +1277,12 @@ function KeywordsView() {
     const t = term.trim().toLowerCase();
     if (!t) return;
     // Check negative terms
-    if (negativeTerms.includes(t)) {
+    if (negativeTerms.some(x => x.toLowerCase() === t)) {
       showToast(`"${t}" is in the Negative Terms list — remove it there first`, "#ef4444");
       return;
     }
     // Check other pillars
-    const conflict = pillars.find(p => p.key !== pillarKey && p.terms.includes(t));
+    const conflict = pillars.find(p => p.key !== pillarKey && p.terms.some(x => x.toLowerCase() === t));
     if (conflict) {
       showToast(`"${t}" already exists in "${conflict.name}" — remove it there first`, "#ef4444");
       return;
@@ -1484,6 +1484,7 @@ function KeywordsView() {
                 value={newTermInputs[pillar.key] || ""}
                 onChange={e => setNewTermInputs(prev=>({...prev,[pillar.key]:e.target.value}))}
                 onKeyDown={e => e.key==="Enter" && addTerm(pillar.key, newTermInputs[pillar.key]||"")}
+                onBlur={e => addTerm(pillar.key, e.target.value)}
                 placeholder="Add term..."
                 style={{ flex:1, background:"#0f172a", border:"1px solid #1e293b", color:"#94a3b8",
                   padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none",
