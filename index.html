@@ -1826,9 +1826,9 @@ function RFPBidsView() {
       doc_id:         (r["Doc ID"]         || r["doc_id"]         || "").slice(0, 200),
     })).filter(r => r.bid_url);
     if (!records.length) return;
-    const { error: upsertErr } = await window._db.from("rfp_bids").upsert(records, { onConflict: "bid_url" });
-    if (upsertErr) console.error("upsertRfpRows error:", upsertErr);
-    else console.log("upsertRfpRows: saved", records.length, "rows to rfp_bids");
+    const { data: upsertData, error: upsertErr } = await window._db.from("rfp_bids").upsert(records, { onConflict: "doc_id" });
+    if (upsertErr) console.error("upsertRfpRows error:", JSON.stringify(upsertErr), upsertErr);
+    else console.log("upsertRfpRows: saved", records.length, "rows to rfp_bids", upsertData);
   }
 
   function handleFile(e) {
@@ -1846,6 +1846,7 @@ function RFPBidsView() {
     const reader = new FileReader();
     reader.onload = ev => {
       const parsed = parseCSV(ev.target.result);
+      console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
       upsertRfpRows(parsed, fDate);
       const withMeta = parsed.map((r, i) => ({
         ...r, _id: i, _assignee: "", _status: "pending", _hubspot: false, _removed: false,
