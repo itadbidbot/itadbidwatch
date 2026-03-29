@@ -1826,7 +1826,9 @@ function RFPBidsView() {
       doc_id:         (r["Doc ID"]         || r["doc_id"]         || "").slice(0, 200),
     })).filter(r => r.bid_url);
     if (!records.length) return;
-    await window._db.from("rfp_bids").upsert(records, { onConflict: "bid_url" });
+    const { error: upsertErr } = await window._db.from("rfp_bids").upsert(records, { onConflict: "bid_url" });
+    if (upsertErr) console.error("upsertRfpRows error:", upsertErr);
+    else console.log("upsertRfpRows: saved", records.length, "rows to rfp_bids");
   }
 
   function handleFile(e) {
@@ -1858,14 +1860,21 @@ function RFPBidsView() {
 
   // ── Load all rows from rfp_bids on mount ────────────────────────────────────
   useEffect(() => {
-    async function loadFromDB() {
+    async function loadFromDB(attempt) {
+      console.log("Loading RFP bids, _db ready:", !!window._db, "attempt:", attempt);
+      if (!window._db) {
+        if (attempt < 5) setTimeout(() => loadFromDB(attempt + 1), 1000);
+        else console.warn("RFP load: window._db never became available after 5 retries");
+        return;
+      }
       const { data, error } = await window._db
         .from("rfp_bids")
         .select("*")
         .order("file_date", { ascending: false })
         .limit(2000);
-      if (error || !data || !data.length) return;
-      // Map DB columns back to CSV-style keys + meta fields
+      if (error) { console.error("RFP load error:", error); return; }
+      console.log("RFP bids loaded from Supabase:", data ? data.length : 0, "rows");
+      if (!data || !data.length) return;
       const withMeta = data.map((r, i) => ({
         _id: i,
         _assignee: r.assignee || "",
@@ -1888,11 +1897,10 @@ function RFPBidsView() {
         "Doc ID":         r.doc_id || "",
       }));
       setRows(withMeta);
-      // Set fileDate to the most recent file_date
       const latest = data.find(r => r.file_date);
       if (latest) setFileDate(latest.file_date);
     }
-    loadFromDB();
+    loadFromDB(0);
   }, []);
 
   async function saveMeta(row, field, value) {
