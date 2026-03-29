@@ -1239,12 +1239,17 @@ function KeywordsView() {
   const [toast, setToast] = useState(null);
   const [savingPillar, setSavingPillar] = useState(null);
   const [savingNeg, setSavingNeg] = useState(false);
+  const toastTimer = React.useRef(null);
 
   const COLORS = ["#f59e0b","#3b82f6","#10b981","#8b5cf6","#ef4444","#06b6d4","#f97316","#84cc16"];
 
-  const showToast = (msg, color="#10b981") => {
-    setToast({ msg, color });
-    setTimeout(() => setToast(null), 3000);
+  const showToast = (msg, color="#10b981", opts={}) => {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ msg, color, ...opts });
+    if (!opts.persist) {
+      const delay = color === "#ef4444" ? 5000 : 3000;
+      toastTimer.current = setTimeout(() => setToast(null), delay);
+    }
   };
 
   // Load from Supabase
@@ -1273,7 +1278,7 @@ function KeywordsView() {
     // Note: user still needs to Save after toggling to persist
   };
 
-  const addTerm = (pillarKey, term) => {
+  const addTerm = (pillarKey, term, onConfirmed=null) => {
     const t = term.trim().toLowerCase();
     if (!t) return true;
     // Exact match in negative terms — hard block
@@ -1287,24 +1292,41 @@ function KeywordsView() {
       showToast(`"${t}" already exists in "${conflict.name}" — remove it there first`, "#ef4444");
       return false;
     }
-    // Partial match — warning only, still adds
+    // Partial match check
+    let partialMsg = null;
     const negPartial = negativeTerms.find(x => { const xl = x.toLowerCase(); return xl !== t && (xl.includes(t) || t.includes(xl)); });
     if (negPartial) {
-      showToast(`A similar term "${negPartial}" was found in Negative Terms — please review before saving`, "#f59e0b");
+      partialMsg = `A similar term "${negPartial}" was found in Negative Terms — please review before saving`;
     } else {
       for (const p of pillars) {
         if (p.key === pillarKey) continue;
         const match = p.terms.find(x => { const xl = x.toLowerCase(); return xl !== t && (xl.includes(t) || t.includes(xl)); });
-        if (match) {
-          showToast(`A similar term "${match}" was found in "${p.name}" — please review before saving`, "#f59e0b");
-          break;
-        }
+        if (match) { partialMsg = `A similar term "${match}" was found in "${p.name}" — please review before saving`; break; }
       }
     }
-    setPillars(prev => prev.map(p =>
-      p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x => x !== t), t] } : p
-    ));
-    setNewTermInputs(prev => ({ ...prev, [pillarKey]: "" }));
+    const doAdd = () => {
+      setPillars(prev => prev.map(p =>
+        p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x => x !== t), t] } : p
+      ));
+      setNewTermInputs(prev => ({ ...prev, [pillarKey]: "" }));
+    };
+    if (partialMsg) {
+      if (onConfirmed) {
+        // Save context: block save, ask for confirmation
+        showToast(partialMsg, "#f59e0b", {
+          persist: true,
+          confirmLabel: "Save Anyway",
+          onConfirm: () => { doAdd(); setToast(null); onConfirmed(); },
+        });
+        return "warn";
+      } else {
+        // Standalone add: add immediately, show dismissable warning
+        doAdd();
+        showToast(partialMsg, "#f59e0b", { persist: true });
+        return true;
+      }
+    }
+    doAdd();
     return true;
   };
 
@@ -1314,10 +1336,7 @@ function KeywordsView() {
     ));
   };
 
-  const savePillar = async (pillarKey) => {
-    if (!window._db) return;
-    const pending = (newTermInputs[pillarKey] || "").trim();
-    if (pending && !addTerm(pillarKey, pending)) return;
+  const doSave = (pillarKey) => {
     setSavingPillar(pillarKey);
     // Use functional update to get current state at save time
     setPillars(current => {
@@ -1332,16 +1351,20 @@ function KeywordsView() {
         color: pillar.color,
         updated_at: new Date().toISOString(),
       }, { onConflict: "pillar_key" })
-      .then(() => {
-        showToast(`"${pillar.name}" saved!`);
-        setSavingPillar(null);
-      })
-      .catch(() => {
-        showToast("Save failed", "#ef4444");
-        setSavingPillar(null);
-      });
+      .then(() => { showToast(`"${pillar.name}" saved!`); setSavingPillar(null); })
+      .catch(() => { showToast("Save failed", "#ef4444"); setSavingPillar(null); });
       return current;
     });
+  };
+
+  const savePillar = (pillarKey) => {
+    if (!window._db) return;
+    const pending = (newTermInputs[pillarKey] || "").trim();
+    if (pending) {
+      const result = addTerm(pillarKey, pending, () => doSave(pillarKey));
+      if (result === false || result === "warn") return;
+    }
+    doSave(pillarKey);
   };
 
   const deletePillar = async (key) => {
@@ -1404,9 +1427,29 @@ function KeywordsView() {
 
       {toast && (
         <div style={{ position:"fixed", bottom:"28px", right:"28px", zIndex:999,
-          background: toast.color, color:"#fff", padding:"12px 20px",
+          background: toast.color, color:"#fff", padding:"12px 16px",
           borderRadius:"10px", fontSize:"13px", fontWeight:600,
-          boxShadow:"0 4px 20px rgba(0,0,0,0.4)" }}>{toast.msg}</div>
+          boxShadow:"0 4px 20px rgba(0,0,0,0.4)",
+          display:"flex", alignItems:"flex-start", gap:"10px", maxWidth:"380px" }}>
+          <span style={{ flex:1, lineHeight:"1.4" }}>{toast.msg}</span>
+          {toast.onConfirm ? (
+            <div style={{ display:"flex", gap:"6px", flexShrink:0 }}>
+              <button onClick={toast.onConfirm} style={{
+                background:"rgba(255,255,255,0.25)", border:"none", borderRadius:"6px",
+                color:"#fff", padding:"3px 10px", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>
+                {toast.confirmLabel || "Confirm"}
+              </button>
+              <button onClick={() => setToast(null)} style={{
+                background:"rgba(0,0,0,0.2)", border:"none", borderRadius:"6px",
+                color:"#fff", padding:"3px 10px", fontSize:"12px", fontWeight:600, cursor:"pointer" }}>
+                Cancel
+              </button>
+            </div>
+          ) : toast.persist ? (
+            <span onClick={() => setToast(null)}
+              style={{ cursor:"pointer", fontSize:"15px", lineHeight:1, opacity:0.8, flexShrink:0 }}>✕</span>
+          ) : null}
+        </div>
       )}
 
       {/* Header */}
@@ -1510,6 +1553,9 @@ function KeywordsView() {
               <button onClick={() => addTerm(pillar.key, newTermInputs[pillar.key]||"")}
                 style={{ padding:"5px 10px", background:"#1e293b", border:"1px solid #334155",
                   borderRadius:"6px", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>+</button>
+            </div>
+            <div style={{ fontSize:"10px", color:"#475569", marginBottom:"8px", fontStyle:"italic" }}>
+              Press Enter to add keyword before saving
             </div>
 
             {/* Save + Delete row */}
