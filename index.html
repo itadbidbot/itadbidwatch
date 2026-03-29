@@ -1875,27 +1875,29 @@ function RFPBidsView() {
         .limit(2000);
       if (error) { console.error("RFP load error:", error); return; }
       console.log("RFP bids loaded from Supabase:", data ? data.length : 0, "rows");
+      if (data && data.length > 0) console.log("RFP first raw row from Supabase:", data[0]);
       if (!data || !data.length) return;
       const withMeta = data.map((r, i) => ({
         _id: i,
-        _assignee: r.assignee || "",
-        _status: r.status || "pending",
-        _hubspot: !!r.hubspot,
-        _removed: false,
-        "Title":          r.title || "",
-        "Bid URL":        r.bid_url || "",
-        "Doc URL":        r.document_url || "",
-        "Bid Documents":  r.bid_documents || "",
-        "Publish Date":   r.publish_date || "",
-        "Pre-bid Date":   r.pre_bid_date || "",
-        "Due Date":       r.due_date || "",
-        "Memo":           r.memo || "",
-        "Bid Type":       r.bid_type || "",
-        "Institution":    r.institution || "",
-        "State":          r.state || "",
+        _assignee:   r.assignee      || "",
+        _status:     r.status        || "pending",
+        _hubspot:    !!(r.hubspot_added),
+        _added_to_db: !!(r.added_to_db),
+        _removed:    false,
+        "Doc ID":         r.doc_id         || "",
+        "Title":          r.title          || "",
+        "Bid URL":        r.bid_url        || "",
+        "Doc URL":        r.document_url   || "",
+        "Bid Documents":  r.bid_documents  || "",
+        "Publish Date":   r.publish_date   || "",
+        "Pre-bid Date":   r.pre_bid_date   || "",
+        "Due Date":       r.due_date       || "",
+        "Memo":           r.memo           || "",
+        "Bid Type":       r.bid_type       || "",
+        "Institution":    r.institution    || "",
+        "State":          r.state          || "",
         "Market Sectors": r.market_sectors || "",
-        "Scan Date":      r.file_date || "",
-        "Doc ID":         r.doc_id || "",
+        "Scan Date":      r.file_date      || "",
       }));
       setRows(withMeta);
       const latest = data.find(r => r.file_date);
@@ -1908,10 +1910,11 @@ function RFPBidsView() {
     const bidUrl = row["Bid URL"] || row["bid_url"] || "";
     if (!bidUrl) return;
     const update = { bid_url: bidUrl };
-    if (field === "assignee") update.assignee = value;
-    if (field === "status") update.status = value;
-    if (field === "hubspot") update.hubspot = value;
-    await window._db.from("rfp_bids").upsert(update, { onConflict: "bid_url" });
+    if (field === "assignee")    update.assignee       = value;
+    if (field === "status")      update.status         = value;
+    if (field === "hubspot")     update.hubspot_added  = value;
+    if (field === "added_to_db") update.added_to_db    = value;
+    await window._db.from("rfp_bids").upsert(update, { onConflict: "doc_id" });
   }
 
   function updateRow(id, field, value) {
