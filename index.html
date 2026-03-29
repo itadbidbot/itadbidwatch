@@ -247,6 +247,7 @@ function Sidebar({ active, setActive, onRunScan, scanning }) {
     { key:"sources", label:"Bid Scan Sources", icon:Globe },
     { key:"keywords", label:"Keywords & Scoring", icon:Key },
     { key:"history", label:"Scan History", icon:Clock },
+    { key:"rfp_bids", label:"RFP School Watch", icon:FileText },
     { key:"settings", label:"Settings", icon:Settings },
   ];
 
@@ -1762,11 +1763,277 @@ function SettingsView() {
   );
 }
 
+// ─── RFP BIDS VIEW ────────────────────────────────────────────────────────────
+function RFPBidsView() {
+  const [rows, setRows] = useState([]);
+  const [fileDate, setFileDate] = useState(null);
+  const [filter, setFilter] = useState("");
+  const [dbStatus, setDbStatus] = useState({}); // rowIndex -> "adding"|"added"|"duplicate"|"error"
+  const fileInputRef = useRef(null);
+
+  function parseCSV(text) {
+    const lines = text.split(/\r?\n/);
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",").map(h => h.trim().replace(/^"|"$/g, ""));
+    const results = [];
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      // Handle quoted fields
+      const fields = [];
+      let cur = "", inQ = false;
+      for (let c = 0; c < line.length; c++) {
+        if (line[c] === '"') { inQ = !inQ; }
+        else if (line[c] === ',' && !inQ) { fields.push(cur); cur = ""; }
+        else { cur += line[c]; }
+      }
+      fields.push(cur);
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h] = (fields[idx] || "").trim(); });
+      results.push(obj);
+    }
+    return results;
+  }
+
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    // Extract date from filename like RFPSchoolwatch_Daily_Bid_Alert_20260327.csv
+    const match = file.name.match(/(\d{8})/);
+    if (match) {
+      const raw = match[1];
+      setFileDate(`${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`);
+    } else {
+      setFileDate(null);
+    }
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const parsed = parseCSV(ev.target.result);
+      // Attach assignee/status/hubspot fields
+      const withMeta = parsed.map((r, i) => ({
+        ...r,
+        _id: i,
+        _assignee: "",
+        _status: "pending",
+        _hubspot: false,
+      }));
+      setRows(withMeta);
+      setDbStatus({});
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  async function loadSavedMeta(parsedRows) {
+    // Try to load saved rfp_bids rows by bid_url key
+    const urls = parsedRows.map(r => r["Bid URL"] || r["bid_url"] || "").filter(Boolean);
+    if (!urls.length) return;
+    const { data } = await window._db.from("rfp_bids").select("bid_url,assignee,status,hubspot").in("bid_url", urls);
+    if (!data) return;
+    const map = {};
+    data.forEach(d => { map[d.bid_url] = d; });
+    setRows(prev => prev.map(r => {
+      const key = r["Bid URL"] || r["bid_url"] || "";
+      if (map[key]) {
+        return { ...r, _assignee: map[key].assignee || "", _status: map[key].status || "pending", _hubspot: !!map[key].hubspot };
+      }
+      return r;
+    }));
+  }
+
+  useEffect(() => {
+    if (rows.length > 0) loadSavedMeta(rows);
+  }, [rows.length]);
+
+  async function saveMeta(row, field, value) {
+    const bidUrl = row["Bid URL"] || row["bid_url"] || "";
+    if (!bidUrl) return;
+    const update = { bid_url: bidUrl };
+    if (field === "assignee") update.assignee = value;
+    if (field === "status") update.status = value;
+    if (field === "hubspot") update.hubspot = value;
+    await window._db.from("rfp_bids").upsert(update, { onConflict: "bid_url" });
+  }
+
+  function updateRow(idx, field, value) {
+    setRows(prev => prev.map((r, i) => i === idx ? { ...r, [field]: value } : r));
+    const row = rows[idx];
+    if (row) saveMeta({ ...row, [field]: value }, field.replace("_",""), value);
+  }
+
+  async function addToDB(row, idx) {
+    const bidUrl = row["Bid URL"] || row["bid_url"] || "";
+    setDbStatus(s => ({ ...s, [idx]: "adding" }));
+    // Check for duplicate
+    const { data: existing } = await window._db.from("leads").select("id").eq("source_url", bidUrl).limit(1);
+    if (existing && existing.length > 0) {
+      setDbStatus(s => ({ ...s, [idx]: "duplicate" }));
+      return;
+    }
+    const record = {
+      title: row["Title"] || row["title"] || "",
+      source_url: bidUrl,
+      state: row["State"] || row["state"] || "",
+      scan_date: fileDate || new Date().toISOString().slice(0,10),
+      tier: "WARM",
+      score: 0,
+      source_name: row["Institution"] || row["institution"] || "",
+      snippet: row["Market Sectors"] || row["market_sectors"] || "",
+      due_date: row["Due Date"] || row["due_date"] || null,
+      publish_date: row["Publish Date"] || row["publish_date"] || null,
+    };
+    const { error } = await window._db.from("leads").insert(record);
+    setDbStatus(s => ({ ...s, [idx]: error ? "error" : "added" }));
+  }
+
+  const filtered = rows.filter(r => {
+    if (!filter) return true;
+    const q = filter.toLowerCase();
+    return (
+      (r["Title"] || "").toLowerCase().includes(q) ||
+      (r["Institution"] || "").toLowerCase().includes(q) ||
+      (r["State"] || "").toLowerCase().includes(q)
+    );
+  });
+
+  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #1e293b", color:"#cbd5e1", fontSize:"12px", whiteSpace:"nowrap", verticalAlign:"middle" };
+  const thStyle = { ...colStyle, background:"#0f172a", color:"#94a3b8", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2 };
+
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", padding:"24px" }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px", flexShrink:0 }}>
+        <div>
+          <h2 style={{ color:"#f8fafc", fontSize:"20px", fontWeight:700, margin:0 }}>RFP School Watch</h2>
+          {fileDate && <div style={{ color:"#f59e0b", fontSize:"13px", marginTop:"4px" }}>File date: {fileDate}</div>}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
+          <div style={{ position:"relative" }}>
+            <Search size={13} color="#64748b" style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)" }} />
+            <input
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              placeholder="Filter by title, institution, state…"
+              style={{
+                background:"#1e293b", border:"1px solid #334155", color:"#f8fafc",
+                padding:"7px 12px 7px 30px", borderRadius:"8px", fontSize:"12px",
+                outline:"none", width:"260px"
+              }}
+            />
+          </div>
+          <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFile} style={{ display:"none" }} />
+          <button
+            onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            style={{
+              padding:"8px 16px", borderRadius:"8px",
+              background:"linear-gradient(135deg,#f59e0b,#f97316)",
+              border:"none", color:"#0f172a", fontSize:"12px", fontWeight:700,
+              cursor:"pointer", display:"flex", alignItems:"center", gap:"6px"
+            }}>
+            <Upload size={13} /> Upload CSV
+          </button>
+        </div>
+      </div>
+
+      {rows.length === 0 && (
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#475569", fontSize:"14px" }}>
+          Upload a RFPSchoolwatch CSV file to get started.
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div style={{ flex:1, overflow:"auto", borderRadius:"10px", border:"1px solid #1e293b" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", tableLayout:"auto" }}>
+            <thead>
+              <tr>
+                {["Title","Bid Type","Due Date","State","Institution","Market Sectors","Bid URL","Doc URL","Publish Date","Pre-bid Date","Assignee","Status","Hubspot","Add to DB"].map(h => (
+                  <th key={h} style={thStyle}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row, idx) => {
+                const bidUrl = row["Bid URL"] || row["bid_url"] || "";
+                const docUrl = row["Doc URL"] || row["doc_url"] || row["Document URL"] || "";
+                const st = dbStatus[row._id];
+                return (
+                  <tr key={row._id} style={{ background: idx % 2 === 0 ? "#0a0f1e" : "#0d1424" }}>
+                    <td style={{ ...colStyle, maxWidth:"220px", whiteSpace:"normal", wordBreak:"break-word" }}>{row["Title"] || row["title"] || ""}</td>
+                    <td style={colStyle}>{row["Bid Type"] || row["bid_type"] || ""}</td>
+                    <td style={colStyle}>{row["Due Date"] || row["due_date"] || ""}</td>
+                    <td style={colStyle}>{row["State"] || row["state"] || ""}</td>
+                    <td style={{ ...colStyle, maxWidth:"160px", whiteSpace:"normal", wordBreak:"break-word" }}>{row["Institution"] || row["institution"] || ""}</td>
+                    <td style={{ ...colStyle, maxWidth:"160px", whiteSpace:"normal", wordBreak:"break-word" }}>{row["Market Sectors"] || row["market_sectors"] || ""}</td>
+                    <td style={colStyle}>{bidUrl ? <a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>View</a> : "—"}</td>
+                    <td style={colStyle}>{docUrl ? <a href={docUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>Doc</a> : "—"}</td>
+                    <td style={colStyle}>{row["Publish Date"] || row["publish_date"] || ""}</td>
+                    <td style={colStyle}>{row["Pre-bid Date"] || row["pre_bid_date"] || ""}</td>
+                    <td style={colStyle}>
+                      <select
+                        value={row._assignee}
+                        onChange={e => updateRow(row._id, "_assignee", e.target.value)}
+                        style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 6px", borderRadius:"4px" }}>
+                        <option value="">—</option>
+                        <option value="Bruce">Bruce</option>
+                        <option value="Mike">Mike</option>
+                      </select>
+                    </td>
+                    <td style={colStyle}>
+                      <select
+                        value={row._status}
+                        onChange={e => updateRow(row._id, "_status", e.target.value)}
+                        style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 6px", borderRadius:"4px" }}>
+                        <option value="pending">Pending</option>
+                        <option value="working">Working</option>
+                        <option value="completed">Completed</option>
+                        <option value="dead">Dead</option>
+                      </select>
+                    </td>
+                    <td style={{ ...colStyle, textAlign:"center" }}>
+                      <input
+                        type="checkbox"
+                        checked={row._hubspot}
+                        onChange={e => updateRow(row._id, "_hubspot", e.target.checked)}
+                        style={{ cursor:"pointer", accentColor:"#f59e0b" }}
+                      />
+                    </td>
+                    <td style={colStyle}>
+                      {st === "duplicate" ? (
+                        <span style={{ color:"#f59e0b", fontSize:"11px" }}>Already in DB</span>
+                      ) : st === "added" ? (
+                        <span style={{ color:"#10b981", fontSize:"11px" }}>Added ✓</span>
+                      ) : st === "error" ? (
+                        <span style={{ color:"#ef4444", fontSize:"11px" }}>Error</span>
+                      ) : (
+                        <button
+                          onClick={() => addToDB(row, row._id)}
+                          disabled={st === "adding" || !bidUrl}
+                          style={{
+                            padding:"3px 10px", borderRadius:"5px",
+                            background: (!bidUrl || st==="adding") ? "#1e293b" : "#1d4ed8",
+                            border:"none", color: (!bidUrl || st==="adding") ? "#475569" : "#fff",
+                            fontSize:"11px", fontWeight:600, cursor: (!bidUrl || st==="adding") ? "not-allowed" : "pointer"
+                          }}>
+                          {st === "adding" ? "…" : "Add"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── APP ROOT ──────────────────────────────────────────────────────────────────
 function App() {
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
-    const valid = ["dashboard","hot_leads","all_bids","sources","keywords","history","settings"];
+    const valid = ["dashboard","hot_leads","all_bids","sources","keywords","history","rfp_bids","settings"];
     return valid.includes(hash) ? hash : "dashboard";
   });
   const [stateFilter, setStateFilter] = useState("all");
@@ -1944,6 +2211,7 @@ function App() {
           {page==="sources"    && <SourcesView />}
           {page==="keywords"   && <KeywordsView />}
           {page==="history"    && <ScanHistoryView />}
+          {page==="rfp_bids"   && <RFPBidsView />}
           {page==="settings"   && <SettingsView />}
         </main>
       </div>
