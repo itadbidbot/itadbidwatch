@@ -1276,16 +1276,30 @@ function KeywordsView() {
   const addTerm = (pillarKey, term) => {
     const t = term.trim().toLowerCase();
     if (!t) return true;
-    // Check negative terms
+    // Exact match in negative terms — hard block
     if (negativeTerms.some(x => x.toLowerCase() === t)) {
       showToast(`"${t}" is in the Negative Terms list — remove it there first`, "#ef4444");
       return false;
     }
-    // Check other pillars
+    // Exact match in other pillars — hard block
     const conflict = pillars.find(p => p.key !== pillarKey && p.terms.some(x => x.toLowerCase() === t));
     if (conflict) {
       showToast(`"${t}" already exists in "${conflict.name}" — remove it there first`, "#ef4444");
       return false;
+    }
+    // Partial match — warning only, still adds
+    const negPartial = negativeTerms.find(x => { const xl = x.toLowerCase(); return xl !== t && (xl.includes(t) || t.includes(xl)); });
+    if (negPartial) {
+      showToast(`A similar term "${negPartial}" was found in Negative Terms — please review before saving`, "#f59e0b");
+    } else {
+      for (const p of pillars) {
+        if (p.key === pillarKey) continue;
+        const match = p.terms.find(x => { const xl = x.toLowerCase(); return xl !== t && (xl.includes(t) || t.includes(xl)); });
+        if (match) {
+          showToast(`A similar term "${match}" was found in "${p.name}" — please review before saving`, "#f59e0b");
+          break;
+        }
+      }
     }
     setPillars(prev => prev.map(p =>
       p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x => x !== t), t] } : p
