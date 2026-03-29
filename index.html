@@ -1806,19 +1806,45 @@ function RFPBidsView() {
     return results;
   }
 
+  // ── Upsert CSV rows to rfp_bids ─────────────────────────────────────────────
+  async function upsertRfpRows(parsed, fDate) {
+    if (!parsed.length) return;
+    const records = parsed.map(r => ({
+      bid_url:        (r["Bid URL"]        || r["bid_url"]        || "").slice(0, 2000),
+      title:          (r["Title"]          || r["title"]          || "").slice(0, 500),
+      document_url:   (r["Doc URL"]        || r["doc_url"]        || r["Document URL"] || "").slice(0, 2000),
+      bid_documents:  (r["Bid Documents"]  || r["bid_documents"]  || "").slice(0, 2000),
+      publish_date:   r["Publish Date"]    || r["publish_date"]   || null,
+      pre_bid_date:   r["Pre-bid Date"]    || r["pre_bid_date"]   || null,
+      due_date:       r["Due Date"]        || r["due_date"]       || null,
+      memo:           (r["Memo"]           || r["memo"]           || "").slice(0, 1000),
+      bid_type:       (r["Bid Type"]       || r["bid_type"]       || "").slice(0, 200),
+      institution:    (r["Institution"]    || r["institution"]    || "").slice(0, 300),
+      state:          (r["State"]          || r["state"]          || "").slice(0, 10),
+      market_sectors: (r["Market Sectors"] || r["market_sectors"] || "").slice(0, 500),
+      file_date:      fDate || null,
+      doc_id:         (r["Doc ID"]         || r["doc_id"]         || "").slice(0, 200),
+    })).filter(r => r.bid_url);
+    if (!records.length) return;
+    await window._db.from("rfp_bids").upsert(records, { onConflict: "bid_url" });
+  }
+
   function handleFile(e) {
     const file = e.target.files[0];
     if (!file) return;
+    let fDate = null;
     const match = file.name.match(/(\d{8})/);
     if (match) {
       const raw = match[1];
-      setFileDate(`${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`);
+      fDate = `${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`;
+      setFileDate(fDate);
     } else {
       setFileDate(null);
     }
     const reader = new FileReader();
     reader.onload = ev => {
       const parsed = parseCSV(ev.target.result);
+      upsertRfpRows(parsed, fDate);
       const withMeta = parsed.map((r, i) => ({
         ...r, _id: i, _assignee: "", _status: "pending", _hubspot: false, _removed: false,
       }));
@@ -1830,22 +1856,44 @@ function RFPBidsView() {
     e.target.value = "";
   }
 
-  // ── Load saved meta ─────────────────────────────────────────────────────────
-  async function loadSavedMeta(parsedRows) {
-    const urls = parsedRows.map(r => r["Bid URL"] || r["bid_url"] || "").filter(Boolean);
-    if (!urls.length) return;
-    const { data } = await window._db.from("rfp_bids").select("bid_url,assignee,status,hubspot").in("bid_url", urls);
-    if (!data) return;
-    const map = {};
-    data.forEach(d => { map[d.bid_url] = d; });
-    setRows(prev => prev.map(r => {
-      const key = r["Bid URL"] || r["bid_url"] || "";
-      if (map[key]) return { ...r, _assignee: map[key].assignee || "", _status: map[key].status || "pending", _hubspot: !!map[key].hubspot };
-      return r;
-    }));
-  }
-
-  useEffect(() => { if (rows.length > 0) loadSavedMeta(rows); }, [rows.length]);
+  // ── Load all rows from rfp_bids on mount ────────────────────────────────────
+  useEffect(() => {
+    async function loadFromDB() {
+      const { data, error } = await window._db
+        .from("rfp_bids")
+        .select("*")
+        .order("file_date", { ascending: false })
+        .limit(2000);
+      if (error || !data || !data.length) return;
+      // Map DB columns back to CSV-style keys + meta fields
+      const withMeta = data.map((r, i) => ({
+        _id: i,
+        _assignee: r.assignee || "",
+        _status: r.status || "pending",
+        _hubspot: !!r.hubspot,
+        _removed: false,
+        "Title":          r.title || "",
+        "Bid URL":        r.bid_url || "",
+        "Doc URL":        r.document_url || "",
+        "Bid Documents":  r.bid_documents || "",
+        "Publish Date":   r.publish_date || "",
+        "Pre-bid Date":   r.pre_bid_date || "",
+        "Due Date":       r.due_date || "",
+        "Memo":           r.memo || "",
+        "Bid Type":       r.bid_type || "",
+        "Institution":    r.institution || "",
+        "State":          r.state || "",
+        "Market Sectors": r.market_sectors || "",
+        "Scan Date":      r.file_date || "",
+        "Doc ID":         r.doc_id || "",
+      }));
+      setRows(withMeta);
+      // Set fileDate to the most recent file_date
+      const latest = data.find(r => r.file_date);
+      if (latest) setFileDate(latest.file_date);
+    }
+    loadFromDB();
+  }, []);
 
   async function saveMeta(row, field, value) {
     const bidUrl = row["Bid URL"] || row["bid_url"] || "";
@@ -1870,29 +1918,32 @@ function RFPBidsView() {
   // ── Add to DB ───────────────────────────────────────────────────────────────
   async function addToDB(row) {
     const id = row._id;
-    const bidUrl = row["Bid URL"] || row["bid_url"] || "";
+    const t = s => (s || "").trim();
+    const bidUrl = t(row["Bid URL"] || row["bid_url"]).slice(0, 1000);
+    if (!bidUrl) return;
     setDbStatus(s => ({ ...s, [id]: "adding" }));
     const { data: existing } = await window._db.from("leads").select("id").eq("direct_link", bidUrl).limit(1);
     if (existing && existing.length > 0) { setDbStatus(s => ({ ...s, [id]: "duplicate" })); return; }
-    const docUrl = row["Doc URL"] || row["doc_url"] || row["Document URL"] || "";
+    const docUrl = t(row["Doc URL"] || row["doc_url"] || row["Document URL"]).slice(0, 1000) || null;
     const record = {
-      title: row["Title"] || row["title"] || "",
-      institution: row["Institution"] || row["institution"] || "",
-      state: row["State"] || row["state"] || "",
-      due_date: row["Due Date"] || row["due_date"] || null,
-      direct_link: bidUrl,
-      pdf_url: docUrl || null,
+      title:            t(row["Title"]          || row["title"]).slice(0, 500),
+      institution:      t(row["Institution"]    || row["institution"]).slice(0, 300),
+      state:            t(row["State"]          || row["state"]).slice(0, 10),
+      due_date:         t(row["Due Date"]        || row["due_date"])   || null,
+      direct_link:      bidUrl,
+      pdf_url:          docUrl,
       tier: "HOT", score: 0,
-      source_name: "RFP School Watch",
-      source_url: bidUrl,
-      scan_date: fileDate || new Date().toISOString().slice(0,10),
-      matched_positive: row["Market Sectors"] || row["market_sectors"] || "",
+      source_name:      "RFP School Watch",
+      source_url:       bidUrl,
+      scan_date:        fileDate || new Date().toISOString().slice(0, 10),
+      matched_positive: t(row["Market Sectors"] || row["market_sectors"]).slice(0, 500),
       matched_negative: "", contact_name: "", contact_email: "", contact_phone: "",
     };
     const { error } = await window._db.from("leads").insert(record);
     if (error) {
-      console.error("RFP Add to DB error:", error);
-      setDbErrors(s => ({ ...s, [id]: error.message || "Insert failed" }));
+      const msg = error.message || JSON.stringify(error);
+      console.error("RFP Add to DB error:", msg, record);
+      setDbErrors(s => ({ ...s, [id]: msg }));
       setDbStatus(s => ({ ...s, [id]: "error" }));
     } else {
       setDbStatus(s => ({ ...s, [id]: "added" }));
@@ -1994,7 +2045,7 @@ function RFPBidsView() {
   }
 
   // ── Styles ──────────────────────────────────────────────────────────────────
-  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #1e293b", color:"#cbd5e1", fontSize:"12px", verticalAlign:"top", wordBreak:"break-word", overflow:"hidden" };
+  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #1e293b", color:"#cbd5e1", fontSize:"12px", verticalAlign:"middle", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:0 };
   const thBase = { padding:"8px 10px", borderBottom:"1px solid #1e293b", background:"#0f172a", color:"#94a3b8", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
 
   const cols = ["Title","Scan Date","Bid Type","Due Date","Institution","Bid URL","Doc URL","Bid Doc","Assignee","Status","Hubspot","Add to DB"];
@@ -2046,7 +2097,7 @@ function RFPBidsView() {
 
       {rows.length === 0 && (
         <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#475569", fontSize:"14px" }}>
-          Upload a RFPSchoolwatch CSV file to get started.
+          Loading… or upload a RFPSchoolwatch CSV file to get started.
         </div>
       )}
 
@@ -2079,16 +2130,16 @@ function RFPBidsView() {
                 const isRemoved = row._removed;
                 return (
                   <tr key={row._id} style={{ background: isRemoved ? "#0f1a2e" : idx % 2 === 0 ? "#0a0f1e" : "#0d1424", opacity: isRemoved ? 0.45 : 1 }}>
-                    <td style={colStyle}>{row["Title"] || row["title"] || ""}</td>
-                    <td style={colStyle}>{scanDate}</td>
-                    <td style={colStyle}>{row["Bid Type"] || row["bid_type"] || ""}</td>
-                    <td style={colStyle}>{row["Due Date"] || row["due_date"] || ""}</td>
-                    <td style={colStyle}>
-                      <span>{row["Institution"] || row["institution"] || ""}</span>
+                    <td style={colStyle} title={row["Title"] || ""}>{row["Title"] || ""}</td>
+                    <td style={colStyle} title={scanDate}>{scanDate}</td>
+                    <td style={colStyle} title={row["Bid Type"] || ""}>{row["Bid Type"] || ""}</td>
+                    <td style={colStyle} title={row["Due Date"] || ""}>{row["Due Date"] || ""}</td>
+                    <td style={colStyle} title={row["Institution"] || ""}>
+                      <span>{row["Institution"] || ""}</span>
                       {docBadge(docUrl || bidDocUrl)}
                     </td>
-                    <td style={colStyle}>{bidUrl ? <a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>View</a> : "—"}</td>
-                    <td style={colStyle}>
+                    <td style={colStyle} title={bidUrl}>{bidUrl ? <a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>View</a> : "—"}</td>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }} title={docUrl}>
                       <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
                         {docUrl ? <a href={docUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>Doc</a> : <span style={{ color:"#475569" }}>—</span>}
                         {docUrl && (
@@ -2099,8 +2150,8 @@ function RFPBidsView() {
                         )}
                       </div>
                     </td>
-                    <td style={colStyle}>{bidDocUrl ? <a href={bidDocUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>Docs →</a> : "—"}</td>
-                    <td style={colStyle}>
+                    <td style={colStyle} title={bidDocUrl}>{bidDocUrl ? <a href={bidDocUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>Docs →</a> : "—"}</td>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
                         <option value="">—</option>
@@ -2108,7 +2159,7 @@ function RFPBidsView() {
                         <option value="Mike">Mike</option>
                       </select>
                     </td>
-                    <td style={colStyle}>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._status} onChange={e => updateRow(row._id, "_status", e.target.value)}
                         style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
                         <option value="pending">Pending</option>
@@ -2117,18 +2168,18 @@ function RFPBidsView() {
                         <option value="dead">Dead</option>
                       </select>
                     </td>
-                    <td style={{ ...colStyle, textAlign:"center" }}>
+                    <td style={{ ...colStyle, textAlign:"center", whiteSpace:"normal" }}>
                       <input type="checkbox" checked={row._hubspot} onChange={e => updateRow(row._id, "_hubspot", e.target.checked)}
                         style={{ cursor:"pointer", accentColor:"#f59e0b" }} />
                     </td>
-                    <td style={colStyle}>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
                         {st === "duplicate" ? (
                           <span style={{ color:"#f59e0b", fontSize:"11px" }}>Already in DB</span>
                         ) : st === "added" ? (
                           <span style={{ color:"#10b981", fontSize:"11px" }}>Added ✓</span>
                         ) : st === "error" ? (
-                          <span style={{ color:"#ef4444", fontSize:"10px" }} title={errMsg}>Error</span>
+                          <span style={{ color:"#ef4444", fontSize:"10px" }} title={errMsg}>{errMsg ? errMsg.slice(0,40) : "Error"}</span>
                         ) : (
                           <button onClick={() => addToDB(row)} disabled={st === "adding" || !bidUrl}
                             style={{ padding:"3px 10px", borderRadius:"5px", background: (!bidUrl || st==="adding") ? "#1e293b" : "#1d4ed8", border:"none", color: (!bidUrl || st==="adding") ? "#475569" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!bidUrl || st==="adding") ? "not-allowed" : "pointer" }}>
