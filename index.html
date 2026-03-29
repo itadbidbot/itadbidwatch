@@ -281,7 +281,7 @@ function Sidebar({ active, setActive, onRunScan, scanning }) {
               <span style={{
                 marginLeft:"auto", background:"#ef4444", color:"#fff",
                 fontSize:"10px", fontWeight:700, padding:"1px 6px", borderRadius:"99px"
-              }}>{window._bidbotData && window._bidbotData.ready ? (window._LIVE_HOT||[]).filter(l=>(l.score||0)>=50).length : 0}</span>
+              }}>{window._bidbotData && window._bidbotData.ready ? (window._LIVE_HOT||[]).filter(l=>l.tier==="HOT").length : 0}</span>
             )}
           </button>
         );
@@ -350,8 +350,8 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
   const today = scanning
     ? []  // Reset to 0 while scan is running
     : window._bidbotData && window._bidbotData.ready
-      ? (window._LIVE_HOT || []).filter(l => (l.score || 0) >= 50)
-      : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT" && (l.score||0) >= 50);
+      ? (window._LIVE_HOT || []).filter(l => l.tier === "HOT")
+      : (window._LIVE_HOT || []).filter(l=>l.tier==="HOT");
   const liveSources = window._LIVE_SOURCES || [];
   const totalSources = window._bidbotData && window._bidbotData.ready ? liveSources.length : MOCK_SOURCES.length;
   const activeSources = window._bidbotData && window._bidbotData.ready ? liveSources.filter(s=>!s.captcha_protected).length : MOCK_SOURCES.filter(s=>!s.captcha_protected).length;
@@ -359,7 +359,7 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
   const weekLeads = window._bidbotData && window._bidbotData.ready ? (window._ALL_LEADS||[]).filter(l=>{
     const d = new Date(l.scan_date); const now = new Date();
     const diff = (now - d) / (1000*60*60*24);
-    return diff <= 7 && (l.score||0) >= 50 && l.tier === "HOT";
+    return diff <= 7 && l.tier === "HOT";
   }).length : 42;
   const stats = [
     { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan", page:"hot_leads" },
@@ -524,7 +524,7 @@ function HotLeadsView({ stateFilter, allBids=false }) {
     ? (allBids ? (window._ALL_LEADS || []) : (window._LIVE_HOT || []))
     : (allBids ? MOCK_HOT_LEADS : MOCK_HOT_LEADS.filter(l=>l.tier==="HOT"));
   const filtered = _src.filter(l=>{
-    if (!allBids && (l.tier !== "HOT" || (l.score || 0) < 50)) return false;
+    if (!allBids && l.tier !== "HOT") return false;
     if (allBids && category === "all") {} // show everything in All Bids
     if (stateFilter !== "all" && l.state !== stateFilter) return false;
     if (search && !l.title.toLowerCase().includes(search.toLowerCase()) && !l.institution.toLowerCase().includes(search.toLowerCase())) return false;
@@ -1230,495 +1230,340 @@ function Toggle({ enabled, onChange }) {
 
 function KeywordsView() {
   const [pillars, setPillars] = useState([]);
+  const [negativeTerms, setNegativeTerms] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [currentPlan, setCurrentPlan] = useState("starter");
-  const [showUpgrade, setShowUpgrade] = useState(false);
+  const [newTermInputs, setNewTermInputs] = useState({});
+  const [newNegTerm, setNewNegTerm] = useState("");
+  const [newPillarName, setNewPillarName] = useState("");
   const [showAddPillar, setShowAddPillar] = useState(false);
-  const [showPricingModal, setShowPricingModal] = useState(false);
-  const [newPillar, setNewPillar] = useState({ name:"", weight:10, terms:"", color:"#06b6d4", negative: false });
-  const [addTermInput, setAddTermInput] = useState({});
-  const [editingTerms, setEditingTerms] = useState(null);
   const [toast, setToast] = useState(null);
+  const [savingPillar, setSavingPillar] = useState(null);
+  const [savingNeg, setSavingNeg] = useState(false);
 
-  const plan = PLANS.find(p => p.key === currentPlan);
-  const customPillars = pillars.filter(p => p.custom);
-  const atLimit = customPillars.length >= plan.maxCustom;
+  const COLORS = ["#f59e0b","#3b82f6","#10b981","#8b5cf6","#ef4444","#06b6d4","#f97316","#84cc16"];
 
   const showToast = (msg, color="#10b981") => {
     setToast({ msg, color });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Load pillars from Supabase on mount
+  // Load from Supabase
   React.useEffect(() => {
     if (!window._db) { setLoading(false); return; }
     window._db.from("keywords").select("*").order("weight", { ascending: false })
       .then(({ data, error }) => {
-        if (error || !data || data.length === 0) { setLoading(false); return; }
-        const loaded = data.map(row => ({
-          key: row.pillar_key,
-          name: row.pillar_name,
-          weight: row.weight,
-          terms: Array.isArray(row.terms) ? row.terms : JSON.parse(row.terms || "[]"),
-          enabled: row.enabled !== false,
-          color: row.color || "#f59e0b",
-          custom: row.pillar_key.startsWith("custom_"),
-        }));
-        setPillars(loaded);
+        if (error || !data) { setLoading(false); return; }
+        const neg = data.find(r => r.pillar_key === "negative_terms");
+        const pos = data.filter(r => r.pillar_key !== "negative_terms" && r.weight >= 0);
+        setNegativeTerms(neg ? (Array.isArray(neg.terms) ? neg.terms : JSON.parse(neg.terms || "[]")) : []);
+        setPillars(pos.map((r, i) => ({
+          key: r.pillar_key,
+          name: r.pillar_name,
+          terms: Array.isArray(r.terms) ? r.terms : JSON.parse(r.terms || "[]"),
+          enabled: r.enabled !== false,
+          color: r.color || COLORS[i % COLORS.length],
+        })));
         setLoading(false);
-        setHasChanges(false);
       })
       .catch(() => setLoading(false));
   }, []);
 
-  // Save all pillars to Supabase
-  const saveToSupabase = async () => {
-    if (!window._db) { showToast("Database not connected", "#ef4444"); return; }
-    setSaving(true);
-    try {
-      for (const p of pillars) {
-        await window._db.from("keywords").upsert({
-          pillar_key: p.key,
-          pillar_name: p.name,
-          weight: p.weight,
-          terms: p.terms,
-          enabled: p.enabled,
-          color: p.color,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "pillar_key" });
-      }
-      setHasChanges(false);
-      showToast("Keywords saved! Changes apply on next scan.", "#10b981");
-    } catch(e) {
-      showToast("Save failed: " + e.message, "#ef4444");
-    }
-    setSaving(false);
-  };
-
   const togglePillar = (key) => {
     setPillars(prev => prev.map(p => p.key === key ? { ...p, enabled: !p.enabled } : p));
-    setHasChanges(true);
-  };
-
-  const deletePillar = async (key) => {
-    // Remove from Supabase first
-    if (window._db) {
-      try {
-        await window._db.from("keywords").delete().eq("pillar_key", key);
-      } catch(e) {
-        showToast("Delete failed: " + e.message, "#ef4444");
-        return;
-      }
-    }
-    // Then remove from local state
-    setPillars(prev => prev.filter(p => p.key !== key));
-    showToast("Pillar removed", "#ef4444");
+    // Note: user still needs to Save after toggling to persist
   };
 
   const addTerm = (pillarKey, term) => {
     const t = term.trim().toLowerCase();
     if (!t) return;
+    // Check negative terms
+    if (negativeTerms.includes(t)) {
+      showToast(`"${t}" is in the Negative Terms list — remove it there first`, "#ef4444");
+      return;
+    }
+    // Check other pillars
+    const conflict = pillars.find(p => p.key !== pillarKey && p.terms.includes(t));
+    if (conflict) {
+      showToast(`"${t}" already exists in "${conflict.name}" — remove it there first`, "#ef4444");
+      return;
+    }
     setPillars(prev => prev.map(p =>
-      p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x=>x!==t), t] } : p
+      p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x => x !== t), t] } : p
     ));
-    setAddTermInput(prev => ({ ...prev, [pillarKey]: "" }));
-    setHasChanges(true);
+    setNewTermInputs(prev => ({ ...prev, [pillarKey]: "" }));
   };
 
   const removeTerm = (pillarKey, term) => {
     setPillars(prev => prev.map(p =>
       p.key === pillarKey ? { ...p, terms: p.terms.filter(t => t !== term) } : p
     ));
-    setHasChanges(true);
   };
 
-  const handleAddPillar = () => {
-    if (!newPillar.name.trim()) return;
-    const terms = newPillar.terms.split(",").map(t=>t.trim().toLowerCase()).filter(Boolean);
-    const key = "custom_" + newPillar.name.toLowerCase().replace(/\s+/g,"_") + "_" + Date.now();
-    const weight = newPillar.negative ? -Math.abs(newPillar.weight) : Math.abs(newPillar.weight);
-    setPillars(prev => [...prev, {
-      name: newPillar.name.trim(), key, weight,
-      color: newPillar.color, terms, enabled: true, custom: true
-    }]);
-    setNewPillar({ name:"", weight:10, terms:"", color:"#06b6d4", negative:false });
-    setShowAddPillar(false);
-    showToast(`"${newPillar.name.trim()}" pillar added!`);
-    setHasChanges(true);
+  const savePillar = async (pillarKey) => {
+    if (!window._db) return;
+    setSavingPillar(pillarKey);
+    // Use functional update to get current state at save time
+    setPillars(current => {
+      const pillar = current.find(p => p.key === pillarKey);
+      if (!pillar) return current;
+      window._db.from("keywords").upsert({
+        pillar_key: pillar.key,
+        pillar_name: pillar.name,
+        weight: 1,
+        terms: pillar.terms,
+        enabled: pillar.enabled,
+        color: pillar.color,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "pillar_key" })
+      .then(() => {
+        showToast(`"${pillar.name}" saved!`);
+        setSavingPillar(null);
+      })
+      .catch(() => {
+        showToast("Save failed", "#ef4444");
+        setSavingPillar(null);
+      });
+      return current;
+    });
   };
 
-  const enabledCount = pillars.filter(p => p.enabled).length;
+  const deletePillar = async (key) => {
+    if (!window._db) return;
+    try {
+      await window._db.from("keywords").delete().eq("pillar_key", key);
+      setPillars(prev => prev.filter(p => p.key !== key));
+      showToast("Pillar removed", "#ef4444");
+    } catch(e) {
+      showToast("Delete failed", "#ef4444");
+    }
+  };
+
+  const saveNegatives = async () => {
+    if (!window._db) return;
+    setSavingNeg(true);
+    try {
+      await window._db.from("keywords").upsert({
+        pillar_key: "negative_terms",
+        pillar_name: "Negative Terms",
+        weight: -999,
+        terms: negativeTerms,
+        enabled: true,
+        color: "#ef4444",
+        updated_at: new Date().toISOString(),
+      }, { onConflict: "pillar_key" });
+      showToast("Negative terms saved!");
+    } catch(e) {
+      showToast("Save failed", "#ef4444");
+    }
+    setSavingNeg(false);
+  };
+
+  const addPillar = async () => {
+    const name = newPillarName.trim();
+    if (!name || !window._db) return;
+    const key = "custom_" + name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
+    const color = COLORS[pillars.length % COLORS.length];
+    const newP = { key, name, terms: [], enabled: true, color };
+    try {
+      await window._db.from("keywords").insert({
+        pillar_key: key, pillar_name: name, weight: 1,
+        terms: [], enabled: true, color,
+      });
+      setPillars(prev => [...prev, newP]);
+      setNewPillarName("");
+      setShowAddPillar(false);
+      showToast(`"${name}" pillar created!`);
+    } catch(e) {
+      showToast("Create failed", "#ef4444");
+    }
+  };
 
   if (loading) return (
-    <div style={{ padding:"28px", color:"#64748b", fontSize:"14px" }}>Loading keywords from database...</div>
+    <div style={{ padding:"28px", color:"#64748b", fontSize:"14px" }}>Loading keywords...</div>
   );
 
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1, position:"relative" }}>
 
-      {/* Toast */}
       {toast && (
-        <div style={{
-          position:"fixed", bottom:"28px", right:"28px", zIndex:999,
+        <div style={{ position:"fixed", bottom:"28px", right:"28px", zIndex:999,
           background: toast.color, color:"#fff", padding:"12px 20px",
           borderRadius:"10px", fontSize:"13px", fontWeight:600,
-          boxShadow:"0 4px 20px rgba(0,0,0,0.4)"
-        }}>{toast.msg}</div>
+          boxShadow:"0 4px 20px rgba(0,0,0,0.4)" }}>{toast.msg}</div>
       )}
 
       {/* Header */}
-      <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:"24px" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" }}>
         <div>
-          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Keywords & Scoring</h1>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Keywords & Pillars</h1>
           <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>
-            {enabledCount} of {pillars.length} pillars active
+            {pillars.filter(p=>p.enabled).length} of {pillars.length} pillars active · Toggle on to include in scans
           </p>
         </div>
-        <div style={{ display:"flex", gap:"10px", alignItems:"center" }}>
-          <button onClick={() => setShowPricingModal(true)} style={{
-            padding:"8px 14px", background:"transparent", border:"1px solid #334155",
-            borderRadius:"8px", color:"#94a3b8", fontSize:"12px", cursor:"pointer",
-            display:"flex", alignItems:"center", gap:"6px"
-          }}>
-            <span style={{ fontSize:"10px" }}>⭐</span> {plan.label} Plan
-          </button>
-          {hasChanges && (
-            <button onClick={saveToSupabase} disabled={saving} style={{
-              padding:"8px 16px", borderRadius:"8px", fontSize:"13px", fontWeight:600,
-              cursor: saving ? "not-allowed" : "pointer",
-              background: saving ? "#1e293b" : "linear-gradient(135deg,#10b981,#059669)",
-              border:"none", color: saving ? "#64748b" : "#fff",
-              boxShadow: saving ? "none" : "0 3px 12px rgba(16,185,129,0.35)",
-              display:"flex", alignItems:"center", gap:"7px"
-            }}>
-              {saving ? "Saving..." : "💾 Save Changes"}
-            </button>
-          )}
-          <button
-            onClick={() => { if (atLimit) { setShowUpgrade(true); } else { setShowAddPillar(true); } }}
-            style={{
-              padding:"8px 16px", borderRadius:"8px", fontSize:"13px", fontWeight:600,
-              cursor:"pointer", display:"flex", alignItems:"center", gap:"7px",
-              background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", color:"#0f172a",
-              boxShadow:"0 3px 12px rgba(245,158,11,0.35)"
-            }}>
-            <Plus size={14} /> Add Custom Pillar
-          </button>
-        </div>
+        <button onClick={() => setShowAddPillar(!showAddPillar)} style={{
+          padding:"8px 16px", borderRadius:"8px", fontSize:"13px", fontWeight:600,
+          cursor:"pointer", display:"flex", alignItems:"center", gap:"7px",
+          background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", color:"#0f172a",
+          boxShadow:"0 3px 12px rgba(245,158,11,0.35)"
+        }}>
+          + Add Pillar
+        </button>
       </div>
 
-      {/* Plan usage bar */}
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"16px 20px", marginBottom:"20px" }}>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"10px" }}>
-          <div style={{ fontSize:"12px", color:"#94a3b8", fontWeight:600 }}>
-            CUSTOM PILLAR USAGE — <span style={{ color: plan.color }}>{plan.label.toUpperCase()} PLAN</span>
-          </div>
-          <span style={{ fontSize:"12px", color:"#64748b" }}>
-            {customPillars.length} / {plan.maxCustom === Infinity ? "∞" : plan.maxCustom} custom pillars
-          </span>
+      {/* Add Pillar inline */}
+      {showAddPillar && (
+        <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px",
+          padding:"16px 20px", marginBottom:"20px", display:"flex", gap:"10px", alignItems:"center" }}>
+          <input value={newPillarName} onChange={e=>setNewPillarName(e.target.value)}
+            placeholder="Pillar name e.g. Networking Gear"
+            onKeyDown={e=>e.key==="Enter" && addPillar()}
+            style={{ flex:1, background:"#0f172a", border:"1px solid #334155", color:"#f8fafc",
+              padding:"8px 12px", borderRadius:"8px", fontSize:"13px", outline:"none" }} />
+          <button onClick={addPillar} style={{
+            padding:"8px 16px", background:"#10b981", border:"none", borderRadius:"8px",
+            color:"#fff", fontSize:"13px", fontWeight:600, cursor:"pointer" }}>Create</button>
+          <button onClick={()=>setShowAddPillar(false)} style={{
+            padding:"8px 12px", background:"transparent", border:"1px solid #334155",
+            borderRadius:"8px", color:"#64748b", fontSize:"13px", cursor:"pointer" }}>Cancel</button>
         </div>
-        <div style={{ height:"6px", background:"#0f172a", borderRadius:"99px", overflow:"hidden" }}>
-          <div style={{
-            height:"100%", borderRadius:"99px", transition:"width 0.4s",
-            background: atLimit ? "#ef4444" : plan.color,
-            width: plan.maxCustom === Infinity ? "30%" : `${Math.min(100, (customPillars.length / plan.maxCustom) * 100)}%`
-          }} />
-        </div>
-        {atLimit && (
-          <div style={{ marginTop:"10px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:"12px", color:"#ef4444" }}>⚠ Pillar limit reached on {plan.label} plan</span>
-            <button onClick={() => setShowPricingModal(true)} style={{
-              padding:"5px 12px", background:"#3b82f6", border:"none", borderRadius:"6px",
-              color:"#fff", fontSize:"12px", fontWeight:600, cursor:"pointer"
-            }}>Upgrade Plan →</button>
-          </div>
-        )}
-      </div>
+      )}
 
       {/* Pillars grid */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px" }}>
-        {[...pillars].sort((a,b) => (b.enabled ? 1 : 0) - (a.enabled ? 1 : 0)).map(pillar => (
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px", marginBottom:"24px" }}>
+        {[...pillars].sort((a,b) => (b.enabled?1:0)-(a.enabled?1:0)).map(pillar => (
           <div key={pillar.key} style={{
             background:"#1e293b",
-            border:`1px solid ${pillar.enabled ? pillar.color + "40" : "#1e293b"}`,
+            border:`1px solid ${pillar.enabled ? pillar.color+"40" : "#1e293b"}`,
             borderLeft:`3px solid ${pillar.enabled ? pillar.color : "#334155"}`,
             borderRadius:"12px", padding:"18px",
-            opacity: pillar.enabled ? 1 : 0.5,
-            transition:"all 0.2s"
+            opacity: pillar.enabled ? 1 : 0.5, transition:"all 0.2s"
           }}>
             {/* Pillar header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px" }}>
-              <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                  <div style={{ fontWeight:700, color: pillar.enabled ? "#f8fafc" : "#475569", fontSize:"14px" }}>{pillar.name}</div>
-                  {pillar.custom && (
-                    <span style={{ fontSize:"9px", padding:"1px 6px", borderRadius:"99px", background:"#f59e0b20", color:"#f59e0b", border:"1px solid #f59e0b30", fontWeight:700, letterSpacing:"0.05em" }}>CUSTOM</span>
-                  )}
-                </div>
-                <div style={{ fontSize:"11px", color:"#475569", marginTop:"2px", fontFamily:"monospace" }}>{pillar.key}</div>
+              <div style={{ fontWeight:700, color: pillar.enabled?"#f8fafc":"#475569", fontSize:"14px" }}>
+                {pillar.name}
               </div>
-              <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
-                <div style={{
-                  padding:"3px 10px", borderRadius:"99px", fontSize:"11px", fontWeight:700, fontFamily:"monospace",
-                  background: pillar.enabled ? `${pillar.color}18` : "#0f172a",
-                  color: pillar.enabled ? pillar.color : "#475569",
-                  border:`1px solid ${pillar.enabled ? pillar.color + "30" : "#334155"}`
+              <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+                {/* Toggle */}
+                <div onClick={() => togglePillar(pillar.key)} style={{
+                  width:"36px", height:"20px", borderRadius:"99px", cursor:"pointer",
+                  background: pillar.enabled ? pillar.color : "#334155",
+                  position:"relative", transition:"background 0.2s", flexShrink:0
                 }}>
-                  {pillar.weight > 0 ? `+${pillar.weight}` : pillar.weight} pts
+                  <div style={{
+                    position:"absolute", top:"2px",
+                    left: pillar.enabled ? "18px" : "2px",
+                    width:"16px", height:"16px", borderRadius:"50%",
+                    background:"#fff", transition:"left 0.2s"
+                  }}/>
                 </div>
-                <Toggle enabled={pillar.enabled} onChange={() => togglePillar(pillar.key)} />
               </div>
             </div>
 
             {/* Terms */}
-            <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom: editingTerms === pillar.key ? "10px" : "0" }}>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom:"12px", minHeight:"28px" }}>
               {pillar.terms.map(t => (
                 <span key={t} style={{
                   background:"#0f172a", border:"1px solid #334155", color:"#94a3b8",
                   fontSize:"11px", padding:"3px 8px", borderRadius:"4px", fontFamily:"monospace",
-                  display:"flex", alignItems:"center", gap:"4px", cursor: editingTerms === pillar.key ? "pointer" : "default"
+                  display:"flex", alignItems:"center", gap:"4px"
                 }}>
                   {t}
-                  {editingTerms === pillar.key && (
-                    <span onClick={() => removeTerm(pillar.key, t)} style={{ color:"#ef4444", fontWeight:700, lineHeight:1, marginLeft:"2px" }}>×</span>
-                  )}
+                  <span onClick={() => removeTerm(pillar.key, t)}
+                    style={{ cursor:"pointer", color:"#475569", fontSize:"10px", lineHeight:1 }}>✕</span>
                 </span>
               ))}
+              {pillar.terms.length === 0 && (
+                <span style={{ fontSize:"11px", color:"#334155", fontStyle:"italic" }}>No terms yet</span>
+              )}
             </div>
 
-            {/* Edit terms mode */}
-            {editingTerms === pillar.key && (
-              <div style={{ marginTop:"10px", display:"flex", gap:"6px" }}>
-                <input
-                  placeholder="add term, press Enter"
-                  value={addTermInput[pillar.key] || ""}
-                  onChange={e => setAddTermInput(prev => ({ ...prev, [pillar.key]: e.target.value }))}
-                  onKeyDown={e => { if (e.key === "Enter") addTerm(pillar.key, addTermInput[pillar.key] || ""); }}
-                  style={{
-                    flex:1, background:"#0f172a", border:"1px solid #334155", borderRadius:"6px",
-                    color:"#f8fafc", fontSize:"12px", padding:"6px 10px", outline:"none", fontFamily:"monospace"
-                  }}
-                  autoFocus
-                />
-                <button onClick={() => addTerm(pillar.key, addTermInput[pillar.key] || "")} style={{
-                  padding:"6px 12px", background:"#10b981", border:"none", borderRadius:"6px",
-                  color:"#fff", fontSize:"12px", fontWeight:600, cursor:"pointer"
-                }}>Add</button>
-              </div>
-            )}
+            {/* Add term input */}
+            <div style={{ display:"flex", gap:"6px", marginBottom:"10px" }}>
+              <input
+                value={newTermInputs[pillar.key] || ""}
+                onChange={e => setNewTermInputs(prev=>({...prev,[pillar.key]:e.target.value}))}
+                onKeyDown={e => e.key==="Enter" && addTerm(pillar.key, newTermInputs[pillar.key]||"")}
+                placeholder="Add term..."
+                style={{ flex:1, background:"#0f172a", border:"1px solid #1e293b", color:"#94a3b8",
+                  padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none",
+                  fontFamily:"monospace" }}
+              />
+              <button onClick={() => addTerm(pillar.key, newTermInputs[pillar.key]||"")}
+                style={{ padding:"5px 10px", background:"#1e293b", border:"1px solid #334155",
+                  borderRadius:"6px", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>+</button>
+            </div>
 
-            {/* Footer actions */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginTop:"12px", paddingTop:"10px", borderTop:"1px solid #0f172a" }}>
-              <button
-                onClick={() => setEditingTerms(editingTerms === pillar.key ? null : pillar.key)}
-                style={{
-                  padding:"4px 10px", background:"transparent", border:"1px solid #334155",
-                  borderRadius:"6px", color:"#64748b", fontSize:"11px", cursor:"pointer"
-                }}>
-                {editingTerms === pillar.key ? "✓ Done editing" : "✏ Edit terms"}
-              </button>
-              {pillar.custom && (
-                <button onClick={() => deletePillar(pillar.key)} style={{
-                  padding:"4px 10px", background:"transparent", border:"1px solid #ef444430",
-                  borderRadius:"6px", color:"#ef4444", fontSize:"11px", cursor:"pointer"
-                }}>🗑 Remove</button>
-              )}
+            {/* Save + Delete row */}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:"6px" }}>
+              <button onClick={() => deletePillar(pillar.key)} style={{
+                padding:"4px 8px", background:"transparent", border:"1px solid #334155",
+                borderRadius:"6px", color:"#ef4444", fontSize:"11px", cursor:"pointer"
+              }}>✕ Remove</button>
+              <button onClick={() => savePillar(pillar.key)} disabled={savingPillar===pillar.key} style={{
+                padding:"4px 10px", background: savingPillar===pillar.key?"#1e293b":"#10b981",
+                border:"none", borderRadius:"6px", color:"#fff", fontSize:"11px",
+                fontWeight:600, cursor:"pointer"
+              }}>{savingPillar===pillar.key ? "Saving..." : "💾 Save"}</button>
             </div>
           </div>
         ))}
+      </div>
 
-        {/* Add pillar placeholder */}
-        <div
-          onClick={() => { if (atLimit) setShowUpgrade(true); else setShowAddPillar(true); }}
-          style={{
-            background:"transparent", border:"2px dashed #334155", borderRadius:"12px",
-            padding:"18px", display:"flex", flexDirection:"column", alignItems:"center",
-            justifyContent:"center", gap:"8px", cursor:"pointer", minHeight:"120px",
-            transition:"all 0.15s"
-          }}
-          onMouseEnter={e => e.currentTarget.style.borderColor="#f59e0b"}
-          onMouseLeave={e => e.currentTarget.style.borderColor="#334155"}
-        >
-          <div style={{ width:"36px", height:"36px", borderRadius:"50%", background:"#1e293b", display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Plus size={18} color="#64748b" />
+      {/* Negative Terms */}
+      <div style={{ background:"#1e293b", border:"1px solid #ef444440", borderLeft:"3px solid #ef4444",
+        borderRadius:"12px", padding:"18px" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px" }}>
+          <div>
+            <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px" }}>🚫 Negative Terms</div>
+            <div style={{ fontSize:"11px", color:"#64748b", marginTop:"2px" }}>
+              Bids matching any of these terms will be excluded from results
+            </div>
           </div>
-          <div style={{ fontSize:"13px", color:"#64748b", fontWeight:600 }}>Add Custom Pillar</div>
-          <div style={{ fontSize:"11px", color:"#475569", textAlign:"center" }}>
-            {atLimit ? `Upgrade to add more (${plan.label} limit: ${plan.maxCustom})` : `${plan.maxCustom === Infinity ? "Unlimited" : plan.maxCustom - customPillars.length + " more"} available on ${plan.label}`}
-          </div>
+        </div>
+
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom:"12px", minHeight:"28px" }}>
+          {negativeTerms.map(t => (
+            <span key={t} style={{
+              background:"#0f172a", border:"1px solid #ef444430", color:"#ef4444",
+              fontSize:"11px", padding:"3px 8px", borderRadius:"4px", fontFamily:"monospace",
+              display:"flex", alignItems:"center", gap:"4px"
+            }}>
+              {t}
+              <span onClick={() => setNegativeTerms(prev => prev.filter(x=>x!==t))}
+                style={{ cursor:"pointer", color:"#991b1b", fontSize:"10px" }}>✕</span>
+            </span>
+          ))}
+          {negativeTerms.length === 0 && (
+            <span style={{ fontSize:"11px", color:"#334155", fontStyle:"italic" }}>No negative terms</span>
+          )}
+        </div>
+
+        <div style={{ display:"flex", gap:"6px", marginBottom:"10px" }}>
+          <input value={newNegTerm} onChange={e=>setNewNegTerm(e.target.value)}
+            onKeyDown={e=>{ if(e.key==="Enter" && newNegTerm.trim()){
+              const t = newNegTerm.trim().toLowerCase();
+              const conflict = pillars.find(p => p.terms.includes(t));
+              if (conflict) { showToast(`"${t}" exists in "${conflict.name}" pillar — remove it there first`, "#ef4444"); return; }
+              setNegativeTerms(prev=>[...prev.filter(x=>x!==t),t]); setNewNegTerm(""); }}}
+            placeholder="Add term to exclude..."
+            style={{ flex:1, background:"#0f172a", border:"1px solid #1e293b", color:"#94a3b8",
+              padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none", fontFamily:"monospace" }}
+          />
+          <button onClick={()=>{ if(newNegTerm.trim()){ setNegativeTerms(prev=>[...prev.filter(x=>x!==newNegTerm.trim().toLowerCase()),newNegTerm.trim().toLowerCase()]); setNewNegTerm(""); }}}
+            style={{ padding:"5px 10px", background:"#1e293b", border:"1px solid #334155",
+              borderRadius:"6px", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>+</button>
+        </div>
+
+        <div style={{ display:"flex", justifyContent:"flex-end" }}>
+          <button onClick={saveNegatives} disabled={savingNeg} style={{
+            padding:"4px 12px", background: savingNeg?"#1e293b":"#ef4444",
+            border:"none", borderRadius:"6px", color:"#fff", fontSize:"11px",
+            fontWeight:600, cursor:"pointer"
+          }}>{savingNeg ? "Saving..." : "💾 Save"}</button>
         </div>
       </div>
 
-      {/* Scoring rules */}
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"20px", marginTop:"20px" }}>
-        <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px", marginBottom:"12px" }}>Scoring Rules</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px" }}>
-          <div style={{ background:"#0f172a", borderRadius:"8px", padding:"14px" }}>
-            <div style={{ color:"#10b981", fontSize:"11px", fontWeight:700, letterSpacing:"0.08em", marginBottom:"6px" }}>GATE (must match one)</div>
-            <div style={{ fontFamily:"monospace", fontSize:"12px", color:"#94a3b8" }}>apple_terms<br/>chromebook_terms<br/>disposition_terms</div>
-          </div>
-          <div style={{ background:"#0f172a", borderRadius:"8px", padding:"14px" }}>
-            <div style={{ color:"#ef4444", fontSize:"11px", fontWeight:700, letterSpacing:"0.08em", marginBottom:"6px" }}>DROP (any match = drop)</div>
-            <div style={{ fontFamily:"monospace", fontSize:"12px", color:"#94a3b8" }}>hard_negative_terms</div>
-          </div>
-          <div style={{ background:"#0f172a", borderRadius:"8px", padding:"14px" }}>
-            <div style={{ color:"#f59e0b", fontSize:"11px", fontWeight:700, letterSpacing:"0.08em", marginBottom:"6px" }}>TIER LOGIC</div>
-            <div style={{ fontFamily:"monospace", fontSize:"12px", color:"#94a3b8" }}>HOT: gate pass, no soft neg<br/>WARM: soft neg present</div>
-          </div>
-        </div>
-      </div>
-
-      {/* ── ADD PILLAR MODAL ── */}
-      {showAddPillar && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"480px", maxWidth:"95vw" }}>
-            <div style={{ fontSize:"18px", fontWeight:700, color:"#f8fafc", marginBottom:"20px" }}>Create Custom Pillar</div>
-
-            <div style={{ display:"grid", gap:"14px" }}>
-              <div>
-                <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>PILLAR NAME *</label>
-                <input value={newPillar.name} onChange={e => setNewPillar(p=>({...p,name:e.target.value}))}
-                  placeholder="e.g. Network Equipment"
-                  style={{ width:"100%", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc", fontSize:"13px", padding:"9px 12px", outline:"none", boxSizing:"border-box" }} />
-              </div>
-
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px" }}>
-                <div>
-                  <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>SCORE WEIGHT</label>
-                  <input type="number" value={newPillar.weight} onChange={e => setNewPillar(p=>({...p,weight:Number(e.target.value)}))}
-                    style={{ width:"100%", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc", fontSize:"13px", padding:"9px 12px", outline:"none", boxSizing:"border-box" }} />
-                </div>
-                <div>
-                  <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>PILLAR COLOR</label>
-                  <div style={{ display:"flex", gap:"6px", flexWrap:"wrap" }}>
-                    {PILLAR_COLORS.map(c => (
-                      <div key={c} onClick={() => setNewPillar(p=>({...p,color:c}))} style={{
-                        width:"22px", height:"22px", borderRadius:"50%", background:c, cursor:"pointer",
-                        outline: newPillar.color === c ? `2px solid #fff` : "none", outlineOffset:"2px"
-                      }} />
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>PILLAR TYPE</label>
-                <div style={{ display:"flex", gap:"8px" }}>
-                  {[{val:false,label:"✅ Positive (adds score)"},{val:true,label:"🚫 Negative (reduces score)"}].map(opt => (
-                    <button key={String(opt.val)} onClick={() => setNewPillar(p=>({...p,negative:opt.val}))} style={{
-                      flex:1, padding:"8px", borderRadius:"8px", cursor:"pointer", fontSize:"12px", fontWeight:600,
-                      background: newPillar.negative === opt.val ? (opt.val ? "#ef444420" : "#10b98120") : "#0f172a",
-                      border: `1px solid ${newPillar.negative === opt.val ? (opt.val ? "#ef4444" : "#10b981") : "#334155"}`,
-                      color: newPillar.negative === opt.val ? (opt.val ? "#ef4444" : "#10b981") : "#64748b"
-                    }}>{opt.label}</button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", display:"block", marginBottom:"6px" }}>KEYWORDS (comma-separated) *</label>
-                <textarea value={newPillar.terms} onChange={e => setNewPillar(p=>({...p,terms:e.target.value}))}
-                  placeholder="e.g. switch, router, access point, network, networking, wifi"
-                  rows={3}
-                  style={{ width:"100%", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc", fontSize:"12px", padding:"9px 12px", outline:"none", resize:"vertical", fontFamily:"monospace", boxSizing:"border-box" }} />
-                <div style={{ fontSize:"11px", color:"#475569", marginTop:"4px" }}>
-                  {newPillar.terms.split(",").filter(t=>t.trim()).length} terms entered
-                </div>
-              </div>
-            </div>
-
-            {/* Preview */}
-            {(newPillar.name || newPillar.terms) && (
-              <div style={{ marginTop:"14px", background:"#0f172a", borderRadius:"8px", padding:"12px", borderLeft:`3px solid ${newPillar.color}` }}>
-                <div style={{ fontSize:"11px", color:"#475569", marginBottom:"6px", fontWeight:600 }}>PREVIEW</div>
-                <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"8px" }}>
-                  <span style={{ fontWeight:700, color:"#f8fafc", fontSize:"13px" }}>{newPillar.name || "Untitled"}</span>
-                  <span style={{ fontSize:"11px", padding:"2px 8px", borderRadius:"99px", background:`${newPillar.color}18`, color:newPillar.color, border:`1px solid ${newPillar.color}30`, fontFamily:"monospace" }}>
-                    {newPillar.negative ? "-" : "+"}{newPillar.weight} pts
-                  </span>
-                </div>
-                <div style={{ display:"flex", flexWrap:"wrap", gap:"4px" }}>
-                  {newPillar.terms.split(",").filter(t=>t.trim()).slice(0,8).map((t,i)=>(
-                    <span key={i} style={{ background:"#1e293b", border:"1px solid #334155", color:"#94a3b8", fontSize:"10px", padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{t.trim()}</span>
-                  ))}
-                  {newPillar.terms.split(",").filter(t=>t.trim()).length > 8 && <span style={{ color:"#475569", fontSize:"10px" }}>+{newPillar.terms.split(",").filter(t=>t.trim()).length - 8} more</span>}
-                </div>
-              </div>
-            )}
-
-            <div style={{ display:"flex", gap:"10px", marginTop:"20px" }}>
-              <button onClick={() => setShowAddPillar(false)} style={{ flex:1, padding:"10px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>Cancel</button>
-              <button
-                onClick={handleAddPillar}
-                disabled={!newPillar.name.trim() || !newPillar.terms.trim()}
-                style={{
-                  flex:2, padding:"10px", borderRadius:"8px", fontSize:"13px", fontWeight:700, cursor:"pointer", border:"none",
-                  background: newPillar.name && newPillar.terms ? "linear-gradient(135deg,#f59e0b,#f97316)" : "#334155",
-                  color: newPillar.name && newPillar.terms ? "#0f172a" : "#475569"
-                }}>
-                ✓ Create Pillar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ── PRICING MODAL ── */}
-      {(showPricingModal || showUpgrade) && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:500, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"32px", width:"560px", maxWidth:"95vw" }}>
-            <div style={{ textAlign:"center", marginBottom:"24px" }}>
-              <div style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", marginBottom:"6px" }}>Keyword Pillar Plans</div>
-              <div style={{ fontSize:"13px", color:"#64748b" }}>Custom pillars let you target any device category, brand, or bid type</div>
-            </div>
-
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"12px", marginBottom:"24px" }}>
-              {PLANS.map(p => (
-                <div key={p.key} onClick={() => setCurrentPlan(p.key)} style={{
-                  background: currentPlan === p.key ? "#0f172a" : "#0f172a",
-                  border: `2px solid ${currentPlan === p.key ? p.color : "#334155"}`,
-                  borderRadius:"12px", padding:"20px", cursor:"pointer",
-                  transition:"all 0.15s", textAlign:"center",
-                  boxShadow: currentPlan === p.key ? `0 0 20px ${p.color}30` : "none"
-                }}>
-                  {p.key === "pro" && (
-                    <div style={{ fontSize:"9px", fontWeight:700, color:"#3b82f6", letterSpacing:"0.15em", marginBottom:"6px" }}>MOST POPULAR</div>
-                  )}
-                  {p.key === "unlimited" && (
-                    <div style={{ fontSize:"9px", fontWeight:700, color:"#f59e0b", letterSpacing:"0.15em", marginBottom:"6px" }}>BEST VALUE</div>
-                  )}
-                  <div style={{ fontSize:"22px", fontWeight:800, color: p.color }}>{p.price}</div>
-                  <div style={{ fontSize:"11px", color:"#64748b" }}>{p.period}</div>
-                  <div style={{ fontSize:"14px", fontWeight:700, color:"#f8fafc", margin:"8px 0 4px" }}>{p.label}</div>
-                  <div style={{ fontSize:"11px", color:"#64748b" }}>{p.desc}</div>
-                  {currentPlan === p.key && (
-                    <div style={{ marginTop:"10px", fontSize:"10px", fontWeight:700, color:p.color, letterSpacing:"0.08em" }}>✓ CURRENT PLAN</div>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div style={{ background:"#0f172a", borderRadius:"10px", padding:"14px", marginBottom:"20px", fontSize:"12px", color:"#64748b", lineHeight:"1.6" }}>
-              💡 <strong style={{ color:"#94a3b8" }}>How it works:</strong> System pillars (Apple, Chromebook, Fleet, Disposition, Negatives) are always included free. Custom pillars are your added-value targeting — create pillars for Network Gear, Solar, Microsoft Surface, or any niche you want to scan for.
-            </div>
-
-            <div style={{ display:"flex", gap:"10px" }}>
-              <button onClick={() => { setShowPricingModal(false); setShowUpgrade(false); }} style={{
-                flex:1, padding:"11px", background:"transparent", border:"1px solid #334155",
-                borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer"
-              }}>Close</button>
-              <button onClick={() => { setShowPricingModal(false); setShowUpgrade(false); showToast(`Switched to ${PLANS.find(p=>p.key===currentPlan).label} plan!`); }} style={{
-                flex:2, padding:"11px", background:"linear-gradient(135deg,#f59e0b,#f97316)",
-                border:"none", borderRadius:"8px", color:"#0f172a", fontSize:"13px", fontWeight:700, cursor:"pointer"
-              }}>
-                Confirm Plan → {PLANS.find(p=>p.key===currentPlan).price}/mo
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
