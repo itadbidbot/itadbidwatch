@@ -1275,22 +1275,23 @@ function KeywordsView() {
 
   const addTerm = (pillarKey, term) => {
     const t = term.trim().toLowerCase();
-    if (!t) return;
+    if (!t) return true;
     // Check negative terms
     if (negativeTerms.some(x => x.toLowerCase() === t)) {
       showToast(`"${t}" is in the Negative Terms list — remove it there first`, "#ef4444");
-      return;
+      return false;
     }
     // Check other pillars
     const conflict = pillars.find(p => p.key !== pillarKey && p.terms.some(x => x.toLowerCase() === t));
     if (conflict) {
       showToast(`"${t}" already exists in "${conflict.name}" — remove it there first`, "#ef4444");
-      return;
+      return false;
     }
     setPillars(prev => prev.map(p =>
       p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x => x !== t), t] } : p
     ));
     setNewTermInputs(prev => ({ ...prev, [pillarKey]: "" }));
+    return true;
   };
 
   const removeTerm = (pillarKey, term) => {
@@ -1301,6 +1302,8 @@ function KeywordsView() {
 
   const savePillar = async (pillarKey) => {
     if (!window._db) return;
+    const pending = (newTermInputs[pillarKey] || "").trim();
+    if (pending && !addTerm(pillarKey, pending)) return;
     setSavingPillar(pillarKey);
     // Use functional update to get current state at save time
     setPillars(current => {
