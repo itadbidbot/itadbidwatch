@@ -1954,9 +1954,10 @@ function RFPBidsView() {
       friendly_name:     institution,
       url:               bidUrl,
       state:             state,
-      fetch_method:      "jina",
+      site_type:         "other",
       captcha_protected: false,
-      enabled:           true,
+      status:            "active",
+      date_added:        new Date().toISOString().slice(0, 10),
     };
     const { error } = await window._db.from("sources").insert(record);
     if (error) {
