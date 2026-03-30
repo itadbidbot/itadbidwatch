@@ -2492,7 +2492,6 @@ function SamGovView() {
         posted_date:        (o.postedDate || "").slice(0, 30),
         response_deadline:  (o.responseDeadLine || o.archiveDate || "").slice(0, 30),
         department:         (o.fullParentPathName || o.departmentName || o.organizationName || "").slice(0, 500),
-        state:              "Federal",
         ui_link:            (o.uiLink || "").slice(0, 2000),
       })).filter(r => r.notice_id);
 
