@@ -2432,7 +2432,7 @@ function SamGovView() {
       "Due Date": r.response_deadline || "",
       "Institution": r.department || "",
       "State": r.state || "Federal",
-      "Link": r.ui_link || "",
+      "Link": r.link || "",
     })));
   }, []);
 
@@ -2492,7 +2492,7 @@ function SamGovView() {
         posted_date:        (o.postedDate || "").slice(0, 30),
         response_deadline:  (o.responseDeadLine || o.archiveDate || "").slice(0, 30),
         department:         (o.fullParentPathName || o.departmentName || o.organizationName || "").slice(0, 500),
-        ui_link:            (o.uiLink || "").slice(0, 2000),
+        link:               (o.uiLink || "").slice(0, 2000),
       })).filter(r => r.notice_id);
 
       const { error: upsertErr } = await window._db.from("sam_gov_bids").upsert(records, { onConflict: "notice_id" });
