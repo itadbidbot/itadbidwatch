@@ -248,6 +248,7 @@ function Sidebar({ active, setActive, onRunScan, scanning }) {
     { key:"keywords", label:"Keywords & Scoring", icon:Key },
     { key:"history", label:"Scan History", icon:Clock },
     { key:"rfp_bids", label:"RFP School Watch", icon:FileText },
+    { key:"samgov",   label:"SAM.gov",          icon:Search },
     { key:"settings", label:"Settings", icon:Settings },
   ];
 
@@ -2368,11 +2369,417 @@ function RFPBidsView() {
   );
 }
 
+// ─── SAM.GOV VIEW ─────────────────────────────────────────────────────────────
+function SamGovView() {
+  const [rows, setRows] = useState([]);
+  const [filter, setFilter] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [sourceStatus, setSourceStatus] = useState({});
+  const [toast, setToast] = useState(null);
+  const toastTimer = React.useRef(null);
+  const [fetching, setFetching] = useState(false);
+  const [fetchMsg, setFetchMsg] = useState("");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("sam_gov_api_key") || "");
+  const [showKeyPrompt, setShowKeyPrompt] = useState(false);
+  const [keyInput, setKeyInput] = useState("");
+  const [sortCol, setSortCol] = useState("Posted Date");
+  const [sortDir, setSortDir] = useState("desc");
+  const [colWidths, setColWidths] = useState({
+    Title: 220, "Notice Type": 120, "Posted Date": 100, "Due Date": 110,
+    Institution: 200, State: 70, Link: 60, Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
+  });
+
+  const COL_KEY = {
+    "Title": "Title", "Notice Type": "Notice Type", "Posted Date": "Posted Date",
+    "Due Date": "Due Date", "Institution": "Institution", "State": "State",
+    "Assignee": "_assignee", "Status": "_status",
+  };
+  const cols = ["Title","Notice Type","Posted Date","Due Date","Institution","State","Link","Assignee","Status","Hubspot","Add to Sources"];
+
+  // ── Toast ────────────────────────────────────────────────────────────────────
+  function showToast(msg, color="#10b981") {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ msg, color });
+    toastTimer.current = setTimeout(() => setToast(null), color === "#f59e0b" ? 4000 : 3000);
+  }
+
+  // ── Load from Supabase ───────────────────────────────────────────────────────
+  const loadRows = React.useCallback(async function(attempt=0) {
+    if (!window._db) {
+      if (attempt < 5) setTimeout(() => loadRows(attempt + 1), 1000);
+      return;
+    }
+    const { data, error } = await window._db
+      .from("sam_gov_bids")
+      .select("*")
+      .order("posted_date", { ascending: false })
+      .limit(2000);
+    if (error) { console.error("SAM.gov load error:", error); return; }
+    if (!data || !data.length) return;
+    setRows(data.map((r, i) => ({
+      _id: i,
+      _dbid: r.id,
+      _notice_id: r.notice_id || "",
+      _assignee: r.assignee || "",
+      _status: r.status || "pending",
+      _hubspot: !!(r.hubspot_added),
+      _added_to_sources: !!(r.added_to_sources),
+      _removed: !!(r.removed),
+      "Title": r.title || "",
+      "Notice Type": r.notice_type || "",
+      "Posted Date": r.posted_date || "",
+      "Due Date": r.response_deadline || "",
+      "Institution": r.department || "",
+      "State": r.state || "Federal",
+      "Link": r.ui_link || "",
+    })));
+  }, []);
+
+  useEffect(() => { loadRows(); }, [loadRows]);
+
+  // ── Save meta to Supabase ───────────────────────────────────────────────────
+  async function saveMeta(noticeId, field, value) {
+    if (!noticeId) return;
+    const update = {};
+    if (field === "assignee")         update.assignee         = value;
+    if (field === "status")           update.status           = value;
+    if (field === "hubspot")          update.hubspot_added    = value;
+    if (field === "added_to_sources") update.added_to_sources = value;
+    if (field === "removed")          update.removed          = value;
+    if (!Object.keys(update).length) return;
+    await window._db.from("sam_gov_bids").update(update).eq("notice_id", noticeId);
+  }
+
+  function updateRow(id, field, value) {
+    setRows(prev => prev.map(r => r._id === id ? { ...r, [field]: value } : r));
+    const row = rows.find(r => r._id === id);
+    if (row) saveMeta(row._notice_id, field.replace(/^_/, ""), value);
+  }
+
+  function removeRow(id) {
+    setRows(prev => prev.map(r => r._id === id ? { ...r, _removed: true } : r));
+    const row = rows.find(r => r._id === id);
+    if (row) saveMeta(row._notice_id, "removed", true);
+  }
+
+  // ── Fetch from SAM.gov API ───────────────────────────────────────────────────
+  async function fetchSamGov(key) {
+    setFetching(true);
+    setFetchMsg("Fetching from SAM.gov…");
+    try {
+      const today = new Date();
+      const from  = new Date(today); from.setDate(from.getDate() - 30);
+      const pad = n => String(n).padStart(2, "0");
+      const fmt = d => `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${d.getFullYear()}`;
+      const postedFrom = fmt(from);
+      const postedTo   = fmt(today);
+      const url = `https://api.sam.gov/opportunities/v2/search?api_key=${encodeURIComponent(key)}&keywords=chromebook+ipad+apple+surplus+laptop&postedFrom=${postedFrom}&postedTo=${postedTo}&limit=100&active=true`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`SAM.gov API error ${res.status}: ${txt.slice(0,200)}`);
+      }
+      const json = await res.json();
+      const opps = json.opportunitiesData || [];
+      setFetchMsg(`Got ${opps.length} results — saving…`);
+      if (!opps.length) { showToast("No results returned", "#f59e0b"); setFetching(false); return; }
+
+      const records = opps.map(o => ({
+        notice_id:          (o.noticeId || o.solicitationNumber || o.id || "").slice(0, 200),
+        title:              (o.title || "").slice(0, 500),
+        notice_type:        (o.type || o.baseType || "").slice(0, 100),
+        posted_date:        (o.postedDate || "").slice(0, 30),
+        response_deadline:  (o.responseDeadLine || o.archiveDate || "").slice(0, 30),
+        department:         (o.fullParentPathName || o.departmentName || o.organizationName || "").slice(0, 500),
+        state:              "Federal",
+        ui_link:            (o.uiLink || "").slice(0, 2000),
+      })).filter(r => r.notice_id);
+
+      const { error: upsertErr } = await window._db.from("sam_gov_bids").upsert(records, { onConflict: "notice_id" });
+      if (upsertErr) throw new Error("Supabase upsert error: " + (upsertErr.message || JSON.stringify(upsertErr)));
+      showToast(`Saved ${records.length} SAM.gov bids`);
+      await loadRows();
+    } catch(err) {
+      console.error("SAM.gov fetch error:", err);
+      showToast("Error: " + err.message, "#ef4444");
+    }
+    setFetchMsg("");
+    setFetching(false);
+  }
+
+  function handleFetchClick() {
+    if (!apiKey) { setShowKeyPrompt(true); setKeyInput(""); return; }
+    fetchSamGov(apiKey);
+  }
+
+  function handleKeySave() {
+    const k = keyInput.trim();
+    if (!k) return;
+    localStorage.setItem("sam_gov_api_key", k);
+    setApiKey(k);
+    setShowKeyPrompt(false);
+    fetchSamGov(k);
+  }
+
+  // ── Add to Sources ───────────────────────────────────────────────────────────
+  async function addToSources(row) {
+    const id = row._id;
+    const link = (row["Link"] || "").slice(0, 1000);
+    if (!link) return;
+    setSourceStatus(s => ({ ...s, [id]: "adding" }));
+    const { data: existing } = await window._db.from("sources").select("id").eq("url", link).limit(1);
+    if (existing && existing.length > 0) {
+      setSourceStatus(s => ({ ...s, [id]: "idle" }));
+      showToast("Already a source", "#f59e0b");
+      return;
+    }
+    const record = {
+      friendly_name: (row["Institution"] || "SAM.gov Opportunity").slice(0, 300),
+      url: link,
+      state: "DC",
+      site_type: "links_page",
+      captcha_protected: false,
+      status: "active",
+      date_added: new Date().toISOString().slice(0, 10),
+    };
+    const { error } = await window._db.from("sources").insert(record);
+    if (error) {
+      setSourceStatus(s => ({ ...s, [id]: "idle" }));
+      showToast("Error adding source: " + (error.message || "unknown"), "#ef4444");
+    } else {
+      setSourceStatus(s => ({ ...s, [id]: "added" }));
+      setRows(prev => prev.map(r => r._id === id ? { ...r, _added_to_sources: true } : r));
+      saveMeta(row._notice_id, "added_to_sources", true);
+      showToast("Added to scanner: " + (row["Institution"] || ""));
+    }
+  }
+
+  // ── Column resize ────────────────────────────────────────────────────────────
+  function makeResizer(col) {
+    return function(e) {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = colWidths[col];
+      function onMove(ev) { setColWidths(w => ({ ...w, [col]: Math.max(50, startW + ev.clientX - startX) })); }
+      function onUp() { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); }
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    };
+  }
+
+  // ── Derived data ─────────────────────────────────────────────────────────────
+  const dateOptions = [...new Set(rows.map(r => (r["Posted Date"] || "").slice(0,10)).filter(Boolean))].sort().reverse();
+
+  const displayed = rows
+    .filter(r => {
+      if (r._removed && !showRemoved) return false;
+      const q = filter.toLowerCase();
+      const matchText = !q || (
+        (r["Title"] || "").toLowerCase().includes(q) ||
+        (r["Institution"] || "").toLowerCase().includes(q) ||
+        (r["Notice Type"] || "").toLowerCase().includes(q)
+      );
+      const matchDate = !dateFilter || (r["Posted Date"] || "").startsWith(dateFilter);
+      return matchText && matchDate;
+    })
+    .slice()
+    .sort((a, b) => {
+      const key = COL_KEY[sortCol] || sortCol;
+      const va = (a[key] || "").toString().toLowerCase();
+      const vb = (b[key] || "").toString().toLowerCase();
+      return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+
+  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #1e293b", color:"#cbd5e1", fontSize:"12px", verticalAlign:"middle", overflow:"visible", whiteSpace:"normal", wordBreak:"break-word" };
+  const thBase = { padding:"8px 10px", borderBottom:"1px solid #1e293b", background:"#0f172a", color:"#94a3b8", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
+
+  const resizeHandle = (col) => (
+    <span onMouseDown={e => { e.stopPropagation(); makeResizer(col)(e); }} style={{ cursor:"col-resize", marginLeft:"4px", color:"#334155", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
+  );
+
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", padding:"24px" }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", flexShrink:0 }}>
+        <div>
+          <h2 style={{ color:"#f8fafc", fontSize:"20px", fontWeight:700, margin:0 }}>SAM.gov Bid Browser</h2>
+          <div style={{ color:"#64748b", fontSize:"13px", marginTop:"4px" }}>Federal contract opportunities • last 30 days</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+          {apiKey && (
+            <button onClick={() => { setKeyInput(apiKey); setShowKeyPrompt(true); }}
+              style={{ padding:"6px 12px", borderRadius:"8px", background:"#1e293b", border:"1px solid #334155", color:"#64748b", fontSize:"12px", cursor:"pointer" }}>
+              Change API Key
+            </button>
+          )}
+          <button onClick={handleFetchClick} disabled={fetching}
+            style={{ padding:"8px 16px", borderRadius:"8px", background: fetching ? "#334155" : "linear-gradient(135deg,#3b82f6,#6366f1)", border:"none", color:"#fff", fontSize:"12px", fontWeight:700, cursor: fetching ? "not-allowed" : "pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            <RefreshCw size={13} style={{ animation: fetching ? "spin 1s linear infinite" : "none" }} />
+            {fetching ? (fetchMsg || "Fetching…") : "Fetch Latest"}
+          </button>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"12px", flexShrink:0, flexWrap:"wrap" }}>
+        <div style={{ position:"relative" }}>
+          <Search size={13} color="#64748b" style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)" }} />
+          <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search title, agency, type…"
+            style={{ background:"#1e293b", border:"1px solid #334155", color:"#f8fafc", padding:"6px 12px 6px 30px", borderRadius:"8px", fontSize:"12px", outline:"none", width:"220px" }} />
+        </div>
+        <select value={dateFilter} onChange={e => setDateFilter(e.target.value)}
+          style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          <option value="">All Posted Dates</option>
+          {dateOptions.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <button onClick={() => setShowRemoved(v => !v)}
+          style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#334155" : "#1e293b", border:"1px solid #334155", color: showRemoved ? "#f8fafc" : "#64748b", fontSize:"12px", cursor:"pointer" }}>
+          {showRemoved ? "Hide removed" : "Show removed"}
+        </button>
+        {rows.length > 0 && <span style={{ color:"#64748b", fontSize:"12px", marginLeft:"auto" }}>{displayed.length} of {rows.length} rows</span>}
+      </div>
+
+      {rows.length === 0 && !fetching && (
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#475569", fontSize:"14px" }}>
+          Click "Fetch Latest" to pull SAM.gov opportunities.
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div style={{ flex:1, overflow:"auto", borderRadius:"10px", border:"1px solid #1e293b" }}>
+          <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <colgroup>
+              {cols.map(c => <col key={c} style={{ width: colWidths[c] + "px" }} />)}
+            </colgroup>
+            <thead>
+              <tr>
+                {cols.map(col => (
+                  <th key={col} style={{ ...thBase, cursor: COL_KEY[col] ? "pointer" : "default" }}
+                    onClick={() => { if (!COL_KEY[col]) return; if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("asc"); } }}>
+                    <div style={{ display:"flex", alignItems:"center" }}>
+                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", flex:1 }}>{col}{sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</span>
+                      {resizeHandle(col)}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.map((row, idx) => {
+                const link = row["Link"] || "";
+                const srcSt = sourceStatus[row._id];
+                const isRemoved = row._removed;
+                return (
+                  <tr key={row._id} style={{ background: isRemoved ? "#0f1a2e" : idx % 2 === 0 ? "#0a0f1e" : "#0d1424", opacity: isRemoved ? 0.45 : 1 }}>
+                    <td style={colStyle} title={row["Title"]}>{row["Title"]}</td>
+                    <td style={colStyle} title={row["Notice Type"]}>{row["Notice Type"]}</td>
+                    <td style={colStyle} title={row["Posted Date"]}>{(row["Posted Date"] || "").slice(0,10)}</td>
+                    <td style={colStyle} title={row["Due Date"]}>{(row["Due Date"] || "").slice(0,10)}</td>
+                    <td style={colStyle} title={row["Institution"]}>{row["Institution"]}</td>
+                    <td style={colStyle}><span style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.35)", color:"#818cf8", fontSize:"10px", fontWeight:700, padding:"2px 6px", borderRadius:"4px" }}>Federal</span></td>
+                    <td style={colStyle}>{link ? <a href={link} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>View</a> : "—"}</td>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
+                      <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
+                        style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
+                        <option value="">—</option>
+                        <option value="Bruce">Bruce</option>
+                        <option value="Mike">Mike</option>
+                      </select>
+                    </td>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
+                      <select value={row._status} onChange={e => updateRow(row._id, "_status", e.target.value)}
+                        style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
+                        <option value="pending">Pending</option>
+                        <option value="working">Working</option>
+                        <option value="completed">Completed</option>
+                        <option value="dead">Dead</option>
+                      </select>
+                    </td>
+                    <td style={{ ...colStyle, textAlign:"center", whiteSpace:"normal" }}>
+                      <input type="checkbox" checked={row._hubspot} onChange={e => updateRow(row._id, "_hubspot", e.target.checked)}
+                        style={{ cursor:"pointer", accentColor:"#f59e0b" }} />
+                    </td>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
+                      <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                        {(row._added_to_sources || srcSt === "added") ? (
+                          <span style={{ color:"#10b981", fontSize:"11px" }}>✓ Source</span>
+                        ) : (
+                          <button onClick={() => addToSources(row)} disabled={srcSt === "adding" || !link}
+                            style={{ padding:"3px 10px", borderRadius:"5px", background: (!link || srcSt==="adding") ? "#1e293b" : "#1d4ed8", border:"none", color: (!link || srcSt==="adding") ? "#475569" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!link || srcSt==="adding") ? "not-allowed" : "pointer" }}>
+                            {srcSt === "adding" ? "…" : "Add to Sources"}
+                          </button>
+                        )}
+                        {!isRemoved ? (
+                          <button onClick={() => removeRow(row._id)}
+                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#1e293b", border:"1px solid #334155", color:"#64748b", fontSize:"11px", cursor:"pointer" }}>
+                            Remove
+                          </button>
+                        ) : (
+                          <button onClick={() => { setRows(prev => prev.map(r => r._id === row._id ? { ...r, _removed: false } : r)); saveMeta(row._notice_id, "removed", false); }}
+                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#1e293b", border:"1px solid #334155", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>
+                            Restore
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: toast.color === "#f59e0b" ? "rgba(245,158,11,0.15)" : toast.color === "#ef4444" ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${toast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#f8fafc", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"360px" }}>
+          {toast.msg}
+        </div>
+      )}
+
+      {/* API Key Prompt Modal */}
+      {showKeyPrompt && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e => { if (e.target === e.currentTarget) setShowKeyPrompt(false); }}>
+          <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"14px", padding:"28px", width:"420px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)" }}>
+            <div style={{ fontWeight:700, fontSize:"15px", color:"#f8fafc", marginBottom:"8px", display:"flex", alignItems:"center", gap:"8px" }}>
+              <Key size={15} color="#3b82f6" /> SAM.gov API Key
+            </div>
+            <p style={{ fontSize:"12px", color:"#64748b", marginBottom:"16px", lineHeight:1.5 }}>
+              Enter your SAM.gov API key. It will be stored in your browser's local storage and never sent anywhere except SAM.gov.
+            </p>
+            <input
+              autoFocus
+              type="password"
+              value={keyInput}
+              onChange={e => setKeyInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") handleKeySave(); if (e.key === "Escape") setShowKeyPrompt(false); }}
+              placeholder="Paste your SAM.gov API key…"
+              style={{ width:"100%", background:"#0f172a", border:"1px solid #334155", color:"#f8fafc", padding:"10px 14px", borderRadius:"8px", fontSize:"13px", outline:"none", marginBottom:"16px" }}
+            />
+            <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
+              <button onClick={() => setShowKeyPrompt(false)}
+                style={{ padding:"8px 16px", borderRadius:"8px", background:"#0f172a", border:"1px solid #334155", color:"#64748b", fontSize:"12px", cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={handleKeySave} disabled={!keyInput.trim()}
+                style={{ padding:"8px 18px", borderRadius:"8px", background: keyInput.trim() ? "linear-gradient(135deg,#3b82f6,#6366f1)" : "#1e293b", border:"none", color: keyInput.trim() ? "#fff" : "#475569", fontSize:"12px", fontWeight:700, cursor: keyInput.trim() ? "pointer" : "not-allowed" }}>
+                Save & Fetch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── APP ROOT ──────────────────────────────────────────────────────────────────
 function App() {
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
-    const valid = ["dashboard","hot_leads","all_bids","sources","keywords","history","rfp_bids","settings"];
+    const valid = ["dashboard","hot_leads","all_bids","sources","keywords","history","rfp_bids","samgov","settings"];
     return valid.includes(hash) ? hash : "dashboard";
   });
   const [stateFilter, setStateFilter] = useState("all");
@@ -2551,6 +2958,7 @@ function App() {
           {page==="keywords"   && <KeywordsView />}
           {page==="history"    && <ScanHistoryView />}
           {page==="rfp_bids"   && <RFPBidsView />}
+          {page==="samgov"     && <SamGovView />}
           {page==="settings"   && <SettingsView />}
         </main>
       </div>
