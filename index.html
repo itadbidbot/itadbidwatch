@@ -1818,6 +1818,9 @@ function RFPBidsView() {
     Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
   });
   const [extractModal, setExtractModal] = useState({ open: false, loading: false, row: null, contact: null, error: null });
+  const [scanDateFilter, setScanDateFilter] = useState("");
+  const [sortCol, setSortCol] = useState("Scan Date");
+  const [sortDir, setSortDir] = useState("desc");
   const fileInputRef = useRef(null);
 
   // ── CSV parser ──────────────────────────────────────────────────────────────
@@ -1882,77 +1885,71 @@ function RFPBidsView() {
       setFileDate(null);
     }
     const reader = new FileReader();
-    reader.onload = ev => {
+    reader.onload = async ev => {
       const parsed = parseCSV(ev.target.result);
       console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
-      upsertRfpRows(parsed, fDate);
-      const withMeta = parsed.map((r, i) => ({
-        ...r, _id: i, _assignee: "", _status: "pending", _hubspot: false, _removed: false,
-      }));
-      setRows(withMeta);
-      setDbStatus({});
-      setDbErrors({});
+      await upsertRfpRows(parsed, fDate);
+      loadAllRows();
     };
     reader.readAsText(file);
     e.target.value = "";
   }
 
-  // ── Load all rows from rfp_bids on mount ────────────────────────────────────
-  useEffect(() => {
-    async function loadFromDB(attempt) {
-      console.log("Loading RFP bids, _db ready:", !!window._db, "attempt:", attempt);
-      if (!window._db) {
-        if (attempt < 5) setTimeout(() => loadFromDB(attempt + 1), 1000);
-        else console.warn("RFP load: window._db never became available after 5 retries");
-        return;
-      }
-      const { data, error } = await window._db
-        .from("rfp_bids")
-        .select("*")
-        .order("file_date", { ascending: false })
-        .limit(2000);
-      if (error) { console.error("RFP load error:", error); return; }
-      console.log("RFP bids loaded from Supabase:", data ? data.length : 0, "rows");
-      if (data && data.length > 0) console.log("RFP first raw row from Supabase:", data[0]);
-      if (!data || !data.length) return;
-      const withMeta = data.map((r, i) => ({
-        _id: i,
-        _assignee:         r.assignee         || "",
-        _status:           r.status           || "pending",
-        _hubspot:          !!(r.hubspot_added),
-        _added_to_sources: !!(r.added_to_sources),
-        _removed:          false,
-        "Doc ID":         r.doc_id         || "",
-        "Title":          r.title          || "",
-        "Bid URL":        r.bid_url        || "",
-        "Doc URL":        r.document_url   || "",
-        "Bid Documents":  r.bid_documents  || "",
-        "Publish Date":   r.publish_date   || "",
-        "Pre-bid Date":   r.pre_bid_date   || "",
-        "Due Date":       r.due_date       || "",
-        "Memo":           r.memo           || "",
-        "Bid Type":       r.bid_type       || "",
-        "Institution":    r.institution    || "",
-        "State":          r.state          || "",
-        "Market Sectors": r.market_sectors || "",
-        "Scan Date":      r.file_date      || "",
-      }));
-      setRows(withMeta);
-      const latest = data.find(r => r.file_date);
-      if (latest) setFileDate(latest.file_date);
+  // ── Load all rows from rfp_bids ─────────────────────────────────────────────
+  const loadAllRows = React.useCallback(async function(attempt=0) {
+    if (!window._db) {
+      if (attempt < 5) setTimeout(() => loadAllRows(attempt + 1), 1000);
+      else console.warn("RFP load: window._db never became available after 5 retries");
+      return;
     }
-    loadFromDB(0);
+    const { data, error } = await window._db
+      .from("rfp_bids")
+      .select("*")
+      .order("file_date", { ascending: false })
+      .limit(2000);
+    if (error) { console.error("RFP load error:", error); return; }
+    console.log("RFP bids loaded from Supabase:", data ? data.length : 0, "rows");
+    if (!data || !data.length) return;
+    const withMeta = data.map((r, i) => ({
+      _id: i,
+      _assignee:         r.assignee         || "",
+      _status:           r.status           || "pending",
+      _hubspot:          !!(r.hubspot_added),
+      _added_to_sources: !!(r.added_to_sources),
+      _removed:          !!(r.removed),
+      "Doc ID":         r.doc_id         || "",
+      "Title":          r.title          || "",
+      "Bid URL":        r.bid_url        || "",
+      "Doc URL":        r.document_url   || "",
+      "Bid Documents":  r.bid_documents  || "",
+      "Publish Date":   r.publish_date   || "",
+      "Pre-bid Date":   r.pre_bid_date   || "",
+      "Due Date":       r.due_date       || "",
+      "Memo":           r.memo           || "",
+      "Bid Type":       r.bid_type       || "",
+      "Institution":    r.institution    || "",
+      "State":          r.state          || "",
+      "Market Sectors": r.market_sectors || "",
+      "Scan Date":      r.file_date      || "",
+    }));
+    setRows(withMeta);
+    const latest = data.find(r => r.file_date);
+    if (latest) setFileDate(latest.file_date);
   }, []);
+
+  useEffect(() => { loadAllRows(); }, [loadAllRows]);
 
   async function saveMeta(row, field, value) {
     const bidUrl = row["Bid URL"] || row["bid_url"] || "";
     if (!bidUrl) return;
-    const update = { bid_url: bidUrl };
+    const update = {};
     if (field === "assignee")          update.assignee          = value;
     if (field === "status")            update.status            = value;
     if (field === "hubspot")           update.hubspot_added     = value;
     if (field === "added_to_sources")  update.added_to_sources  = value;
-    await window._db.from("rfp_bids").upsert(update, { onConflict: "doc_id" });
+    if (field === "removed")           update.removed           = value;
+    if (!Object.keys(update).length) return;
+    await window._db.from("rfp_bids").update(update).eq("bid_url", bidUrl);
   }
 
   function updateRow(id, field, value) {
@@ -1963,6 +1960,8 @@ function RFPBidsView() {
 
   function removeRow(id) {
     setRows(prev => prev.map(r => r._id === id ? { ...r, _removed: true } : r));
+    const row = rows.find(r => r._id === id);
+    if (row) saveMeta(row, "removed", true);
   }
 
   // ── Show toast ──────────────────────────────────────────────────────────────
@@ -2085,6 +2084,14 @@ function RFPBidsView() {
   // ── Derived data ────────────────────────────────────────────────────────────
   const stateOptions = [...new Set(rows.map(r => r["State"] || r["state"] || "").filter(Boolean))].sort();
   const sectorOptions = [...new Set(rows.map(r => r["Market Sectors"] || r["market_sectors"] || "").filter(Boolean))].sort();
+  const scanDateOptions = [...new Set(rows.map(r => r["Scan Date"] || "").filter(Boolean))].sort().reverse();
+
+  const COL_KEY = {
+    "Title": "Title", "Scan Date": "Scan Date", "Bid Type": "Bid Type",
+    "Due Date": "Due Date", "Institution": "Institution", "Bid URL": "Bid URL",
+    "Doc URL": "Doc URL", "Bid Doc": "Bid Documents", "Assignee": "_assignee",
+    "Status": "_status",
+  };
 
   const displayed = rows
     .filter(r => {
@@ -2097,13 +2104,15 @@ function RFPBidsView() {
       );
       const matchState = !stateFilter || (r["State"] || r["state"] || "") === stateFilter;
       const matchSector = !sectorFilter || (r["Market Sectors"] || r["market_sectors"] || "") === sectorFilter;
-      return matchText && matchState && matchSector;
+      const matchScanDate = !scanDateFilter || (r["Scan Date"] || "") === scanDateFilter;
+      return matchText && matchState && matchSector && matchScanDate;
     })
     .slice()
     .sort((a, b) => {
-      const da = a["Scan Date"] || a["scan_date"] || a["Publish Date"] || "";
-      const db2 = b["Scan Date"] || b["scan_date"] || b["Publish Date"] || "";
-      return db2.localeCompare(da);
+      const key = COL_KEY[sortCol] || sortCol;
+      const va = (a[key] || "").toString().toLowerCase();
+      const vb = (b[key] || "").toString().toLowerCase();
+      return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
 
   // ── Doc type badge helper ────────────────────────────────────────────────────
@@ -2126,7 +2135,7 @@ function RFPBidsView() {
   const cols = ["Title","Scan Date","Bid Type","Due Date","Institution","Bid URL","Doc URL","Bid Doc","Assignee","Status","Hubspot","Add to Sources"];
 
   const resizeHandle = (col) => (
-    <span onMouseDown={makeResizer(col)} style={{ cursor:"col-resize", marginLeft:"4px", color:"#334155", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
+    <span onMouseDown={e => { e.stopPropagation(); makeResizer(col)(e); }} style={{ cursor:"col-resize", marginLeft:"4px", color:"#334155", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
   );
 
   return (
@@ -2163,6 +2172,11 @@ function RFPBidsView() {
           <option value="">All Market Sectors</option>
           {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select value={scanDateFilter} onChange={e => setScanDateFilter(e.target.value)}
+          style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          <option value="">All Dates</option>
+          {scanDateOptions.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
         <button onClick={() => setShowRemoved(v => !v)}
           style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#334155" : "#1e293b", border:"1px solid #334155", color: showRemoved ? "#f8fafc" : "#64748b", fontSize:"12px", cursor:"pointer" }}>
           {showRemoved ? "Hide removed" : "Show removed"}
@@ -2185,9 +2199,10 @@ function RFPBidsView() {
             <thead>
               <tr>
                 {cols.map(col => (
-                  <th key={col} style={thBase}>
+                  <th key={col} style={{ ...thBase, cursor: COL_KEY[col] ? "pointer" : "default" }}
+                    onClick={() => { if (!COL_KEY[col]) return; if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("asc"); } }}>
                     <div style={{ display:"flex", alignItems:"center" }}>
-                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", flex:1 }}>{col}</span>
+                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", flex:1 }}>{col}{sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</span>
                       {resizeHandle(col)}
                     </div>
                   </th>
@@ -2262,7 +2277,7 @@ function RFPBidsView() {
                             Remove
                           </button>
                         ) : (
-                          <button onClick={() => setRows(prev => prev.map(r => r._id === row._id ? { ...r, _removed: false } : r))}
+                          <button onClick={() => { setRows(prev => prev.map(r => r._id === row._id ? { ...r, _removed: false } : r)); saveMeta(row, "removed", false); }}
                             style={{ padding:"3px 10px", borderRadius:"5px", background:"#1e293b", border:"1px solid #334155", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>
                             Restore
                           </button>
