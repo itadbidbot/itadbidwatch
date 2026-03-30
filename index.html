@@ -2119,13 +2119,18 @@ function RFPBidsView() {
   function docBadge(url) {
     if (!url) return null;
     const u = url.toLowerCase();
-    let label = null;
-    if (u.includes(".pdf"))  label = "PDF";
-    else if (u.includes(".docx") || u.includes(".doc")) label = "DOC";
-    else if (u.includes(".xlsx") || u.includes(".xls")) label = "XLS";
-    else if (u.includes("document") || u.includes("filedownload") || u.includes("download")) label = "DOC";
+    let label = null, bg, border, color;
+    if (u.includes(".pdf")) {
+      label = "PDF"; bg = "rgba(245,158,11,0.15)"; border = "rgba(245,158,11,0.35)"; color = "#f59e0b";
+    } else if (u.match(/\.docx?(\?|$)/) || u.includes(".docx") || u.includes(".doc")) {
+      label = "DOC"; bg = "rgba(59,130,246,0.15)"; border = "rgba(59,130,246,0.35)"; color = "#60a5fa";
+    } else if (u.match(/\.xlsx?(\?|$)/) || u.includes(".xlsx") || u.includes(".xls")) {
+      label = "XLS"; bg = "rgba(16,185,129,0.15)"; border = "rgba(16,185,129,0.35)"; color = "#34d399";
+    } else if (u.includes("document") || u.includes("filedownload") || u.includes("download")) {
+      label = "DOC"; bg = "rgba(59,130,246,0.15)"; border = "rgba(59,130,246,0.35)"; color = "#60a5fa";
+    }
     if (!label) return null;
-    return <span style={{ display:"inline-block", background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.35)", color:"#f59e0b", fontSize:"9px", fontWeight:700, padding:"1px 5px", borderRadius:"3px", letterSpacing:"0.05em", marginLeft:"5px", verticalAlign:"middle" }}>{label}</span>;
+    return <span style={{ display:"inline-block", background:bg, border:`1px solid ${border}`, color, fontSize:"9px", fontWeight:700, padding:"1px 5px", borderRadius:"3px", letterSpacing:"0.05em", marginLeft:"5px", verticalAlign:"middle" }}>{label}</span>;
   }
 
   // ── Styles ──────────────────────────────────────────────────────────────────
