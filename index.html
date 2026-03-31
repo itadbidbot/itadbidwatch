@@ -9,18 +9,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:#0a0f1e;font-family:system-ui,-apple-system,sans-serif;overflow:hidden}
+body{background:#001a33;font-family:system-ui,-apple-system,sans-serif;overflow:hidden}
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 ::-webkit-scrollbar{width:6px;height:6px}
-::-webkit-scrollbar-track{background:#0f172a}
-::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
-select option{background:#1e293b;color:#f8fafc}
-input:focus,textarea:focus{border-color:#f59e0b !important}
+::-webkit-scrollbar-track{background:#002244}
+::-webkit-scrollbar-thumb{background:#003875;border-radius:3px}
+select option{background:#003366;color:#ffffff}
+input:focus,textarea:focus{border-color:#C60C30 !important}
 </style>
 
 <style>
 @keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
-.hamburger-btn { display: none; background: none; border: none; color: #f8fafc; font-size: 22px; cursor: pointer; padding: 4px 8px; line-height: 1; }
+.hamburger-btn { display: none; background: none; border: none; color: #ffffff; font-size: 22px; cursor: pointer; padding: 4px 8px; line-height: 1; }
 .sidebar-backdrop { display: none; }
 .sidebar-close-btn { display: none; }
 @media (max-width: 768px) {
@@ -37,7 +37,7 @@ input:focus,textarea:focus{border-color:#f59e0b !important}
   .sidebar-backdrop { display: none; }
   .sidebar-backdrop.open { display: block !important; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.55); z-index: 9999; }
   .hamburger-btn { display: flex !important; align-items: center; }
-  .sidebar-close-btn { display: flex !important; align-items: center; justify-content: flex-end; padding: 10px 16px 4px; background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; width: 100%; }
+  .sidebar-close-btn { display: flex !important; align-items: center; justify-content: flex-end; padding: 10px 16px 4px; background: none; border: none; color: #B0B7BC; font-size: 20px; cursor: pointer; width: 100%; }
   main[style] { width: 100vw !important; }
   header[style] { height: auto !important; flex-wrap: wrap !important; padding: 8px 12px !important; gap: 6px !important; }
   header[style] > div:nth-child(4), header[style] > div:nth-child(5) { display: none !important; }
@@ -150,12 +150,12 @@ const MOCK_SCAN_HISTORY = [
 ];
 
 const KEYWORD_PILLARS = [
-  { name:"Apple Terms", key:"apple_terms", weight:22, color:"#f59e0b", terms:["apple","apples","ipad","ipads","iphone","iphones","macbook","macbooks","imac","mac mini","apple school manager","apple business manager","jamf","jamf pro"] },
-  { name:"Chromebook Terms", key:"chromebook_terms", weight:20, color:"#3b82f6", terms:["chromebook","chromebooks","chrome os","chromeos","google workspace for education","g suite for education","google classroom","chrome device management"] },
-  { name:"Fleet Program Terms", key:"fleet_program_terms", weight:8, color:"#8b5cf6", terms:["1:1","one to one","student device","student devices","device program","fleet","take home device","device refresh","refresh cycle","end of life","eol"] },
+  { name:"Apple Terms", key:"apple_terms", weight:22, color:"#C60C30", terms:["apple","apples","ipad","ipads","iphone","iphones","macbook","macbooks","imac","mac mini","apple school manager","apple business manager","jamf","jamf pro"] },
+  { name:"Chromebook Terms", key:"chromebook_terms", weight:20, color:"#B0B7BC", terms:["chromebook","chromebooks","chrome os","chromeos","google workspace for education","g suite for education","google classroom","chrome device management"] },
+  { name:"Fleet Program Terms", key:"fleet_program_terms", weight:8, color:"#B0B7BC", terms:["1:1","one to one","student device","student devices","device program","fleet","take home device","device refresh","refresh cycle","end of life","eol"] },
   { name:"Disposition Terms", key:"disposition_terms", weight:12, color:"#10b981", terms:["surplus","obsolete","refresh","replacement","trade-in","trade in","buyback","buy back","asset disposition","itad","decommission","decommissioning","retired equipment","dispose","disposal"] },
-  { name:"Soft Negatives", key:"soft_negative_terms", weight:-3, color:"#f97316", terms:["av","audio visual","copier","copiers","printer","printers","hvac","roof","roofing","floor","flooring"] },
-  { name:"Hard Negatives", key:"hard_negative_terms", weight:-999, color:"#ef4444", terms:["construction","asphalt","concrete","paving","roof replacement","re-roof","geotechnical","janitorial","lawn","landscaping","vehicle","vehicles","van","vans","gutter","plumbing","wastewater","diffuser","diffusers"] },
+  { name:"Soft Negatives", key:"soft_negative_terms", weight:-3, color:"#C60C30", terms:["av","audio visual","copier","copiers","printer","printers","hvac","roof","roofing","floor","flooring"] },
+  { name:"Hard Negatives", key:"hard_negative_terms", weight:-999, color:"#C60C30", terms:["construction","asphalt","concrete","paving","roof replacement","re-roof","geotechnical","janitorial","lawn","landscaping","vehicle","vehicles","van","vans","gutter","plumbing","wastewater","diffuser","diffusers"] },
 ];
 
 const FILTER_CATEGORIES = [
@@ -172,7 +172,7 @@ const FILTER_CATEGORIES = [
 function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, onRunScan, scanning, scanProgress, onHamburger }) {
   return (
     <header style={{
-      background:"#0f172a", borderBottom:"1px solid #1e293b",
+      background:"#002244", borderBottom:"1px solid #003366",
       display:"flex", alignItems:"center", gap:"16px",
       padding:"0 24px", height:"56px", flexShrink:0, zIndex:10
     }}>
@@ -180,23 +180,23 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
       <button className="hamburger-btn" onClick={onHamburger} aria-label="Open menu">☰</button>
       {/* Logo */}
       <div style={{ display:"flex", alignItems:"center", gap:"10px", marginRight:"8px" }}>
-        <div style={{ width:"32px", height:"32px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", borderRadius:"8px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ width:"32px", height:"32px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", borderRadius:"8px", display:"flex", alignItems:"center", justifyContent:"center" }}>
           <Zap size={18} color="#fff" />
         </div>
         <div>
-          <div style={{ fontFamily:"'Courier New',monospace", fontWeight:700, fontSize:"13px", color:"#f8fafc", letterSpacing:"0.05em" }}>ITAD</div>
-          <div style={{ fontFamily:"'Courier New',monospace", fontSize:"9px", color:"#f59e0b", letterSpacing:"0.15em" }}>WATCH™</div>
+          <div style={{ fontFamily:"'Courier New',monospace", fontWeight:700, fontSize:"13px", color:"#ffffff", letterSpacing:"0.05em" }}>ITAD</div>
+          <div style={{ fontFamily:"'Courier New',monospace", fontSize:"9px", color:"#C60C30", letterSpacing:"0.15em" }}>WATCH™</div>
         </div>
       </div>
 
-      <div style={{ width:"1px", height:"28px", background:"#1e293b" }} />
+      <div style={{ width:"1px", height:"28px", background:"#003366" }} />
 
       {/* State filter */}
       <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-        <Filter size={13} color="#64748b" />
-        <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>State</label>
+        <Filter size={13} color="#B0B7BC" />
+        <label style={{ fontSize:"11px", color:"#B0B7BC", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>State</label>
         <select value={stateFilter} onChange={e=>setStateFilter(e.target.value)} style={{
-          background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"12px",
+          background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px",
           padding:"4px 28px 4px 10px", borderRadius:"6px", cursor:"pointer", outline:"none",
           appearance:"none", minWidth:"80px"
         }}>
@@ -207,9 +207,9 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
 
       {/* Entity type — placeholder */}
       <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-        <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Entity</label>
+        <label style={{ fontSize:"11px", color:"#B0B7BC", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Entity</label>
         <select disabled style={{
-          background:"#1e293b", border:"1px solid #1e293b", color:"#475569", fontSize:"12px",
+          background:"#003366", border:"1px solid #003366", color:"#4a6080", fontSize:"12px",
           padding:"4px 10px", borderRadius:"6px", cursor:"not-allowed", outline:"none", opacity:0.5
         }}>
           <option>Coming Soon</option>
@@ -218,9 +218,9 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
 
       {/* Class — placeholder */}
       <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-        <label style={{ fontSize:"11px", color:"#64748b", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Class</label>
+        <label style={{ fontSize:"11px", color:"#B0B7BC", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Class</label>
         <select disabled style={{
-          background:"#1e293b", border:"1px solid #1e293b", color:"#475569", fontSize:"12px",
+          background:"#003366", border:"1px solid #003366", color:"#4a6080", fontSize:"12px",
           padding:"4px 10px", borderRadius:"6px", cursor:"not-allowed", outline:"none", opacity:0.5
         }}>
           <option>Coming Soon</option>
@@ -234,13 +234,13 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
           disabled={scanning}
           style={{
             padding:"7px 16px", borderRadius:"8px",
-            background: scanning ? "#1e293b" : "linear-gradient(135deg,#f59e0b,#f97316)",
-            border: scanning ? "1px solid #334155" : "none",
-            color: scanning ? "#64748b" : "#0f172a",
+            background: scanning ? "#003366" : "linear-gradient(135deg,#C60C30,#9a0a26)",
+            border: scanning ? "1px solid #003875" : "none",
+            color: scanning ? "#B0B7BC" : "#ffffff",
             fontSize:"12px", fontWeight:700,
             cursor: scanning ? "not-allowed" : "pointer",
             display:"flex", alignItems:"center", gap:"6px",
-            boxShadow: scanning ? "none" : "0 2px 10px rgba(245,158,11,0.3)",
+            boxShadow: scanning ? "none" : "0 2px 10px rgba(198,12,48,0.3)",
             transition:"all 0.2s"
           }}>
           {scanning
@@ -248,10 +248,10 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
             : <><Play size={12} /> Scan Now</>
           }
         </button>
-        <div style={{ width:"1px", height:"20px", background:"#1e293b" }} />
+        <div style={{ width:"1px", height:"20px", background:"#003366" }} />
         <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
           <div style={{ width:"7px", height:"7px", borderRadius:"50%", background:"#10b981", boxShadow:"0 0 6px #10b981" }} />
-          <span style={{ fontSize:"11px", color:"#64748b" }}>System Active</span>
+          <span style={{ fontSize:"11px", color:"#B0B7BC" }}>System Active</span>
         </div>
       </div>
     </header>
@@ -275,12 +275,12 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose }) {
     <>
       <div className={isOpen ? "sidebar-backdrop open" : "sidebar-backdrop"} onClick={onClose} />
       <nav className={isOpen ? "sidebar-open" : ""} style={{
-        width:"240px", flexShrink:0, background:"#0f172a", borderRight:"1px solid #1e293b",
+        width:"240px", flexShrink:0, background:"#002244", borderRight:"1px solid #003366",
         display:"flex", flexDirection:"column", padding:"16px 0", overflowY:"auto"
       }}>
       <button className="sidebar-close-btn" onClick={onClose} aria-label="Close menu">✕</button>
       <div style={{ padding:"0 12px", marginBottom:"8px" }}>
-        <div style={{ fontSize:"9px", color:"#334155", fontWeight:700, letterSpacing:"0.15em", textTransform:"uppercase", padding:"0 8px 8px" }}>Navigation</div>
+        <div style={{ fontSize:"9px", color:"#003875", fontWeight:700, letterSpacing:"0.15em", textTransform:"uppercase", padding:"0 8px 8px" }}>Navigation</div>
       </div>
 
       {nav.map(({ key, label, icon: Icon }) => {
@@ -293,9 +293,9 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose }) {
             display:"flex", alignItems:"center", gap:"10px",
             padding:"10px 20px", margin:"1px 12px", borderRadius:"8px",
             WebkitTapHighlightColor:"transparent", touchAction:"manipulation",
-            background: isActive ? "linear-gradient(90deg,rgba(245,158,11,0.15),rgba(245,158,11,0.05))" : "transparent",
-            border: isActive ? "1px solid rgba(245,158,11,0.2)" : "1px solid transparent",
-            color: isActive ? "#f59e0b" : "#64748b",
+            background: isActive ? "linear-gradient(90deg,rgba(198,12,48,0.15),rgba(198,12,48,0.05))" : "transparent",
+            border: isActive ? "1px solid rgba(198,12,48,0.2)" : "1px solid transparent",
+            color: isActive ? "#C60C30" : "#B0B7BC",
             cursor:"pointer", textAlign:"left", fontSize:"13px", fontWeight: isActive ? 600 : 400,
             transition:"all 0.15s"
           }}>
@@ -303,7 +303,7 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose }) {
             <span>{label}</span>
             {key === "hot_leads" && (
               <span style={{
-                marginLeft:"auto", background:"#ef4444", color:"#fff",
+                marginLeft:"auto", background:"#C60C30", color:"#fff",
                 fontSize:"10px", fontWeight:700, padding:"1px 6px", borderRadius:"99px"
               }}>{window._bidbotData && window._bidbotData.ready ? (window._LIVE_HOT||[]).filter(l=>l.tier==="HOT").length : 0}</span>
             )}
@@ -314,18 +314,18 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose }) {
       <div style={{ flex:1 }} />
 
       <div style={{ padding:"12px 12px 0" }}>
-        <div style={{ width:"100%", height:"1px", background:"#1e293b", marginBottom:"12px" }} />
+        <div style={{ width:"100%", height:"1px", background:"#003366", marginBottom:"12px" }} />
         <button
           onClick={onRunScan}
           disabled={scanning}
           style={{
             width:"100%", padding:"11px 16px", borderRadius:"10px",
-            background: scanning ? "#1e293b" : "linear-gradient(135deg,#f59e0b,#f97316)",
-            border:"none", color: scanning ? "#64748b" : "#0f172a",
+            background: scanning ? "#003366" : "linear-gradient(135deg,#C60C30,#9a0a26)",
+            border:"none", color: scanning ? "#B0B7BC" : "#ffffff",
             fontSize:"13px", fontWeight:700, cursor: scanning ? "not-allowed" : "pointer",
             display:"flex", alignItems:"center", justifyContent:"center", gap:"8px",
             transition:"all 0.2s", letterSpacing:"0.03em",
-            boxShadow: scanning ? "none" : "0 4px 15px rgba(245,158,11,0.3)"
+            boxShadow: scanning ? "none" : "0 4px 15px rgba(198,12,48,0.3)"
           }}>
           {scanning ? <><RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }} /> Scanning...</> : <><Play size={14} /> Scan Now</>}
         </button>
@@ -336,7 +336,7 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose }) {
 }
 
 function ScoreBadge({ score }) {
-  const color = score >= 70 ? "#10b981" : score >= 50 ? "#f59e0b" : "#64748b";
+  const color = score >= 70 ? "#10b981" : score >= 50 ? "#C60C30" : "#B0B7BC";
   return (
     <span style={{
       background:`${color}18`, border:`1px solid ${color}40`,
@@ -349,21 +349,21 @@ function ScoreBadge({ score }) {
 function TierBadge({ tier }) {
   return (
     <span style={{
-      background: tier==="HOT" ? "rgba(239,68,68,0.15)" : "rgba(245,158,11,0.15)",
-      border: tier==="HOT" ? "1px solid rgba(239,68,68,0.3)" : "1px solid rgba(245,158,11,0.3)",
-      color: tier==="HOT" ? "#ef4444" : "#f59e0b",
+      background: tier==="HOT" ? "rgba(198,12,48,0.15)" : "rgba(198,12,48,0.15)",
+      border: tier==="HOT" ? "1px solid rgba(198,12,48,0.3)" : "1px solid rgba(198,12,48,0.3)",
+      color: tier==="HOT" ? "#C60C30" : "#C60C30",
       fontSize:"10px", fontWeight:700, padding:"2px 8px", borderRadius:"4px", letterSpacing:"0.05em"
     }}>{tier}</span>
   );
 }
 
 function StatusDot({ status }) {
-  const colors = { active:"#10b981", error:"#ef4444", skipped:"#64748b", success:"#10b981", failed:"#ef4444" };
+  const colors = { active:"#10b981", error:"#C60C30", skipped:"#B0B7BC", success:"#10b981", failed:"#C60C30" };
   const labels = { active:"Active", error:"Error", skipped:"Skipped", success:"Success", failed:"Failed" };
   return (
     <span style={{ display:"flex", alignItems:"center", gap:"5px" }}>
-      <span style={{ width:"6px", height:"6px", borderRadius:"50%", background:colors[status]||"#64748b", display:"inline-block" }} />
-      <span style={{ color:colors[status]||"#64748b", fontSize:"12px" }}>{labels[status]||status}</span>
+      <span style={{ width:"6px", height:"6px", borderRadius:"50%", background:colors[status]||"#B0B7BC", display:"inline-block" }} />
+      <span style={{ color:colors[status]||"#B0B7BC", fontSize:"12px" }}>{labels[status]||status}</span>
     </span>
   );
 }
@@ -387,10 +387,10 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
     return diff <= 7 && l.tier === "HOT";
   }).length : 42;
   const stats = [
-    { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#ef4444", sub:"New this scan", page:"hot_leads" },
-    { label:"Total Sources", value:totalSources, icon:Globe, color:"#3b82f6", sub:`${activeSources} active · ${captchaSources} CAPTCHA`, page:"sources" },
+    { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#C60C30", sub:"New this scan", page:"hot_leads" },
+    { label:"Total Sources", value:totalSources, icon:Globe, color:"#B0B7BC", sub:`${activeSources} active · ${captchaSources} CAPTCHA`, page:"sources" },
     { label:"Hot Leads This Week", value:weekLeads, icon:TrendingUp, color:"#10b981", sub:"Last 7 days", page:"hot_leads" },
-    { label:"Sources Added / Month", value:activeSources, icon:Plus, color:"#8b5cf6", sub:"Active sources", page:"sources" },
+    { label:"Sources Added / Month", value:activeSources, icon:Plus, color:"#B0B7BC", sub:"Active sources", page:"sources" },
   ];
 
   return (
@@ -398,8 +398,8 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
       {/* Hero */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" }}>
         <div>
-          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:0, letterSpacing:"-0.02em" }}>Dashboard</h1>
-          <p style={{ color:"#64748b", fontSize:"13px", margin:"4px 0 0" }}>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:0, letterSpacing:"-0.02em" }}>Dashboard</h1>
+          <p style={{ color:"#B0B7BC", fontSize:"13px", margin:"4px 0 0" }}>
             {window._LIVE_SCANS && window._LIVE_SCANS.length > 0
               ? `Last scan: ${new Date((window._LIVE_SCANS[0].started_at||"").endsWith("Z") ? window._LIVE_SCANS[0].started_at : (window._LIVE_SCANS[0].started_at||"")+"Z").toLocaleDateString("en-CA",{timeZone:"America/New_York"})} · ${new Date((window._LIVE_SCANS[0].started_at||"").endsWith("Z") ? window._LIVE_SCANS[0].started_at : (window._LIVE_SCANS[0].started_at||"")+"Z").toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"})}`
               : new Date().toLocaleDateString("en-US",{weekday:"long",year:"numeric",month:"long",day:"numeric"})
@@ -408,11 +408,11 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
         </div>
         <button onClick={onRunScan} disabled={scanning} style={{
           padding:"10px 20px", borderRadius:"10px",
-          background: scanning ? "#1e293b" : "linear-gradient(135deg,#f59e0b,#f97316)",
-          border:"none", color: scanning ? "#64748b" : "#0f172a",
+          background: scanning ? "#003366" : "linear-gradient(135deg,#C60C30,#9a0a26)",
+          border:"none", color: scanning ? "#B0B7BC" : "#ffffff",
           fontSize:"13px", fontWeight:700, cursor: scanning ? "not-allowed" : "pointer",
           display:"flex", alignItems:"center", gap:"8px",
-          boxShadow: scanning ? "none" : "0 4px 20px rgba(245,158,11,0.35)"
+          boxShadow: scanning ? "none" : "0 4px 20px rgba(198,12,48,0.35)"
         }}>
           {scanning ? <><RefreshCw size={14} style={{animation:"spin 1s linear infinite"}} />Scanning…</> : <><Play size={14} />Scan Now</>}
         </button>
@@ -424,68 +424,68 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
           <div key={label} onClick={()=>page && onNavigate(page)}
           onTouchEnd={(e)=>{e.preventDefault(); page && onNavigate(page);}}
           style={{
-            background:"#1e293b", border:"1px solid #334155", borderRadius:"12px",
+            background:"#003366", border:"1px solid #003875", borderRadius:"12px",
             padding:"20px", display:"flex", flexDirection:"column", gap:"8px",
             cursor: page ? "pointer" : "default",
             transition:"border-color 0.2s, transform 0.1s",
             WebkitTapHighlightColor:"transparent",
           }}
           onMouseEnter={e=>{if(page){e.currentTarget.style.borderColor=color;e.currentTarget.style.transform="translateY(-2px)";}}}
-          onMouseLeave={e=>{e.currentTarget.style.borderColor="#334155";e.currentTarget.style.transform="translateY(0)";}}>
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="#003875";e.currentTarget.style.transform="translateY(0)";}}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:"12px", color:"#64748b", fontWeight:600, letterSpacing:"0.04em" }}>{label.toUpperCase()}</span>
+              <span style={{ fontSize:"12px", color:"#B0B7BC", fontWeight:600, letterSpacing:"0.04em" }}>{label.toUpperCase()}</span>
               <div style={{ padding:"6px", borderRadius:"8px", background:`${color}18` }}>
                 <Icon size={14} color={color} />
               </div>
             </div>
-            <div style={{ fontSize:"32px", fontWeight:800, color:"#f8fafc", lineHeight:1, fontFamily:"'Courier New',monospace" }}>{value}</div>
-            <div style={{ fontSize:"11px", color:"#64748b" }}>{sub}</div>
+            <div style={{ fontSize:"32px", fontWeight:800, color:"#ffffff", lineHeight:1, fontFamily:"'Courier New',monospace" }}>{value}</div>
+            <div style={{ fontSize:"11px", color:"#B0B7BC" }}>{sub}</div>
           </div>
         ))}
       </div>
 
       {/* Hot leads table */}
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden", marginBottom:"24px" }}>
-        <div style={{ padding:"16px 20px", borderBottom:"1px solid #334155", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+      <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", overflow:"hidden", marginBottom:"24px" }}>
+        <div style={{ padding:"16px 20px", borderBottom:"1px solid #003875", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-            <Flame size={15} color="#ef4444" />
-            <span style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px" }}>Today's Hot Leads</span>
-            <span style={{ background:"#ef4444", color:"#fff", fontSize:"10px", fontWeight:700, padding:"1px 7px", borderRadius:"99px" }}>{today.length}</span>
+            <Flame size={15} color="#C60C30" />
+            <span style={{ fontWeight:700, color:"#ffffff", fontSize:"14px" }}>Today's Hot Leads</span>
+            <span style={{ background:"#C60C30", color:"#fff", fontSize:"10px", fontWeight:700, padding:"1px 7px", borderRadius:"99px" }}>{today.length}</span>
           </div>
           <button onClick={()=>onNavigate("hot_leads")} style={{
-            background:"transparent", border:"1px solid #334155", color:"#64748b",
+            background:"transparent", border:"1px solid #003875", color:"#B0B7BC",
             fontSize:"12px", padding:"5px 12px", borderRadius:"6px", cursor:"pointer"
           }}>View All →</button>
         </div>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
-            <tr style={{ background:"#0f172a" }}>
+            <tr style={{ background:"#002244" }}>
               {["Title","Institution","State","Due Date","Score","Bid Page","Bid Link"].map(h=>(
-                <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+                <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:"11px", color:"#4a6080", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {today.slice(0,7).map((lead,i)=>(
-              <tr key={lead.id} style={{ borderTop:"1px solid #1e293b", background: i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
-                <td style={{ padding:"12px 16px", fontSize:"13px", color:"#cbd5e1", maxWidth:"280px" }}>
+              <tr key={lead.id} style={{ borderTop:"1px solid #003366", background: i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+                <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC", maxWidth:"280px" }}>
                   <div style={{ fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
-                  <div style={{ fontSize:"11px", color:"#475569", marginTop:"2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.matched_positive || lead.keywords || ""}</div>
+                  <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.matched_positive || lead.keywords || ""}</div>
                 </td>
-                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", whiteSpace:"nowrap" }}>{lead.institution}</td>
-                <td style={{ padding:"12px 16px" }}><span style={{ background:"#334155", color:"#94a3b8", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
-                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>{lead.due_date}</td>
+                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC", whiteSpace:"nowrap" }}>{lead.institution}</td>
+                <td style={{ padding:"12px 16px" }}><span style={{ background:"#003875", color:"#B0B7BC", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
+                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>{lead.due_date}</td>
                 <td style={{ padding:"12px 16px" }}><ScoreBadge score={lead.score} /></td>
                 <td style={{ padding:"12px 16px" }}>
                   {lead.source_url
-                    ? <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color:"#64748b", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> View</a>
-                    : <span style={{ color:"#334155", fontSize:"12px" }}>—</span>
+                    ? <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> View</a>
+                    : <span style={{ color:"#003875", fontSize:"12px" }}>—</span>
                   }
                 </td>
                 <td style={{ padding:"12px 16px" }}>
                   {(lead.pdf_url || lead.direct_link)
-                    ? <a href={lead.pdf_url || lead.direct_link} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> Open</a>
-                    : <span style={{ color:"#334155", fontSize:"12px" }}>—</span>
+                    ? <a href={lead.pdf_url || lead.direct_link} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> Open</a>
+                    : <span style={{ color:"#003875", fontSize:"12px" }}>—</span>
                   }
                 </td>
               </tr>
@@ -495,39 +495,39 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
       </div>
 
       {/* Scan history summary */}
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden" }}>
-        <div style={{ padding:"16px 20px", borderBottom:"1px solid #334155", display:"flex", alignItems:"center", gap:"8px" }}>
-          <Clock size={14} color="#8b5cf6" />
-          <span style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px" }}>Recent Scan History</span>
+      <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", overflow:"hidden" }}>
+        <div style={{ padding:"16px 20px", borderBottom:"1px solid #003875", display:"flex", alignItems:"center", gap:"8px" }}>
+          <Clock size={14} color="#B0B7BC" />
+          <span style={{ fontWeight:700, color:"#ffffff", fontSize:"14px" }}>Recent Scan History</span>
         </div>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
-            <tr style={{ background:"#0f172a" }}>
+            <tr style={{ background:"#002244" }}>
               {["Date","Time","Status","Duration","Hot Leads","Errors"].map(h=>(
-                <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+                <th key={h} style={{ padding:"10px 16px", textAlign:"left", fontSize:"11px", color:"#4a6080", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {MOCK_SCAN_HISTORY.slice(0,3).map((s,i)=>(
-              <tr key={s.id} style={{ borderTop:"1px solid #1e293b", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>{s.date || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleDateString("en-CA",{timeZone:"America/New_York"}) : "—")}</td>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"}) : "—")}</td>
+              <tr key={s.id} style={{ borderTop:"1px solid #003366", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#B0B7BC", fontFamily:"monospace" }}>{s.date || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleDateString("en-CA",{timeZone:"America/New_York"}) : "—")}</td>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#B0B7BC", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"}) : "—")}</td>
                 <td style={{ padding:"11px 16px" }}>
                     {s.captcha_protected
-                      ? <span style={{ fontSize:"11px", padding:"3px 8px", borderRadius:"99px", background:"rgba(124,58,237,0.15)", color:"#a78bfa", border:"1px solid rgba(124,58,237,0.3)", fontWeight:600 }}>🔒 CAPTCHA</span>
+                      ? <span style={{ fontSize:"11px", padding:"3px 8px", borderRadius:"99px", background:"rgba(176,183,188,0.15)", color:"#B0B7BC", border:"1px solid rgba(176,183,188,0.3)", fontWeight:600 }}>🔒 CAPTCHA</span>
                       : <StatusDot status={s.status || "active"} />
                     }
                   </td>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color:"#B0B7BC", fontFamily:"monospace" }}>
                   {s.duration || 
                    (s.finished_at && s.started_at ? Math.floor((new Date(s.finished_at)-new Date(s.started_at))/60000)+"m" : 
                    (s.duration_seconds ? Math.floor(s.duration_seconds/60)+"m "+s.duration_seconds%60+"s" : "—"))}
                 </td>
-                <td style={{ padding:"11px 16px", fontSize:"13px", color: (s.hot_leads||s.hot_count||0)>0?"#10b981":"#64748b", fontWeight:600 }}>
+                <td style={{ padding:"11px 16px", fontSize:"13px", color: (s.hot_leads||s.hot_count||0)>0?"#10b981":"#B0B7BC", fontWeight:600 }}>
                   {s.hot_leads ?? s.hot_count ?? s.leads_found ?? "—"}
                 </td>
-                <td style={{ padding:"11px 16px", fontSize:"12px", color: (s.errors||s.error_count||0)>0?"#ef4444":"#64748b" }}>
+                <td style={{ padding:"11px 16px", fontSize:"12px", color: (s.errors||s.error_count||0)>0?"#C60C30":"#B0B7BC" }}>
                   {s.errors ?? s.error_count ?? 0}
                 </td>
               </tr>
@@ -566,31 +566,31 @@ function HotLeadsView({ stateFilter, allBids=false }) {
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <div style={{ marginBottom:"20px" }}>
-        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px", letterSpacing:"-0.02em" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px", letterSpacing:"-0.02em" }}>
           {allBids ? "All Bids" : "Daily Hot Leads"}
         </h1>
-        <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>
+        <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>
           {allBids ? "Historical master list · " : "Sorted by due date (soonest first) · "}
-          <span style={{ color:"#f59e0b" }}>{filtered.length} results</span>
+          <span style={{ color:"#C60C30" }}>{filtered.length} results</span>
         </p>
       </div>
 
       {/* Filters */}
       <div style={{ display:"flex", gap:"12px", marginBottom:"20px", flexWrap:"wrap" }}>
         <div style={{ position:"relative", flex:1, minWidth:"200px" }}>
-          <Search size={13} style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)", color:"#475569" }} />
+          <Search size={13} style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)", color:"#4a6080" }} />
           <input
             value={search} onChange={e=>setSearch(e.target.value)}
             placeholder="Search bids…"
             style={{
-              width:"100%", padding:"8px 12px 8px 32px", background:"#1e293b",
-              border:"1px solid #334155", borderRadius:"8px", color:"#cbd5e1",
+              width:"100%", padding:"8px 12px 8px 32px", background:"#003366",
+              border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC",
               fontSize:"13px", outline:"none", boxSizing:"border-box"
             }}
           />
         </div>
         <select value={category} onChange={e=>setCategory(e.target.value)} style={{
-          background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1",
+          background:"#003366", border:"1px solid #003875", color:"#B0B7BC",
           fontSize:"13px", padding:"8px 14px", borderRadius:"8px", cursor:"pointer", outline:"none"
         }}>
           {FILTER_CATEGORIES.map(c=><option key={c.value} value={c.value}>{allBids && c.value==="all" ? "All Results" : c.label}</option>)}
@@ -598,12 +598,12 @@ function HotLeadsView({ stateFilter, allBids=false }) {
       </div>
 
       {/* Table */}
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden" }}>
+      <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
-            <tr style={{ background:"#0f172a" }}>
+            <tr style={{ background:"#002244" }}>
               {["Title / Bid Name","Institution","State","Due Date ↑","Score","Tier","Bid Page","Bid Link"].map(h=>(
-                <th key={h} style={{ padding:"11px 16px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+                <th key={h} style={{ padding:"11px 16px", textAlign:"left", fontSize:"11px", color:"#4a6080", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
               ))}
             </tr>
           </thead>
@@ -611,35 +611,35 @@ function HotLeadsView({ stateFilter, allBids=false }) {
             {filtered.length === 0 ? (
               <tr><td colSpan={8} style={{ padding:"48px 20px", textAlign:"center" }}>
                   <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"10px" }}>
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                    <div style={{ fontSize:"18px", fontWeight:700, color:"#f8fafc" }}>No Matches Found</div>
-                    <div style={{ fontSize:"13px", color:"#64748b" }}>Try adjusting your state filter or search term</div>
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a6080" strokeWidth="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <div style={{ fontSize:"18px", fontWeight:700, color:"#ffffff" }}>No Matches Found</div>
+                    <div style={{ fontSize:"13px", color:"#B0B7BC" }}>Try adjusting your state filter or search term</div>
                   </div>
                 </td></tr>
             ) : filtered.map((lead,i)=>(
-              <tr key={lead.id} style={{ borderTop:"1px solid #1e293b", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+              <tr key={lead.id} style={{ borderTop:"1px solid #003366", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
                 <td style={{ padding:"12px 16px", maxWidth:"300px" }}>
-                  <div style={{ fontSize:"13px", color:"#e2e8f0", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
-                  <div style={{ fontSize:"11px", color:"#475569", marginTop:"3px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.memo || lead.source_name || ""}</div>
-                  <div style={{ fontSize:"10px", color:"#334155", marginTop:"2px", fontFamily:"monospace" }}>Keywords: {lead.matched_positive || lead.keywords || ""}</div>
+                  <div style={{ fontSize:"13px", color:"#ffffff", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
+                  <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"3px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.memo || lead.source_name || ""}</div>
+                  <div style={{ fontSize:"10px", color:"#003875", marginTop:"2px", fontFamily:"monospace" }}>Keywords: {lead.matched_positive || lead.keywords || ""}</div>
                 </td>
-                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", whiteSpace:"nowrap" }}>{lead.institution}</td>
-                <td style={{ padding:"12px 16px" }}><span style={{ background:"#334155", color:"#94a3b8", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
-                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>{lead.due_date}</td>
+                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC", whiteSpace:"nowrap" }}>{lead.institution}</td>
+                <td style={{ padding:"12px 16px" }}><span style={{ background:"#003875", color:"#B0B7BC", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
+                <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC", fontFamily:"'Courier New',monospace", whiteSpace:"nowrap" }}>{lead.due_date}</td>
                 <td style={{ padding:"12px 16px" }}><ScoreBadge score={lead.score} /></td>
                 <td style={{ padding:"12px 16px" }}>
                   <TierBadge tier={lead.tier || "WARM"} />
                 </td>
                 <td style={{ padding:"12px 16px" }}>
                   {lead.source_url
-                    ? <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color:"#64748b", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> View</a>
-                    : <span style={{ color:"#334155", fontSize:"12px" }}>—</span>
+                    ? <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> View</a>
+                    : <span style={{ color:"#003875", fontSize:"12px" }}>—</span>
                   }
                 </td>
                 <td style={{ padding:"12px 16px" }}>
                   {(lead.pdf_url || lead.direct_link)
-                    ? <a href={lead.pdf_url || lead.direct_link} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> Open</a>
-                    : <span style={{ color:"#334155", fontSize:"12px" }}>—</span>
+                    ? <a href={lead.pdf_url || lead.direct_link} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> Open</a>
+                    : <span style={{ color:"#003875", fontSize:"12px" }}>—</span>
                   }
                 </td>
               </tr>
@@ -704,23 +704,23 @@ function SourcesView() {
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
         <div>
-          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Bid Scan Sources</h1>
-          <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>{sources.length} sources tracked · {sources.filter(s=>s.status==="active").length} active</p>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Bid Scan Sources</h1>
+          <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>{sources.length} sources tracked · {sources.filter(s=>s.status==="active").length} active</p>
         </div>
         <div style={{ display:"flex", gap:"10px" }}>
           <button onClick={()=>setShowInactive(v=>!v)} style={{
-            padding:"8px 16px", borderRadius:"8px", background: showInactive ? "#334155" : "transparent",
-            border:"1px solid #334155", color: showInactive ? "#f8fafc" : "#64748b", fontSize:"13px", cursor:"pointer"
+            padding:"8px 16px", borderRadius:"8px", background: showInactive ? "#003875" : "transparent",
+            border:"1px solid #003875", color: showInactive ? "#ffffff" : "#B0B7BC", fontSize:"13px", cursor:"pointer"
           }}>{showInactive ? "Hide removed" : "Show removed"}</button>
           <button onClick={()=>setShowCsvModal(true)} style={{
             padding:"8px 16px", borderRadius:"8px", background:"transparent",
-            border:"1px solid #334155", color:"#94a3b8", fontSize:"13px", cursor:"pointer",
+            border:"1px solid #003875", color:"#B0B7BC", fontSize:"13px", cursor:"pointer",
             display:"flex", alignItems:"center", gap:"6px"
           }}><Upload size={13} /> Upload CSV</button>
           <button onClick={()=>setShowAddModal(true)} style={{
             padding:"8px 16px", borderRadius:"8px",
-            background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none",
-            color:"#0f172a", fontSize:"13px", fontWeight:700, cursor:"pointer",
+            background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none",
+            color:"#002244", fontSize:"13px", fontWeight:700, cursor:"pointer",
             display:"flex", alignItems:"center", gap:"6px"
           }}><Plus size={13} /> Add Source</button>
         </div>
@@ -728,45 +728,45 @@ function SourcesView() {
 
       {/* Search */}
       <div style={{ position:"relative", marginBottom:"16px", maxWidth:"400px" }}>
-        <Search size={13} style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)", color:"#475569" }} />
+        <Search size={13} style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)", color:"#4a6080" }} />
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name, URL, state…"
-          style={{ width:"100%", padding:"8px 12px 8px 32px", background:"#1e293b", border:"1px solid #334155", borderRadius:"8px", color:"#cbd5e1", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
+          style={{ width:"100%", padding:"8px 12px 8px 32px", background:"#003366", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
       </div>
 
       {/* Bulk action bar */}
       {selected.size > 0 && (
-        <div style={{ padding:"10px 16px", background:"#1e3a5f", border:"1px solid #2563eb", borderRadius:"8px", marginBottom:"12px", display:"flex", alignItems:"center", gap:"12px" }}>
-          <span style={{ color:"#93c5fd", fontSize:"13px" }}>{selected.size} source{selected.size>1?"s":""} selected</span>
-          <button style={{ padding:"5px 12px", background:"#2563eb", border:"none", color:"#fff", fontSize:"12px", borderRadius:"6px", cursor:"pointer" }}>
+        <div style={{ padding:"10px 16px", background:"#003366", border:"1px solid #C60C30", borderRadius:"8px", marginBottom:"12px", display:"flex", alignItems:"center", gap:"12px" }}>
+          <span style={{ color:"#B0B7BC", fontSize:"13px" }}>{selected.size} source{selected.size>1?"s":""} selected</span>
+          <button style={{ padding:"5px 12px", background:"#C60C30", border:"none", color:"#fff", fontSize:"12px", borderRadius:"6px", cursor:"pointer" }}>
             <RefreshCw size={11} style={{ marginRight:"5px", verticalAlign:"middle" }} />Re-validate Selected
           </button>
-          <button onClick={()=>setSelected(new Set())} style={{ marginLeft:"auto", background:"transparent", border:"none", color:"#64748b", cursor:"pointer", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px" }}>
+          <button onClick={()=>setSelected(new Set())} style={{ marginLeft:"auto", background:"transparent", border:"none", color:"#B0B7BC", cursor:"pointer", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px" }}>
             <X size={12} /> Clear
           </button>
         </div>
       )}
 
       {/* Table */}
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden" }}>
+      <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
-            <tr style={{ background:"#0f172a" }}>
+            <tr style={{ background:"#002244" }}>
               <th style={{ padding:"11px 12px", width:"36px" }}>
-                <div onClick={toggleAll} style={{ cursor:"pointer", color:"#475569" }}>
-                  {allChecked ? <CheckSquare size={14} color="#f59e0b" /> : <Square size={14} />}
+                <div onClick={toggleAll} style={{ cursor:"pointer", color:"#4a6080" }}>
+                  {allChecked ? <CheckSquare size={14} color="#C60C30" /> : <Square size={14} />}
                 </div>
               </th>
               {["Friendly Name","URL","State","Site Type","Date Added","Last Scanned","Status","Actions"].map(h=>(
-                <th key={h} style={{ padding:"11px 12px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+                <th key={h} style={{ padding:"11px 12px", textAlign:"left", fontSize:"11px", color:"#4a6080", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtered.map((s,i)=>(
-              <tr key={s.id} style={{ borderTop:"1px solid #0f172a", background: selected.has(s.id) ? "rgba(37,99,235,0.08)" : i%2===0?"transparent":"rgba(255,255,255,0.01)", opacity: s.status==="inactive" ? 0.4 : 1 }}>
+              <tr key={s.id} style={{ borderTop:"1px solid #002244", background: selected.has(s.id) ? "rgba(198,12,48,0.08)" : i%2===0?"transparent":"rgba(255,255,255,0.01)", opacity: s.status==="inactive" ? 0.4 : 1 }}>
                 <td style={{ padding:"10px 12px" }}>
-                  <div onClick={()=>toggleRow(s.id)} style={{ cursor:"pointer", color:"#475569" }}>
-                    {selected.has(s.id) ? <CheckSquare size={14} color="#f59e0b" /> : <Square size={14} />}
+                  <div onClick={()=>toggleRow(s.id)} style={{ cursor:"pointer", color:"#4a6080" }}>
+                    {selected.has(s.id) ? <CheckSquare size={14} color="#C60C30" /> : <Square size={14} />}
                   </div>
                 </td>
                 <td style={{ padding:"10px 12px", maxWidth:"200px" }}>
@@ -775,55 +775,55 @@ function SourcesView() {
                       <input value={editVal} onChange={e=>setEditVal(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter")saveEdit(s.id);if(e.key==="Escape")setEditingId(null);}}
                         autoFocus
-                        style={{ flex:1, padding:"4px 8px", background:"#0f172a", border:"1px solid #f59e0b", borderRadius:"4px", color:"#f8fafc", fontSize:"12px", outline:"none" }}
+                        style={{ flex:1, padding:"4px 8px", background:"#002244", border:"1px solid #C60C30", borderRadius:"4px", color:"#ffffff", fontSize:"12px", outline:"none" }}
                       />
                       <button onClick={()=>saveEdit(s.id)} style={{ background:"#10b981", border:"none", borderRadius:"4px", padding:"4px 6px", cursor:"pointer" }}><Check size={11} color="#fff" /></button>
-                      <button onClick={()=>setEditingId(null)} style={{ background:"transparent", border:"none", cursor:"pointer", color:"#64748b" }}><X size={11} /></button>
+                      <button onClick={()=>setEditingId(null)} style={{ background:"transparent", border:"none", cursor:"pointer", color:"#B0B7BC" }}><X size={11} /></button>
                     </div>
                   ) : (
                     <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
-                      <span style={{ fontSize:"13px", color:"#e2e8f0", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.friendly_name}</span>
-                      <button onClick={()=>startEdit(s)} style={{ background:"transparent", border:"none", cursor:"pointer", color:"#334155", padding:"2px", flexShrink:0 }}>
+                      <span style={{ fontSize:"13px", color:"#ffffff", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.friendly_name}</span>
+                      <button onClick={()=>startEdit(s)} style={{ background:"transparent", border:"none", cursor:"pointer", color:"#003875", padding:"2px", flexShrink:0 }}>
                         <Edit2 size={11} />
                       </button>
                     </div>
                   )}
                 </td>
                 <td style={{ padding:"10px 12px", maxWidth:"220px" }}>
-                  <a href={s.url} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px", textDecoration:"none", display:"block", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                  <a href={s.url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"none", display:"block", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                     {s.url}
                   </a>
                 </td>
                 <td style={{ padding:"10px 12px" }}>
-                  <span style={{ background:"#334155", color:"#94a3b8", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{s.state}</span>
+                  <span style={{ background:"#003875", color:"#B0B7BC", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{s.state}</span>
                 </td>
-                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#64748b", fontFamily:"monospace" }}>{s.site_type}</td>
-                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#475569", fontFamily:"monospace" }}>{s.date_added}</td>
-                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#475569", fontFamily:"monospace" }}>{s.last_scanned}</td>
+                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#B0B7BC", fontFamily:"monospace" }}>{s.site_type}</td>
+                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#4a6080", fontFamily:"monospace" }}>{s.date_added}</td>
+                <td style={{ padding:"10px 12px", fontSize:"11px", color:"#4a6080", fontFamily:"monospace" }}>{s.last_scanned}</td>
                 <td style={{ padding:"10px 12px" }}>
                   {(s.captcha_protected || s.captcha_protected === true)
-                    ? <span style={{ fontSize:"11px", padding:"3px 8px", borderRadius:"99px", background:"rgba(124,58,237,0.15)", color:"#a78bfa", border:"1px solid rgba(124,58,237,0.3)", fontWeight:600 }}>🔒 CAPTCHA</span>
+                    ? <span style={{ fontSize:"11px", padding:"3px 8px", borderRadius:"99px", background:"rgba(176,183,188,0.15)", color:"#B0B7BC", border:"1px solid rgba(176,183,188,0.3)", fontWeight:600 }}>🔒 CAPTCHA</span>
                     : <StatusDot status={s.status || "active"} />
                   }
                 </td>
                 <td style={{ padding:"10px 12px", whiteSpace:"nowrap" }}>
                   <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"wrap" }}>
                     {s.status === "inactive" ? (
-                      <button onClick={()=>restoreSource(s.id)} style={{ background:"transparent", border:"1px solid #334155", color:"#94a3b8", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer" }}>
+                      <button onClick={()=>restoreSource(s.id)} style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer" }}>
                         Restore
                       </button>
                     ) : confirmRemove === s.id ? (
                       <>
-                        <span style={{ fontSize:"11px", color:"#f8fafc" }}>Remove {s.friendly_name}?</span>
-                        <button onClick={()=>removeSource(s.id)} style={{ background:"#ef4444", border:"none", color:"#fff", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer", fontWeight:600 }}>Yes</button>
-                        <button onClick={()=>setConfirmRemove(null)} style={{ background:"transparent", border:"1px solid #334155", color:"#94a3b8", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer" }}>Cancel</button>
+                        <span style={{ fontSize:"11px", color:"#ffffff" }}>Remove {s.friendly_name}?</span>
+                        <button onClick={()=>removeSource(s.id)} style={{ background:"#C60C30", border:"none", color:"#fff", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer", fontWeight:600 }}>Yes</button>
+                        <button onClick={()=>setConfirmRemove(null)} style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer" }}>Cancel</button>
                       </>
                     ) : (
                       <>
-                        <button style={{ background:"transparent", border:"1px solid #334155", color:"#64748b", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer", display:"flex", alignItems:"center", gap:"4px" }}>
+                        <button style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer", display:"flex", alignItems:"center", gap:"4px" }}>
                           <RefreshCw size={10} />Validate
                         </button>
-                        <button onClick={()=>setConfirmRemove(s.id)} style={{ background:"transparent", border:"1px solid #7f1d1d", color:"#f87171", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer" }}>
+                        <button onClick={()=>setConfirmRemove(s.id)} style={{ background:"transparent", border:"1px solid #5c0713", color:"#ff6666", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer" }}>
                           Remove
                         </button>
                       </>
@@ -948,30 +948,30 @@ function AddSourceModal({ onClose, onAdd }) {
   };
 
   const inputStyle = {
-    width:"100%", padding:"9px 12px", background:"#0f172a",
-    border:"1px solid #334155", borderRadius:"8px", color:"#f8fafc",
+    width:"100%", padding:"9px 12px", background:"#002244",
+    border:"1px solid #003875", borderRadius:"8px", color:"#ffffff",
     fontSize:"13px", outline:"none", boxSizing:"border-box"
   };
   const labelStyle = {
-    fontSize:"11px", color:"#94a3b8", fontWeight:600,
+    fontSize:"11px", color:"#B0B7BC", fontWeight:600,
     display:"block", marginBottom:"6px", letterSpacing:"0.06em"
   };
   const fieldStyle = { marginBottom:"14px" };
-  const hintStyle = { fontSize:"11px", color:"#475569", marginTop:"4px", lineHeight:"1.5" };
+  const hintStyle = { fontSize:"11px", color:"#4a6080", marginTop:"4px", lineHeight:"1.5" };
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, padding:"20px" }}>
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"580px", maxWidth:"100%", maxHeight:"90vh", overflowY:"auto" }}>
+      <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"16px", padding:"28px", width:"580px", maxWidth:"100%", maxHeight:"90vh", overflowY:"auto" }}>
 
         {/* Header */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
           <div>
-            <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#f8fafc" }}>Add New Source</h2>
-            <div style={{ fontSize:"11px", color:"#475569", marginTop:"4px" }}>
+            <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#ffffff" }}>Add New Source</h2>
+            <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>
               Step {step} of 3 — {step===1?"Basic Info":step===2?"Page Configuration":"Review & Add"}
             </div>
           </div>
-          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", cursor:"pointer", fontSize:"20px" }}>×</button>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#B0B7BC", cursor:"pointer", fontSize:"20px" }}>×</button>
         </div>
 
         {/* Progress */}
@@ -979,7 +979,7 @@ function AddSourceModal({ onClose, onAdd }) {
           {[1,2,3].map(s => (
             <div key={s} style={{
               flex:1, height:"3px", borderRadius:"99px",
-              background: s <= step ? "#f59e0b" : "#334155",
+              background: s <= step ? "#C60C30" : "#003875",
               transition:"background 0.3s"
             }} />
           ))}
@@ -990,8 +990,8 @@ function AddSourceModal({ onClose, onAdd }) {
           <div>
             <div style={fieldStyle}>
               <label style={labelStyle}>URL *</label>
-              <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/bids" style={{...inputStyle, borderColor: url && !urlValid ? "#ef4444" : "#334155"}} />
-              {url && !urlValid && <div style={{ fontSize:"11px", color:"#ef4444", marginTop:"4px" }}>Must be a valid HTTPS URL</div>}
+              <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://example.com/bids" style={{...inputStyle, borderColor: url && !urlValid ? "#C60C30" : "#003875"}} />
+              {url && !urlValid && <div style={{ fontSize:"11px", color:"#C60C30", marginTop:"4px" }}>Must be a valid HTTPS URL</div>}
             </div>
             <div style={fieldStyle}>
               <label style={labelStyle}>FRIENDLY NAME *</label>
@@ -1000,14 +1000,14 @@ function AddSourceModal({ onClose, onAdd }) {
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px", marginBottom:"14px" }}>
               <div>
                 <label style={labelStyle}>STATE *</label>
-                <select value={state} onChange={e=>setState(e.target.value)} style={{...inputStyle, color: state?"#f8fafc":"#64748b"}}>
+                <select value={state} onChange={e=>setState(e.target.value)} style={{...inputStyle, color: state?"#ffffff":"#B0B7BC"}}>
                   <option value="">Select state</option>
                   {STATES_LIST.map(s=><option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
               <div>
                 <label style={labelStyle}>PAGE TYPE *</label>
-                <select value={stype} onChange={e=>setStype(e.target.value)} style={{...inputStyle, color: stype?"#f8fafc":"#64748b"}}>
+                <select value={stype} onChange={e=>setStype(e.target.value)} style={{...inputStyle, color: stype?"#ffffff":"#B0B7BC"}}>
                   <option value="">Select type</option>
                   <option value="links_page">Links Page — list of bid title links</option>
                   <option value="search_page">Search Page — has a search box</option>
@@ -1016,7 +1016,7 @@ function AddSourceModal({ onClose, onAdd }) {
               </div>
             </div>
             {stype && (
-              <div style={{ background:"#0f172a", borderRadius:"8px", padding:"12px", marginBottom:"14px", fontSize:"12px", color:"#64748b", lineHeight:"1.6" }}>
+              <div style={{ background:"#002244", borderRadius:"8px", padding:"12px", marginBottom:"14px", fontSize:"12px", color:"#B0B7BC", lineHeight:"1.6" }}>
                 {stype === "links_page" && "📋 Links Page: The page shows a list of bid titles. Each title is a clickable link leading to bid details or documents."}
                 {stype === "search_page" && "🔍 Search Page: The page has a search input. The scanner will type keywords and score the results."}
                 {stype === "generic_table" && "📊 Table Page: Bids are displayed in a table or structured grid. The scanner reads each row directly."}
@@ -1028,7 +1028,7 @@ function AddSourceModal({ onClose, onAdd }) {
         {/* Step 2 — Type-specific questions */}
         {step === 2 && stype === "links_page" && (
           <div>
-            <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#f59e0b", lineHeight:"1.6" }}>
+            <div style={{ background:"rgba(198,12,48,0.08)", border:"1px solid rgba(198,12,48,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#C60C30", lineHeight:"1.6" }}>
               <strong>Beta Note:</strong> Please answer these questions carefully. Accurate answers ensure the scanner finds the right bids.
               In a future Pro release, AI will determine this automatically.
             </div>
@@ -1063,9 +1063,9 @@ function AddSourceModal({ onClose, onAdd }) {
                 {[["yes","Yes — clicking a title reveals more info or a document link"],["no","No — each title is a direct link to the bid"]].map(([val,label])=>(
                   <button key={val} onClick={()=>setLpHasExpand(val)} style={{
                     flex:1, padding:"8px 12px", borderRadius:"8px", cursor:"pointer", fontSize:"12px",
-                    background: lp_hasExpand===val ? "rgba(245,158,11,0.15)" : "#0f172a",
-                    border: `1px solid ${lp_hasExpand===val ? "#f59e0b" : "#334155"}`,
-                    color: lp_hasExpand===val ? "#f59e0b" : "#64748b", textAlign:"left"
+                    background: lp_hasExpand===val ? "rgba(198,12,48,0.15)" : "#002244",
+                    border: `1px solid ${lp_hasExpand===val ? "#C60C30" : "#003875"}`,
+                    color: lp_hasExpand===val ? "#C60C30" : "#B0B7BC", textAlign:"left"
                   }}>{label}</button>
                 ))}
               </div>
@@ -1074,7 +1074,7 @@ function AddSourceModal({ onClose, onAdd }) {
 
             <div style={fieldStyle}>
               <label style={labelStyle}>BID DOCUMENT TYPE</label>
-              <select value={lp_docType} onChange={e=>setLpDocType(e.target.value)} style={{...inputStyle, color: lp_docType?"#f8fafc":"#64748b"}}>
+              <select value={lp_docType} onChange={e=>setLpDocType(e.target.value)} style={{...inputStyle, color: lp_docType?"#ffffff":"#B0B7BC"}}>
                 <option value="">Select document type</option>
                 <option value="PDF files">PDF files (.pdf)</option>
                 <option value="Google Drive documents">Google Drive documents</option>
@@ -1092,9 +1092,9 @@ function AddSourceModal({ onClose, onAdd }) {
                 {[["yes","Yes — has Next/Previous page navigation"],["no","No — all bids on one page"]].map(([val,label])=>(
                   <button key={val} onClick={()=>setLpHasPagination(val)} style={{
                     flex:1, padding:"8px 12px", borderRadius:"8px", cursor:"pointer", fontSize:"12px",
-                    background: lp_hasPagination===val ? "rgba(245,158,11,0.15)" : "#0f172a",
-                    border: `1px solid ${lp_hasPagination===val ? "#f59e0b" : "#334155"}`,
-                    color: lp_hasPagination===val ? "#f59e0b" : "#64748b", textAlign:"left"
+                    background: lp_hasPagination===val ? "rgba(198,12,48,0.15)" : "#002244",
+                    border: `1px solid ${lp_hasPagination===val ? "#C60C30" : "#003875"}`,
+                    color: lp_hasPagination===val ? "#C60C30" : "#B0B7BC", textAlign:"left"
                   }}>{label}</button>
                 ))}
               </div>
@@ -1104,7 +1104,7 @@ function AddSourceModal({ onClose, onAdd }) {
 
         {step === 2 && stype === "search_page" && (
           <div>
-            <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#f59e0b" }}>
+            <div style={{ background:"rgba(198,12,48,0.08)", border:"1px solid rgba(198,12,48,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#C60C30" }}>
               <strong>Beta Note:</strong> The scanner will type each keyword from your active pillars into the search box and score the results.
             </div>
             <div style={fieldStyle}>
@@ -1116,7 +1116,7 @@ function AddSourceModal({ onClose, onAdd }) {
             </div>
             <div style={fieldStyle}>
               <label style={labelStyle}>HOW DO RESULTS APPEAR?</label>
-              <select value={sp_resultsFormat} onChange={e=>setSpResultsFormat(e.target.value)} style={{...inputStyle, color:sp_resultsFormat?"#f8fafc":"#64748b"}}>
+              <select value={sp_resultsFormat} onChange={e=>setSpResultsFormat(e.target.value)} style={{...inputStyle, color:sp_resultsFormat?"#ffffff":"#B0B7BC"}}>
                 <option value="">Select format</option>
                 <option value="a list of linked titles">A list of linked titles</option>
                 <option value="a table with columns">A table with columns</option>
@@ -1130,7 +1130,7 @@ function AddSourceModal({ onClose, onAdd }) {
 
         {step === 2 && stype === "generic_table" && (
           <div>
-            <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#f59e0b" }}>
+            <div style={{ background:"rgba(198,12,48,0.08)", border:"1px solid rgba(198,12,48,0.2)", borderRadius:"8px", padding:"12px", marginBottom:"20px", fontSize:"12px", color:"#C60C30" }}>
               <strong>Beta Note:</strong> The scanner reads all visible rows. Be specific about where bids start and end.
             </div>
             <div style={fieldStyle}>
@@ -1153,8 +1153,8 @@ function AddSourceModal({ onClose, onAdd }) {
         {/* Step 3 — Review */}
         {step === 3 && (
           <div>
-            <div style={{ background:"#0f172a", borderRadius:"10px", padding:"16px", marginBottom:"20px" }}>
-              <div style={{ fontSize:"12px", color:"#475569", fontWeight:600, marginBottom:"12px", letterSpacing:"0.06em" }}>REVIEW SOURCE CONFIGURATION</div>
+            <div style={{ background:"#002244", borderRadius:"10px", padding:"16px", marginBottom:"20px" }}>
+              <div style={{ fontSize:"12px", color:"#4a6080", fontWeight:600, marginBottom:"12px", letterSpacing:"0.06em" }}>REVIEW SOURCE CONFIGURATION</div>
               {[
                 ["Friendly Name", name],
                 ["URL", url],
@@ -1162,13 +1162,13 @@ function AddSourceModal({ onClose, onAdd }) {
                 ["Page Type", stype],
               ].map(([label, val]) => (
                 <div key={label} style={{ display:"flex", gap:"12px", marginBottom:"8px" }}>
-                  <span style={{ fontSize:"12px", color:"#64748b", minWidth:"100px" }}>{label}:</span>
-                  <span style={{ fontSize:"12px", color:"#e2e8f0" }}>{val}</span>
+                  <span style={{ fontSize:"12px", color:"#B0B7BC", minWidth:"100px" }}>{label}:</span>
+                  <span style={{ fontSize:"12px", color:"#ffffff" }}>{val}</span>
                 </div>
               ))}
-              <div style={{ marginTop:"12px", paddingTop:"12px", borderTop:"1px solid #1e293b" }}>
-                <div style={{ fontSize:"12px", color:"#64748b", marginBottom:"6px" }}>Generated Scan Instructions:</div>
-                <div style={{ fontSize:"12px", color:"#94a3b8", lineHeight:"1.6", fontStyle:"italic" }}>{buildInstructions()}</div>
+              <div style={{ marginTop:"12px", paddingTop:"12px", borderTop:"1px solid #003366" }}>
+                <div style={{ fontSize:"12px", color:"#B0B7BC", marginBottom:"6px" }}>Generated Scan Instructions:</div>
+                <div style={{ fontSize:"12px", color:"#B0B7BC", lineHeight:"1.6", fontStyle:"italic" }}>{buildInstructions()}</div>
               </div>
             </div>
             <div style={{ background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.2)", borderRadius:"8px", padding:"12px", fontSize:"12px", color:"#10b981", lineHeight:"1.6" }}>
@@ -1180,10 +1180,10 @@ function AddSourceModal({ onClose, onAdd }) {
 
         {/* Errors */}
         {error && (
-          <div style={{ color:"#ef4444", fontSize:"12px", marginBottom:"12px", padding:"8px 12px", background:"rgba(239,68,68,0.1)", borderRadius:"6px", border:"1px solid rgba(239,68,68,0.2)" }}>{error}</div>
+          <div style={{ color:"#C60C30", fontSize:"12px", marginBottom:"12px", padding:"8px 12px", background:"rgba(198,12,48,0.1)", borderRadius:"6px", border:"1px solid rgba(198,12,48,0.2)" }}>{error}</div>
         )}
         {submitError && (
-          <div style={{ color:"#ef4444", fontSize:"12px", marginBottom:"12px", padding:"10px 14px", background:"rgba(239,68,68,0.1)", borderRadius:"6px", border:"1px solid rgba(239,68,68,0.3)" }}>
+          <div style={{ color:"#C60C30", fontSize:"12px", marginBottom:"12px", padding:"10px 14px", background:"rgba(198,12,48,0.1)", borderRadius:"6px", border:"1px solid rgba(198,12,48,0.3)" }}>
             <strong>Save failed:</strong> {submitError}
           </div>
         )}
@@ -1196,24 +1196,24 @@ function AddSourceModal({ onClose, onAdd }) {
         {/* Footer buttons */}
         <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end", marginTop:"20px" }}>
           {step > 1 && (
-            <button onClick={()=>setStep(step-1)} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>
+            <button onClick={()=>setStep(step-1)} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", cursor:"pointer" }}>
               ← Back
             </button>
           )}
-          <button onClick={onClose} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>
+          <button onClick={onClose} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", cursor:"pointer" }}>
             Cancel
           </button>
           {step < 3 ? (
-            <button onClick={handleNext} style={{ padding:"9px 18px", background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", borderRadius:"8px", color:"#0f172a", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
+            <button onClick={handleNext} style={{ padding:"9px 18px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
               Next →
             </button>
           ) : (
             <button onClick={handleSubmit} disabled={validating || submitSuccess} style={{
               padding:"9px 18px",
               background: submitSuccess ? "linear-gradient(135deg,#10b981,#059669)" :
-                          validating ? "#334155" : "linear-gradient(135deg,#f59e0b,#f97316)",
+                          validating ? "#003875" : "linear-gradient(135deg,#C60C30,#9a0a26)",
               border:"none", borderRadius:"8px",
-              color: validating ? "#64748b" : "#0f172a",
+              color: validating ? "#B0B7BC" : "#002244",
               fontSize:"13px", fontWeight:700,
               cursor: validating || submitSuccess ? "not-allowed" : "pointer",
               display:"flex", alignItems:"center", gap:"6px",
@@ -1235,28 +1235,28 @@ function CsvModal({ onClose }) {
 https://vendornet.wi.gov/Bids.aspx,Wisconsin VendorNet,WI,search_page,Search for bids using keyword terms`;
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999 }}>
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"16px", padding:"28px", width:"640px", maxWidth:"95vw" }}>
+      <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"16px", padding:"28px", width:"640px", maxWidth:"95vw" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"20px" }}>
-          <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#f8fafc" }}>Upload Sources via CSV</h2>
-          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#64748b", cursor:"pointer" }}><X size={18} /></button>
+          <h2 style={{ margin:0, fontSize:"16px", fontWeight:700, color:"#ffffff" }}>Upload Sources via CSV</h2>
+          <button onClick={onClose} style={{ background:"transparent", border:"none", color:"#B0B7BC", cursor:"pointer" }}><X size={18} /></button>
         </div>
         <div style={{ marginBottom:"16px" }}>
-          <p style={{ color:"#94a3b8", fontSize:"13px", margin:"0 0 12px" }}>All 5 columns are required. CSV must use these exact headers:</p>
-          <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", padding:"12px 14px", fontFamily:"'Courier New',monospace", fontSize:"12px", color:"#10b981", marginBottom:"12px" }}>{headers}</div>
-          <p style={{ color:"#64748b", fontSize:"12px", margin:"0 0 6px" }}>Example rows:</p>
-          <div style={{ background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", padding:"12px 14px", fontFamily:"'Courier New',monospace", fontSize:"11px", color:"#94a3b8", whiteSpace:"pre-wrap", lineHeight:1.6 }}>{example}</div>
+          <p style={{ color:"#B0B7BC", fontSize:"13px", margin:"0 0 12px" }}>All 5 columns are required. CSV must use these exact headers:</p>
+          <div style={{ background:"#002244", border:"1px solid #003875", borderRadius:"8px", padding:"12px 14px", fontFamily:"'Courier New',monospace", fontSize:"12px", color:"#10b981", marginBottom:"12px" }}>{headers}</div>
+          <p style={{ color:"#B0B7BC", fontSize:"12px", margin:"0 0 6px" }}>Example rows:</p>
+          <div style={{ background:"#002244", border:"1px solid #003875", borderRadius:"8px", padding:"12px 14px", fontFamily:"'Courier New',monospace", fontSize:"11px", color:"#B0B7BC", whiteSpace:"pre-wrap", lineHeight:1.6 }}>{example}</div>
         </div>
-        <div style={{ border:"2px dashed #334155", borderRadius:"10px", padding:"32px", textAlign:"center", marginBottom:"16px", cursor:"pointer" }}
+        <div style={{ border:"2px dashed #003875", borderRadius:"10px", padding:"32px", textAlign:"center", marginBottom:"16px", cursor:"pointer" }}
           onDragOver={e=>e.preventDefault()}>
-          <Upload size={24} color="#475569" style={{ marginBottom:"8px" }} />
-          <div style={{ color:"#64748b", fontSize:"13px" }}>Drag & drop your CSV here, or</div>
-          <button style={{ marginTop:"8px", padding:"7px 16px", background:"#334155", border:"none", borderRadius:"6px", color:"#94a3b8", fontSize:"12px", cursor:"pointer" }}>Browse File</button>
+          <Upload size={24} color="#4a6080" style={{ marginBottom:"8px" }} />
+          <div style={{ color:"#B0B7BC", fontSize:"13px" }}>Drag & drop your CSV here, or</div>
+          <button style={{ marginTop:"8px", padding:"7px 16px", background:"#003875", border:"none", borderRadius:"6px", color:"#B0B7BC", fontSize:"12px", cursor:"pointer" }}>Browse File</button>
         </div>
-        <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:"8px", padding:"10px 14px", fontSize:"12px", color:"#f59e0b", marginBottom:"16px" }}>
+        <div style={{ background:"rgba(198,12,48,0.08)", border:"1px solid rgba(198,12,48,0.2)", borderRadius:"8px", padding:"10px 14px", fontSize:"12px", color:"#C60C30", marginBottom:"16px" }}>
           <strong>Validation rules:</strong> url must start with https:// · state must be 2 uppercase letters · site_type must be links_page, search_page, or generic_table · all fields required
         </div>
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
-          <button onClick={onClose} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", cursor:"pointer" }}>Close</button>
+          <button onClick={onClose} style={{ padding:"9px 18px", background:"transparent", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", cursor:"pointer" }}>Close</button>
         </div>
       </div>
     </div>
@@ -1265,18 +1265,18 @@ https://vendornet.wi.gov/Bids.aspx,Wisconsin VendorNet,WI,search_page,Search for
 
 // ─── PRICING PLANS ────────────────────────────────────────────────────────────
 const PLANS = [
-  { key:"starter", label:"Starter", price:"$9.99", period:"/mo", maxCustom:3,  color:"#64748b", desc:"Up to 3 custom pillars" },
-  { key:"pro",     label:"Pro",     price:"$19.99", period:"/mo", maxCustom:10, color:"#3b82f6", desc:"Up to 10 custom pillars" },
-  { key:"unlimited",label:"Unlimited",price:"$49", period:"/mo", maxCustom:Infinity, color:"#f59e0b", desc:"Unlimited custom pillars" },
+  { key:"starter", label:"Starter", price:"$9.99", period:"/mo", maxCustom:3,  color:"#B0B7BC", desc:"Up to 3 custom pillars" },
+  { key:"pro",     label:"Pro",     price:"$19.99", period:"/mo", maxCustom:10, color:"#B0B7BC", desc:"Up to 10 custom pillars" },
+  { key:"unlimited",label:"Unlimited",price:"$49", period:"/mo", maxCustom:Infinity, color:"#C60C30", desc:"Unlimited custom pillars" },
 ];
 
-const PILLAR_COLORS = ["#f59e0b","#3b82f6","#8b5cf6","#10b981","#ec4899","#06b6d4","#f97316","#84cc16"];
+const PILLAR_COLORS = ["#C60C30","#B0B7BC","#B0B7BC","#10b981","#C60C30","#B0B7BC","#C60C30","#84cc16"];
 
 function Toggle({ enabled, onChange }) {
   return (
     <div onClick={onChange} style={{
       width:"40px", height:"22px", borderRadius:"99px", cursor:"pointer",
-      background: enabled ? "#f59e0b" : "#334155",
+      background: enabled ? "#C60C30" : "#003875",
       position:"relative", transition:"background 0.2s", flexShrink:0
     }}>
       <div style={{
@@ -1303,13 +1303,13 @@ function KeywordsView() {
   const [savingNeg, setSavingNeg] = useState(false);
   const toastTimer = React.useRef(null);
 
-  const COLORS = ["#f59e0b","#3b82f6","#10b981","#8b5cf6","#ef4444","#06b6d4","#f97316","#84cc16"];
+  const COLORS = ["#C60C30","#B0B7BC","#10b981","#B0B7BC","#C60C30","#B0B7BC","#C60C30","#84cc16"];
 
   const showToast = (msg, color="#10b981", opts={}) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, color, ...opts });
     if (!opts.persist) {
-      const delay = color === "#ef4444" ? 5000 : 3000;
+      const delay = color === "#C60C30" ? 5000 : 3000;
       toastTimer.current = setTimeout(() => setToast(null), delay);
     }
   };
@@ -1345,13 +1345,13 @@ function KeywordsView() {
     if (!t) return true;
     // Exact match in negative terms — hard block
     if (negativeTerms.some(x => x.toLowerCase() === t)) {
-      showToast(`"${t}" is in the Negative Terms list — remove it there first`, "#ef4444");
+      showToast(`"${t}" is in the Negative Terms list — remove it there first`, "#C60C30");
       return false;
     }
     // Exact match in other pillars — hard block
     const conflict = pillars.find(p => p.key !== pillarKey && p.terms.some(x => x.toLowerCase() === t));
     if (conflict) {
-      showToast(`"${t}" already exists in "${conflict.name}" — remove it there first`, "#ef4444");
+      showToast(`"${t}" already exists in "${conflict.name}" — remove it there first`, "#C60C30");
       return false;
     }
     // Partial match check
@@ -1375,7 +1375,7 @@ function KeywordsView() {
     if (partialMsg) {
       if (onConfirmed) {
         // Save context: block save, ask for confirmation
-        showToast(partialMsg, "#f59e0b", {
+        showToast(partialMsg, "#C60C30", {
           persist: true,
           confirmLabel: "Save Anyway",
           onConfirm: () => { doAdd(); setToast(null); onConfirmed(); },
@@ -1384,7 +1384,7 @@ function KeywordsView() {
       } else {
         // Standalone add: add immediately, show dismissable warning
         doAdd();
-        showToast(partialMsg, "#f59e0b", { persist: true });
+        showToast(partialMsg, "#C60C30", { persist: true });
         return true;
       }
     }
@@ -1414,7 +1414,7 @@ function KeywordsView() {
         updated_at: new Date().toISOString(),
       }, { onConflict: "pillar_key" })
       .then(() => { showToast(`"${pillar.name}" saved!`); setSavingPillar(null); })
-      .catch(() => { showToast("Save failed", "#ef4444"); setSavingPillar(null); });
+      .catch(() => { showToast("Save failed", "#C60C30"); setSavingPillar(null); });
       return current;
     });
   };
@@ -1434,9 +1434,9 @@ function KeywordsView() {
     try {
       await window._db.from("keywords").delete().eq("pillar_key", key);
       setPillars(prev => prev.filter(p => p.key !== key));
-      showToast("Pillar removed", "#ef4444");
+      showToast("Pillar removed", "#C60C30");
     } catch(e) {
-      showToast("Delete failed", "#ef4444");
+      showToast("Delete failed", "#C60C30");
     }
   };
 
@@ -1450,12 +1450,12 @@ function KeywordsView() {
         weight: -999,
         terms: negativeTerms,
         enabled: true,
-        color: "#ef4444",
+        color: "#C60C30",
         updated_at: new Date().toISOString(),
       }, { onConflict: "pillar_key" });
       showToast("Negative terms saved!");
     } catch(e) {
-      showToast("Save failed", "#ef4444");
+      showToast("Save failed", "#C60C30");
     }
     setSavingNeg(false);
   };
@@ -1476,12 +1476,12 @@ function KeywordsView() {
       setShowAddPillar(false);
       showToast(`"${name}" pillar created!`);
     } catch(e) {
-      showToast("Create failed", "#ef4444");
+      showToast("Create failed", "#C60C30");
     }
   };
 
   if (loading) return (
-    <div style={{ padding:"28px", color:"#64748b", fontSize:"14px" }}>Loading keywords...</div>
+    <div style={{ padding:"28px", color:"#B0B7BC", fontSize:"14px" }}>Loading keywords...</div>
   );
 
   return (
@@ -1517,16 +1517,16 @@ function KeywordsView() {
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" }}>
         <div>
-          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Keywords & Pillars</h1>
-          <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Keywords & Pillars</h1>
+          <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>
             {pillars.filter(p=>p.enabled).length} of {pillars.length} pillars active · Toggle on to include in scans
           </p>
         </div>
         <button onClick={() => setShowAddPillar(!showAddPillar)} style={{
           padding:"8px 16px", borderRadius:"8px", fontSize:"13px", fontWeight:600,
           cursor:"pointer", display:"flex", alignItems:"center", gap:"7px",
-          background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", color:"#0f172a",
-          boxShadow:"0 3px 12px rgba(245,158,11,0.35)"
+          background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff",
+          boxShadow:"0 3px 12px rgba(198,12,48,0.35)"
         }}>
           + Add Pillar
         </button>
@@ -1534,19 +1534,19 @@ function KeywordsView() {
 
       {/* Add Pillar inline */}
       {showAddPillar && (
-        <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px",
+        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px",
           padding:"16px 20px", marginBottom:"20px", display:"flex", gap:"10px", alignItems:"center" }}>
           <input value={newPillarName} onChange={e=>setNewPillarName(e.target.value)}
             placeholder="Pillar name e.g. Networking Gear"
             onKeyDown={e=>e.key==="Enter" && addPillar()}
-            style={{ flex:1, background:"#0f172a", border:"1px solid #334155", color:"#f8fafc",
+            style={{ flex:1, background:"#002244", border:"1px solid #003875", color:"#ffffff",
               padding:"8px 12px", borderRadius:"8px", fontSize:"13px", outline:"none" }} />
           <button onClick={addPillar} style={{
             padding:"8px 16px", background:"#10b981", border:"none", borderRadius:"8px",
             color:"#fff", fontSize:"13px", fontWeight:600, cursor:"pointer" }}>Create</button>
           <button onClick={()=>setShowAddPillar(false)} style={{
-            padding:"8px 12px", background:"transparent", border:"1px solid #334155",
-            borderRadius:"8px", color:"#64748b", fontSize:"13px", cursor:"pointer" }}>Cancel</button>
+            padding:"8px 12px", background:"transparent", border:"1px solid #003875",
+            borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", cursor:"pointer" }}>Cancel</button>
         </div>
       )}
 
@@ -1554,22 +1554,22 @@ function KeywordsView() {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px", marginBottom:"24px" }}>
         {[...pillars].sort((a,b) => (b.enabled?1:0)-(a.enabled?1:0)).map(pillar => (
           <div key={pillar.key} style={{
-            background:"#1e293b",
-            border:`1px solid ${pillar.enabled ? pillar.color+"40" : "#1e293b"}`,
-            borderLeft:`3px solid ${pillar.enabled ? pillar.color : "#334155"}`,
+            background:"#003366",
+            border:`1px solid ${pillar.enabled ? pillar.color+"40" : "#003366"}`,
+            borderLeft:`3px solid ${pillar.enabled ? pillar.color : "#003875"}`,
             borderRadius:"12px", padding:"18px",
             opacity: pillar.enabled ? 1 : 0.5, transition:"all 0.2s"
           }}>
             {/* Pillar header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px" }}>
-              <div style={{ fontWeight:700, color: pillar.enabled?"#f8fafc":"#475569", fontSize:"14px" }}>
+              <div style={{ fontWeight:700, color: pillar.enabled?"#ffffff":"#4a6080", fontSize:"14px" }}>
                 {pillar.name}
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
                 {/* Toggle */}
                 <div onClick={() => togglePillar(pillar.key)} style={{
                   width:"36px", height:"20px", borderRadius:"99px", cursor:"pointer",
-                  background: pillar.enabled ? pillar.color : "#334155",
+                  background: pillar.enabled ? pillar.color : "#003875",
                   position:"relative", transition:"background 0.2s", flexShrink:0
                 }}>
                   <div style={{
@@ -1586,17 +1586,17 @@ function KeywordsView() {
             <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom:"12px", minHeight:"28px" }}>
               {pillar.terms.map(t => (
                 <span key={t} style={{
-                  background:"#0f172a", border:"1px solid #334155", color:"#94a3b8",
+                  background:"#002244", border:"1px solid #003875", color:"#B0B7BC",
                   fontSize:"11px", padding:"3px 8px", borderRadius:"4px", fontFamily:"monospace",
                   display:"flex", alignItems:"center", gap:"4px"
                 }}>
                   {t}
                   <span onClick={() => removeTerm(pillar.key, t)}
-                    style={{ cursor:"pointer", color:"#475569", fontSize:"10px", lineHeight:1 }}>✕</span>
+                    style={{ cursor:"pointer", color:"#4a6080", fontSize:"10px", lineHeight:1 }}>✕</span>
                 </span>
               ))}
               {pillar.terms.length === 0 && (
-                <span style={{ fontSize:"11px", color:"#334155", fontStyle:"italic" }}>No terms yet</span>
+                <span style={{ fontSize:"11px", color:"#003875", fontStyle:"italic" }}>No terms yet</span>
               )}
             </div>
 
@@ -1608,26 +1608,26 @@ function KeywordsView() {
                 onKeyDown={e => e.key==="Enter" && addTerm(pillar.key, newTermInputs[pillar.key]||"")}
                 onBlur={e => addTerm(pillar.key, e.target.value)}
                 placeholder="Add term..."
-                style={{ flex:1, background:"#0f172a", border:"1px solid #1e293b", color:"#94a3b8",
+                style={{ flex:1, background:"#002244", border:"1px solid #003366", color:"#B0B7BC",
                   padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none",
                   fontFamily:"monospace" }}
               />
               <button onClick={() => addTerm(pillar.key, newTermInputs[pillar.key]||"")}
-                style={{ padding:"5px 10px", background:"#1e293b", border:"1px solid #334155",
-                  borderRadius:"6px", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>+</button>
+                style={{ padding:"5px 10px", background:"#003366", border:"1px solid #003875",
+                  borderRadius:"6px", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>+</button>
             </div>
-            <div style={{ fontSize:"10px", color:"#475569", marginBottom:"8px", fontStyle:"italic" }}>
+            <div style={{ fontSize:"10px", color:"#4a6080", marginBottom:"8px", fontStyle:"italic" }}>
               Press Enter to add keyword before saving
             </div>
 
             {/* Save + Delete row */}
             <div style={{ display:"flex", justifyContent:"flex-end", gap:"6px" }}>
               <button onClick={() => deletePillar(pillar.key)} style={{
-                padding:"4px 8px", background:"transparent", border:"1px solid #334155",
-                borderRadius:"6px", color:"#ef4444", fontSize:"11px", cursor:"pointer"
+                padding:"4px 8px", background:"transparent", border:"1px solid #003875",
+                borderRadius:"6px", color:"#C60C30", fontSize:"11px", cursor:"pointer"
               }}>✕ Remove</button>
               <button onClick={() => savePillar(pillar.key)} disabled={savingPillar===pillar.key} style={{
-                padding:"4px 10px", background: savingPillar===pillar.key?"#1e293b":"#10b981",
+                padding:"4px 10px", background: savingPillar===pillar.key?"#003366":"#10b981",
                 border:"none", borderRadius:"6px", color:"#fff", fontSize:"11px",
                 fontWeight:600, cursor:"pointer"
               }}>{savingPillar===pillar.key ? "Saving..." : "💾 Save"}</button>
@@ -1637,12 +1637,12 @@ function KeywordsView() {
       </div>
 
       {/* Negative Terms */}
-      <div style={{ background:"#1e293b", border:"1px solid #ef444440", borderLeft:"3px solid #ef4444",
+      <div style={{ background:"#003366", border:"1px solid #C60C3040", borderLeft:"3px solid #C60C30",
         borderRadius:"12px", padding:"18px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px" }}>
           <div>
-            <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px" }}>🚫 Negative Terms</div>
-            <div style={{ fontSize:"11px", color:"#64748b", marginTop:"2px" }}>
+            <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px" }}>🚫 Negative Terms</div>
+            <div style={{ fontSize:"11px", color:"#B0B7BC", marginTop:"2px" }}>
               Bids matching any of these terms will be excluded from results
             </div>
           </div>
@@ -1651,17 +1651,17 @@ function KeywordsView() {
         <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom:"12px", minHeight:"28px" }}>
           {negativeTerms.map(t => (
             <span key={t} style={{
-              background:"#0f172a", border:"1px solid #ef444430", color:"#ef4444",
+              background:"#002244", border:"1px solid #C60C3030", color:"#C60C30",
               fontSize:"11px", padding:"3px 8px", borderRadius:"4px", fontFamily:"monospace",
               display:"flex", alignItems:"center", gap:"4px"
             }}>
               {t}
               <span onClick={() => setNegativeTerms(prev => prev.filter(x=>x!==t))}
-                style={{ cursor:"pointer", color:"#991b1b", fontSize:"10px" }}>✕</span>
+                style={{ cursor:"pointer", color:"#7a0a1e", fontSize:"10px" }}>✕</span>
             </span>
           ))}
           {negativeTerms.length === 0 && (
-            <span style={{ fontSize:"11px", color:"#334155", fontStyle:"italic" }}>No negative terms</span>
+            <span style={{ fontSize:"11px", color:"#003875", fontStyle:"italic" }}>No negative terms</span>
           )}
         </div>
 
@@ -1670,20 +1670,20 @@ function KeywordsView() {
             onKeyDown={e=>{ if(e.key==="Enter" && newNegTerm.trim()){
               const t = newNegTerm.trim().toLowerCase();
               const conflict = pillars.find(p => p.terms.includes(t));
-              if (conflict) { showToast(`"${t}" exists in "${conflict.name}" pillar — remove it there first`, "#ef4444"); return; }
+              if (conflict) { showToast(`"${t}" exists in "${conflict.name}" pillar — remove it there first`, "#C60C30"); return; }
               setNegativeTerms(prev=>[...prev.filter(x=>x!==t),t]); setNewNegTerm(""); }}}
             placeholder="Add term to exclude..."
-            style={{ flex:1, background:"#0f172a", border:"1px solid #1e293b", color:"#94a3b8",
+            style={{ flex:1, background:"#002244", border:"1px solid #003366", color:"#B0B7BC",
               padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none", fontFamily:"monospace" }}
           />
           <button onClick={()=>{ if(newNegTerm.trim()){ setNegativeTerms(prev=>[...prev.filter(x=>x!==newNegTerm.trim().toLowerCase()),newNegTerm.trim().toLowerCase()]); setNewNegTerm(""); }}}
-            style={{ padding:"5px 10px", background:"#1e293b", border:"1px solid #334155",
-              borderRadius:"6px", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>+</button>
+            style={{ padding:"5px 10px", background:"#003366", border:"1px solid #003875",
+              borderRadius:"6px", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>+</button>
         </div>
 
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
           <button onClick={saveNegatives} disabled={savingNeg} style={{
-            padding:"4px 12px", background: savingNeg?"#1e293b":"#ef4444",
+            padding:"4px 12px", background: savingNeg?"#003366":"#C60C30",
             border:"none", borderRadius:"6px", color:"#fff", fontSize:"11px",
             fontWeight:600, cursor:"pointer"
           }}>{savingNeg ? "Saving..." : "💾 Save"}</button>
@@ -1700,39 +1700,39 @@ function ScanHistoryView() {
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <div style={{ marginBottom:"24px" }}>
-        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Scan History</h1>
-        <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>All past scan runs and their results</p>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Scan History</h1>
+        <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>All past scan runs and their results</p>
       </div>
 
-      <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", overflow:"hidden" }}>
+      <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
-            <tr style={{ background:"#0f172a" }}>
+            <tr style={{ background:"#002244" }}>
               {["Date","Time","Status","Duration","Hot Leads Found","Sources","Errors","Log"].map(h=>(
-                <th key={h} style={{ padding:"11px 16px", textAlign:"left", fontSize:"11px", color:"#475569", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
+                <th key={h} style={{ padding:"11px 16px", textAlign:"left", fontSize:"11px", color:"#4a6080", fontWeight:600, letterSpacing:"0.06em" }}>{h.toUpperCase()}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {rows.map((s,i)=>(
-              <tr key={s.id} style={{ borderTop:"1px solid #0f172a", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
-                <td style={{ padding:"14px 16px", fontSize:"13px", color:"#e2e8f0", fontFamily:"monospace" }}>{s.date || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleDateString("en-CA",{timeZone:"America/New_York"}) : "—")}</td>
-                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"}) : "—")}</td>
+              <tr key={s.id} style={{ borderTop:"1px solid #002244", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+                <td style={{ padding:"14px 16px", fontSize:"13px", color:"#ffffff", fontFamily:"monospace" }}>{s.date || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleDateString("en-CA",{timeZone:"America/New_York"}) : "—")}</td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#B0B7BC", fontFamily:"monospace" }}>{s.time || (s.started_at ? new Date(s.started_at.endsWith("Z") ? s.started_at : s.started_at + "Z").toLocaleTimeString("en-US",{hour:"2-digit",minute:"2-digit",hour12:true,timeZone:"America/New_York"}) : "—")}</td>
                 <td style={{ padding:"14px 16px" }}><StatusDot status={s.status} /></td>
-                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#94a3b8", fontFamily:"monospace" }}>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#B0B7BC", fontFamily:"monospace" }}>
                   {s.duration ||
                    (s.finished_at && s.started_at ? Math.floor((new Date(s.finished_at)-new Date(s.started_at))/60000)+"m "+Math.floor(((new Date(s.finished_at)-new Date(s.started_at))%60000)/1000)+"s" :
                    (s.duration_seconds ? Math.floor(s.duration_seconds/60)+"m "+s.duration_seconds%60+"s" : "—"))}
                 </td>
                 <td style={{ padding:"14px 16px" }}>
-                  <span style={{ fontSize:"14px", fontWeight:700, color: (s.hot_leads||s.hot_count||0)>10?"#10b981":(s.hot_leads||s.hot_count||0)>0?"#f59e0b":"#475569", fontFamily:"monospace" }}>
+                  <span style={{ fontSize:"14px", fontWeight:700, color: (s.hot_leads||s.hot_count||0)>10?"#10b981":(s.hot_leads||s.hot_count||0)>0?"#C60C30":"#4a6080", fontFamily:"monospace" }}>
                     {s.hot_leads ?? s.hot_count ?? s.leads_found ?? "—"}
                   </span>
                 </td>
-                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#64748b" }}>{s.sources ?? s.sources_scanned ?? "—"}</td>
-                <td style={{ padding:"14px 16px", fontSize:"12px", color: (s.errors||0)>0?"#ef4444":"#64748b" }}>{s.errors ?? s.error_count ?? 0}</td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color:"#B0B7BC" }}>{s.sources ?? s.sources_scanned ?? "—"}</td>
+                <td style={{ padding:"14px 16px", fontSize:"12px", color: (s.errors||0)>0?"#C60C30":"#B0B7BC" }}>{s.errors ?? s.error_count ?? 0}</td>
                 <td style={{ padding:"14px 16px" }}>
-                  <button style={{ background:"transparent", border:"1px solid #334155", color:"#64748b", fontSize:"11px", padding:"4px 10px", borderRadius:"6px", cursor:"pointer" }}>
+                  <button style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"4px 10px", borderRadius:"6px", cursor:"pointer" }}>
                     <FileText size={11} style={{ marginRight:"4px", verticalAlign:"middle" }} />View Log
                   </button>
                 </td>
@@ -1741,9 +1741,9 @@ function ScanHistoryView() {
           </tbody>
         </table>
         {MOCK_SCAN_HISTORY.length > 3 && (
-          <div style={{ padding:"12px 16px", borderTop:"1px solid #0f172a", textAlign:"center" }}>
+          <div style={{ padding:"12px 16px", borderTop:"1px solid #002244", textAlign:"center" }}>
             <button onClick={()=>setExpanded(!expanded)} style={{
-              background:"transparent", border:"1px solid #334155", color:"#64748b",
+              background:"transparent", border:"1px solid #003875", color:"#B0B7BC",
               fontSize:"12px", padding:"6px 18px", borderRadius:"6px", cursor:"pointer"
             }}>
               {expanded ? "▲ Show Less" : `▼ Show All ${MOCK_SCAN_HISTORY.length} Scans`}
@@ -1760,20 +1760,20 @@ function SettingsView() {
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <div style={{ marginBottom:"24px" }}>
-        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#f8fafc", margin:"0 0 4px" }}>Settings</h1>
-        <p style={{ color:"#64748b", fontSize:"13px", margin:0 }}>Configure email notifications and system preferences</p>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Settings</h1>
+        <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Configure email notifications and system preferences</p>
       </div>
 
       <div style={{ maxWidth:"600px" }}>
-        <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
-          <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px", marginBottom:"16px", display:"flex", alignItems:"center", gap:"8px" }}>
-            <AlertCircle size={14} color="#f59e0b" /> Email Notifications
+        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px", display:"flex", alignItems:"center", gap:"8px" }}>
+            <AlertCircle size={14} color="#C60C30" /> Email Notifications
           </div>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
-            <span style={{ color:"#94a3b8", fontSize:"13px" }}>Enable email reports</span>
+            <span style={{ color:"#B0B7BC", fontSize:"13px" }}>Enable email reports</span>
             <div onClick={()=>setEmailEnabled(!emailEnabled)} style={{
               width:"44px", height:"24px", borderRadius:"99px",
-              background: emailEnabled ? "#f59e0b" : "#334155", cursor:"pointer",
+              background: emailEnabled ? "#C60C30" : "#003875", cursor:"pointer",
               position:"relative", transition:"background 0.2s"
             }}>
               <div style={{
@@ -1790,33 +1790,33 @@ function SettingsView() {
             { label:"SMTP Port", val:"587" },
           ].map(({label,val})=>(
             <div key={label} style={{ marginBottom:"12px" }}>
-              <label style={{ fontSize:"11px", color:"#64748b", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>{label.toUpperCase()}</label>
-              <input defaultValue={val} style={{ width:"100%", padding:"8px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
+              <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>{label.toUpperCase()}</label>
+              <input defaultValue={val} style={{ width:"100%", padding:"8px 12px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
             </div>
           ))}
           <div style={{ marginBottom:"12px" }}>
-            <label style={{ fontSize:"11px", color:"#64748b", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>SMTP PASSWORD</label>
-            <input type="password" defaultValue="••••••••••••••••" style={{ width:"100%", padding:"8px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
-            <div style={{ fontSize:"11px", color:"#475569", marginTop:"4px" }}>Stored as environment variable SMTP_PASSWORD</div>
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>SMTP PASSWORD</label>
+            <input type="password" defaultValue="••••••••••••••••" style={{ width:"100%", padding:"8px 12px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
+            <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>Stored as environment variable SMTP_PASSWORD</div>
           </div>
-          <button style={{ padding:"9px 18px", background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", borderRadius:"8px", color:"#0f172a", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
+          <button style={{ padding:"9px 18px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
             Save Settings
           </button>
         </div>
 
-        <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"12px", padding:"24px" }}>
-          <div style={{ fontWeight:700, color:"#f8fafc", fontSize:"14px", marginBottom:"16px", display:"flex", alignItems:"center", gap:"8px" }}>
-            <Database size={14} color="#8b5cf6" /> Scan Configuration
+        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px" }}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px", display:"flex", alignItems:"center", gap:"8px" }}>
+            <Database size={14} color="#B0B7BC" /> Scan Configuration
           </div>
           <div style={{ marginBottom:"12px" }}>
-            <label style={{ fontSize:"11px", color:"#64748b", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>YEAR FILTER</label>
-            <select defaultValue="2026" style={{ padding:"8px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", outline:"none" }}>
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>YEAR FILTER</label>
+            <select defaultValue="2026" style={{ padding:"8px 12px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", outline:"none" }}>
               <option>2026</option><option>2025</option><option>All Years</option>
             </select>
           </div>
           <div style={{ marginBottom:"12px" }}>
-            <label style={{ fontSize:"11px", color:"#64748b", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>MAX DEEP LINKS PER SITE</label>
-            <input type="number" defaultValue={30} style={{ padding:"8px 12px", background:"#0f172a", border:"1px solid #334155", borderRadius:"8px", color:"#94a3b8", fontSize:"13px", outline:"none", width:"80px" }} />
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>MAX DEEP LINKS PER SITE</label>
+            <input type="number" defaultValue={30} style={{ padding:"8px 12px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", outline:"none", width:"80px" }} />
           </div>
         </div>
       </div>
@@ -1992,7 +1992,7 @@ function RFPBidsView() {
   function showRfpToast(msg, color="#10b981") {
     if (rfpToastTimer.current) clearTimeout(rfpToastTimer.current);
     setRfpToast({ msg, color });
-    rfpToastTimer.current = setTimeout(() => setRfpToast(null), color === "#f59e0b" ? 4000 : 3000);
+    rfpToastTimer.current = setTimeout(() => setRfpToast(null), color === "#C60C30" ? 4000 : 3000);
   }
 
   // ── State name → 2-letter code map ─────────────────────────────────────────
@@ -2020,7 +2020,7 @@ function RFPBidsView() {
     const { data: existing } = await window._db.from("sources").select("id").eq("url", bidUrl).limit(1);
     if (existing && existing.length > 0) {
       setSourceStatus(s => ({ ...s, [id]: "idle" }));
-      showRfpToast("Already a source", "#f59e0b");
+      showRfpToast("Already a source", "#C60C30");
       return;
     }
     const institution = tr(row["Institution"] || row["institution"]).slice(0, 300);
@@ -2039,7 +2039,7 @@ function RFPBidsView() {
     if (error) {
       console.error("Add to sources error:", error);
       setSourceStatus(s => ({ ...s, [id]: "idle" }));
-      showRfpToast("Error adding source: " + (error.message || "unknown"), "#ef4444");
+      showRfpToast("Error adding source: " + (error.message || "unknown"), "#C60C30");
     } else {
       setSourceStatus(s => ({ ...s, [id]: "added" }));
       setRows(prev => prev.map(r => r._id === id ? { ...r, _added_to_sources: true } : r));
@@ -2145,26 +2145,26 @@ function RFPBidsView() {
     const u = url.toLowerCase();
     let label = null, bg, border, color;
     if (u.includes(".pdf")) {
-      label = "PDF"; bg = "rgba(245,158,11,0.15)"; border = "rgba(245,158,11,0.35)"; color = "#f59e0b";
+      label = "PDF"; bg = "rgba(198,12,48,0.15)"; border = "rgba(198,12,48,0.35)"; color = "#C60C30";
     } else if (u.match(/\.docx?(\?|$)/) || u.includes(".docx") || u.includes(".doc")) {
-      label = "DOC"; bg = "rgba(59,130,246,0.15)"; border = "rgba(59,130,246,0.35)"; color = "#60a5fa";
+      label = "DOC"; bg = "rgba(176,183,188,0.15)"; border = "rgba(176,183,188,0.35)"; color = "#B0B7BC";
     } else if (u.match(/\.xlsx?(\?|$)/) || u.includes(".xlsx") || u.includes(".xls")) {
       label = "XLS"; bg = "rgba(16,185,129,0.15)"; border = "rgba(16,185,129,0.35)"; color = "#34d399";
     } else if (u.includes("document") || u.includes("filedownload") || u.includes("download")) {
-      label = "DOC"; bg = "rgba(59,130,246,0.15)"; border = "rgba(59,130,246,0.35)"; color = "#60a5fa";
+      label = "DOC"; bg = "rgba(176,183,188,0.15)"; border = "rgba(176,183,188,0.35)"; color = "#B0B7BC";
     }
     if (!label) return null;
     return <span style={{ display:"inline-block", background:bg, border:`1px solid ${border}`, color, fontSize:"9px", fontWeight:700, padding:"1px 5px", borderRadius:"3px", letterSpacing:"0.05em", marginLeft:"5px", verticalAlign:"middle" }}>{label}</span>;
   }
 
   // ── Styles ──────────────────────────────────────────────────────────────────
-  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #1e293b", color:"#cbd5e1", fontSize:"12px", verticalAlign:"middle", overflow:"visible", whiteSpace:"normal", wordBreak:"break-word" };
-  const thBase = { padding:"8px 10px", borderBottom:"1px solid #1e293b", background:"#0f172a", color:"#94a3b8", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
+  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #003366", color:"#B0B7BC", fontSize:"12px", verticalAlign:"middle", overflow:"visible", whiteSpace:"normal", wordBreak:"break-word" };
+  const thBase = { padding:"8px 10px", borderBottom:"1px solid #003366", background:"#002244", color:"#B0B7BC", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
 
   const cols = ["Title","Scan Date","Bid Type","Due Date","Institution","Bid URL","Doc URL","Bid Doc","Assignee","Status","Hubspot","Add to Sources"];
 
   const resizeHandle = (col) => (
-    <span onMouseDown={e => { e.stopPropagation(); makeResizer(col)(e); }} style={{ cursor:"col-resize", marginLeft:"4px", color:"#334155", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
+    <span onMouseDown={e => { e.stopPropagation(); makeResizer(col)(e); }} style={{ cursor:"col-resize", marginLeft:"4px", color:"#003875", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
   );
 
   return (
@@ -2172,13 +2172,13 @@ function RFPBidsView() {
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", flexShrink:0 }}>
         <div>
-          <h2 style={{ color:"#f8fafc", fontSize:"20px", fontWeight:700, margin:0 }}>RFP School Watch</h2>
-          {fileDate && <div style={{ color:"#f59e0b", fontSize:"13px", marginTop:"4px" }}>File date: {fileDate}</div>}
+          <h2 style={{ color:"#ffffff", fontSize:"20px", fontWeight:700, margin:0 }}>RFP School Watch</h2>
+          {fileDate && <div style={{ color:"#C60C30", fontSize:"13px", marginTop:"4px" }}>File date: {fileDate}</div>}
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFile} style={{ display:"none" }} />
           <button onClick={() => fileInputRef.current && fileInputRef.current.click()}
-            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#f59e0b,#f97316)", border:"none", color:"#0f172a", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
             <Upload size={13} /> Upload CSV
           </button>
         </div>
@@ -2187,40 +2187,40 @@ function RFPBidsView() {
       {/* Filter bar */}
       <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"12px", flexShrink:0, flexWrap:"wrap" }}>
         <div style={{ position:"relative" }}>
-          <Search size={13} color="#64748b" style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)" }} />
+          <Search size={13} color="#B0B7BC" style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)" }} />
           <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search title, institution…"
-            style={{ background:"#1e293b", border:"1px solid #334155", color:"#f8fafc", padding:"6px 12px 6px 30px", borderRadius:"8px", fontSize:"12px", outline:"none", width:"200px" }} />
+            style={{ background:"#003366", border:"1px solid #003875", color:"#ffffff", padding:"6px 12px 6px 30px", borderRadius:"8px", fontSize:"12px", outline:"none", width:"200px" }} />
         </div>
         <select value={stateFilter} onChange={e => setStateFilter(e.target.value)}
-          style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
           <option value="">All States</option>
           {stateOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}
-          style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none", maxWidth:"200px" }}>
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none", maxWidth:"200px" }}>
           <option value="">All Market Sectors</option>
           {sectorOptions.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={scanDateFilter} onChange={e => setScanDateFilter(e.target.value)}
-          style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
           <option value="">All Dates</option>
           {scanDateOptions.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
         <button onClick={() => setShowRemoved(v => !v)}
-          style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#334155" : "#1e293b", border:"1px solid #334155", color: showRemoved ? "#f8fafc" : "#64748b", fontSize:"12px", cursor:"pointer" }}>
+          style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#003875" : "#003366", border:"1px solid #003875", color: showRemoved ? "#ffffff" : "#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
           {showRemoved ? "Hide removed" : "Show removed"}
         </button>
-        {rows.length > 0 && <span style={{ color:"#64748b", fontSize:"12px", marginLeft:"auto" }}>{displayed.length} of {rows.length} rows</span>}
+        {rows.length > 0 && <span style={{ color:"#B0B7BC", fontSize:"12px", marginLeft:"auto" }}>{displayed.length} of {rows.length} rows</span>}
       </div>
 
       {rows.length === 0 && (
-        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#475569", fontSize:"14px" }}>
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#4a6080", fontSize:"14px" }}>
           Loading… or upload a RFPSchoolwatch CSV file to get started.
         </div>
       )}
 
       {rows.length > 0 && (
-        <div style={{ flex:1, overflow:"auto", borderRadius:"10px", border:"1px solid #1e293b" }}>
+        <div style={{ flex:1, overflow:"auto", borderRadius:"10px", border:"1px solid #003366" }}>
           <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
             <colgroup>
               {cols.map(c => <col key={c} style={{ width: colWidths[c] + "px" }} />)}
@@ -2247,7 +2247,7 @@ function RFPBidsView() {
                 const srcSt = sourceStatus[row._id];
                 const isRemoved = row._removed;
                 return (
-                  <tr key={row._id} style={{ background: isRemoved ? "#0f1a2e" : idx % 2 === 0 ? "#0a0f1e" : "#0d1424", opacity: isRemoved ? 0.45 : 1 }}>
+                  <tr key={row._id} style={{ background: isRemoved ? "#001a33" : idx % 2 === 0 ? "#001a33" : "#001a33", opacity: isRemoved ? 0.45 : 1 }}>
                     <td style={colStyle} title={row["Title"] || ""}>{row["Title"] || ""}</td>
                     <td style={colStyle} title={scanDate}>{scanDate}</td>
                     <td style={colStyle} title={row["Bid Type"] || ""}>{row["Bid Type"] || ""}</td>
@@ -2256,22 +2256,22 @@ function RFPBidsView() {
                       <span>{row["Institution"] || ""}</span>
                       {docBadge(docUrl || bidDocUrl)}
                     </td>
-                    <td style={colStyle} title={bidUrl}>{bidUrl ? <a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>View</a> : "—"}</td>
+                    <td style={colStyle} title={bidUrl}>{bidUrl ? <a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a> : "—"}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }} title={docUrl}>
                       <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
-                        {docUrl ? <a href={docUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>Doc</a> : <span style={{ color:"#475569" }}>—</span>}
+                        {docUrl ? <a href={docUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a> : <span style={{ color:"#4a6080" }}>—</span>}
                         {docUrl && (
                           <button onClick={() => extractContact(row)}
-                            style={{ padding:"2px 7px", borderRadius:"4px", background:"#1e3a5f", border:"1px solid #1d4ed8", color:"#93c5fd", fontSize:"10px", cursor:"pointer", fontWeight:600 }}>
+                            style={{ padding:"2px 7px", borderRadius:"4px", background:"#003366", border:"1px solid #C60C30", color:"#B0B7BC", fontSize:"10px", cursor:"pointer", fontWeight:600 }}>
                             Extract
                           </button>
                         )}
                       </div>
                     </td>
-                    <td style={colStyle} title={bidDocUrl}>{bidDocUrl ? <a href={bidDocUrl} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>Docs →</a> : "—"}</td>
+                    <td style={colStyle} title={bidDocUrl}>{bidDocUrl ? <a href={bidDocUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Docs →</a> : "—"}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
-                        style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
+                        style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
                         <option value="">—</option>
                         <option value="Bruce">Bruce</option>
                         <option value="Mike">Mike</option>
@@ -2279,7 +2279,7 @@ function RFPBidsView() {
                     </td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._status} onChange={e => updateRow(row._id, "_status", e.target.value)}
-                        style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
+                        style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
                         <option value="pending">Pending</option>
                         <option value="working">Working</option>
                         <option value="completed">Completed</option>
@@ -2288,7 +2288,7 @@ function RFPBidsView() {
                     </td>
                     <td style={{ ...colStyle, textAlign:"center", whiteSpace:"normal" }}>
                       <input type="checkbox" checked={row._hubspot} onChange={e => updateRow(row._id, "_hubspot", e.target.checked)}
-                        style={{ cursor:"pointer", accentColor:"#f59e0b" }} />
+                        style={{ cursor:"pointer", accentColor:"#C60C30" }} />
                     </td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
@@ -2296,18 +2296,18 @@ function RFPBidsView() {
                           <span style={{ color:"#10b981", fontSize:"11px" }}>✓ Source</span>
                         ) : (
                           <button onClick={() => addToSources(row)} disabled={srcSt === "adding" || !bidUrl}
-                            style={{ padding:"3px 10px", borderRadius:"5px", background: (!bidUrl || srcSt==="adding") ? "#1e293b" : "#1d4ed8", border:"none", color: (!bidUrl || srcSt==="adding") ? "#475569" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!bidUrl || srcSt==="adding") ? "not-allowed" : "pointer" }}>
+                            style={{ padding:"3px 10px", borderRadius:"5px", background: (!bidUrl || srcSt==="adding") ? "#003366" : "#C60C30", border:"none", color: (!bidUrl || srcSt==="adding") ? "#4a6080" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!bidUrl || srcSt==="adding") ? "not-allowed" : "pointer" }}>
                             {srcSt === "adding" ? "…" : "Add to Sources"}
                           </button>
                         )}
                         {!isRemoved ? (
                           <button onClick={() => removeRow(row._id)}
-                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#1e293b", border:"1px solid #334155", color:"#64748b", fontSize:"11px", cursor:"pointer" }}>
+                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>
                             Remove
                           </button>
                         ) : (
                           <button onClick={() => { setRows(prev => prev.map(r => r._id === row._id ? { ...r, _removed: false } : r)); saveMeta(row, "removed", false); }}
-                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#1e293b", border:"1px solid #334155", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>
+                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>
                             Restore
                           </button>
                         )}
@@ -2323,7 +2323,7 @@ function RFPBidsView() {
 
       {/* ── Toast ────────────────────────────────────────────────────────── */}
       {rfpToast && (
-        <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: rfpToast.color === "#f59e0b" ? "rgba(245,158,11,0.15)" : rfpToast.color === "#ef4444" ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${rfpToast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#f8fafc", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"340px" }}>
+        <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: rfpToast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : rfpToast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${rfpToast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"340px" }}>
           {rfpToast.msg}
         </div>
       )}
@@ -2332,34 +2332,34 @@ function RFPBidsView() {
       {extractModal.open && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => { if (e.target === e.currentTarget) setExtractModal(m => ({ ...m, open: false })); }}>
-          <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"14px", padding:"28px", width:"420px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)", position:"relative" }}>
+          <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"14px", padding:"28px", width:"420px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)", position:"relative" }}>
             {/* Close */}
             <button onClick={() => setExtractModal(m => ({ ...m, open: false }))}
-              style={{ position:"absolute", top:"14px", right:"14px", background:"transparent", border:"none", color:"#64748b", cursor:"pointer", fontSize:"18px", lineHeight:1 }}>✕</button>
+              style={{ position:"absolute", top:"14px", right:"14px", background:"transparent", border:"none", color:"#B0B7BC", cursor:"pointer", fontSize:"18px", lineHeight:1 }}>✕</button>
 
-            <div style={{ fontWeight:700, fontSize:"15px", color:"#f8fafc", marginBottom:"4px", display:"flex", alignItems:"center", gap:"8px" }}>
-              <FileText size={15} color="#3b82f6" /> Contact Extraction
+            <div style={{ fontWeight:700, fontSize:"15px", color:"#ffffff", marginBottom:"4px", display:"flex", alignItems:"center", gap:"8px" }}>
+              <FileText size={15} color="#B0B7BC" /> Contact Extraction
             </div>
-            <div style={{ fontSize:"11px", color:"#64748b", marginBottom:"20px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            <div style={{ fontSize:"11px", color:"#B0B7BC", marginBottom:"20px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {extractModal.row && (extractModal.row["Doc URL"] || extractModal.row["doc_url"] || "")}
             </div>
 
             {extractModal.loading && (
               <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"14px", padding:"20px 0" }}>
-                <RefreshCw size={28} color="#3b82f6" style={{ animation:"spin 1s linear infinite" }} />
-                <span style={{ color:"#94a3b8", fontSize:"13px" }}>Analyzing document…</span>
+                <RefreshCw size={28} color="#B0B7BC" style={{ animation:"spin 1s linear infinite" }} />
+                <span style={{ color:"#B0B7BC", fontSize:"13px" }}>Analyzing document…</span>
               </div>
             )}
 
             {extractModal.error && !extractModal.loading && (
-              <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:"8px", padding:"12px", color:"#fca5a5", fontSize:"12px" }}>
+              <div style={{ background:"rgba(198,12,48,0.1)", border:"1px solid rgba(198,12,48,0.3)", borderRadius:"8px", padding:"12px", color:"#ff8080", fontSize:"12px" }}>
                 {extractModal.error}
               </div>
             )}
 
             {extractModal.contact && !extractModal.loading && (
               <div>
-                <div style={{ background:"#0f172a", borderRadius:"10px", padding:"16px", display:"flex", flexDirection:"column", gap:"10px", marginBottom:"16px" }}>
+                <div style={{ background:"#002244", borderRadius:"10px", padding:"16px", display:"flex", flexDirection:"column", gap:"10px", marginBottom:"16px" }}>
                   {[
                     { label:"Name", key:"name" },
                     { label:"Title", key:"title" },
@@ -2369,8 +2369,8 @@ function RFPBidsView() {
                     { label:"Address", key:"address" },
                   ].map(({ label, key }) => (
                     <div key={key} style={{ display:"flex", gap:"10px", alignItems:"flex-start" }}>
-                      <span style={{ fontSize:"10px", color:"#64748b", fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", minWidth:"82px", paddingTop:"1px" }}>{label}</span>
-                      <span style={{ fontSize:"13px", color: extractModal.contact[key] ? "#f8fafc" : "#475569", wordBreak:"break-word" }}>
+                      <span style={{ fontSize:"10px", color:"#B0B7BC", fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", minWidth:"82px", paddingTop:"1px" }}>{label}</span>
+                      <span style={{ fontSize:"13px", color: extractModal.contact[key] ? "#ffffff" : "#4a6080", wordBreak:"break-word" }}>
                         {extractModal.contact[key] || "—"}
                       </span>
                     </div>
@@ -2378,10 +2378,10 @@ function RFPBidsView() {
                 </div>
                 <div style={{ position:"relative", display:"inline-block" }}>
                   <button disabled title="Coming Soon"
-                    style={{ padding:"8px 18px", borderRadius:"8px", background:"#1e293b", border:"1px solid #334155", color:"#475569", fontSize:"12px", fontWeight:600, cursor:"not-allowed" }}>
+                    style={{ padding:"8px 18px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#4a6080", fontSize:"12px", fontWeight:600, cursor:"not-allowed" }}>
                     Add to HubSpot
                   </button>
-                  <span style={{ position:"absolute", top:"-22px", left:"50%", transform:"translateX(-50%)", background:"#0f172a", border:"1px solid #334155", color:"#94a3b8", fontSize:"10px", padding:"2px 8px", borderRadius:"4px", whiteSpace:"nowrap" }}>Coming Soon</span>
+                  <span style={{ position:"absolute", top:"-22px", left:"50%", transform:"translateX(-50%)", background:"#002244", border:"1px solid #003875", color:"#B0B7BC", fontSize:"10px", padding:"2px 8px", borderRadius:"4px", whiteSpace:"nowrap" }}>Coming Soon</span>
                 </div>
               </div>
             )}
@@ -2424,7 +2424,7 @@ function SamGovView() {
   function showToast(msg, color="#10b981") {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, color });
-    toastTimer.current = setTimeout(() => setToast(null), color === "#f59e0b" ? 4000 : 3000);
+    toastTimer.current = setTimeout(() => setToast(null), color === "#C60C30" ? 4000 : 3000);
   }
 
   // ── Load from Supabase ───────────────────────────────────────────────────────
@@ -2506,7 +2506,7 @@ function SamGovView() {
       const json = await res.json();
       const opps = json.opportunitiesData || [];
       setFetchMsg(`Got ${opps.length} results — saving…`);
-      if (!opps.length) { showToast("No results returned", "#f59e0b"); setFetching(false); return; }
+      if (!opps.length) { showToast("No results returned", "#C60C30"); setFetching(false); return; }
 
       const records = opps.map(o => ({
         notice_id:          (o.noticeId || o.solicitationNumber || o.id || "").slice(0, 200),
@@ -2524,7 +2524,7 @@ function SamGovView() {
       await loadRows();
     } catch(err) {
       console.error("SAM.gov fetch error:", err);
-      showToast("Error: " + err.message, "#ef4444");
+      showToast("Error: " + err.message, "#C60C30");
     }
     setFetchMsg("");
     setFetching(false);
@@ -2553,7 +2553,7 @@ function SamGovView() {
     const { data: existing } = await window._db.from("sources").select("id").eq("url", link).limit(1);
     if (existing && existing.length > 0) {
       setSourceStatus(s => ({ ...s, [id]: "idle" }));
-      showToast("Already a source", "#f59e0b");
+      showToast("Already a source", "#C60C30");
       return;
     }
     const record = {
@@ -2568,7 +2568,7 @@ function SamGovView() {
     const { error } = await window._db.from("sources").insert(record);
     if (error) {
       setSourceStatus(s => ({ ...s, [id]: "idle" }));
-      showToast("Error adding source: " + (error.message || "unknown"), "#ef4444");
+      showToast("Error adding source: " + (error.message || "unknown"), "#C60C30");
     } else {
       setSourceStatus(s => ({ ...s, [id]: "added" }));
       setRows(prev => prev.map(r => r._id === id ? { ...r, _added_to_sources: true } : r));
@@ -2613,11 +2613,11 @@ function SamGovView() {
       return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
 
-  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #1e293b", color:"#cbd5e1", fontSize:"12px", verticalAlign:"middle", overflow:"visible", whiteSpace:"normal", wordBreak:"break-word" };
-  const thBase = { padding:"8px 10px", borderBottom:"1px solid #1e293b", background:"#0f172a", color:"#94a3b8", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
+  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #003366", color:"#B0B7BC", fontSize:"12px", verticalAlign:"middle", overflow:"visible", whiteSpace:"normal", wordBreak:"break-word" };
+  const thBase = { padding:"8px 10px", borderBottom:"1px solid #003366", background:"#002244", color:"#B0B7BC", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
 
   const resizeHandle = (col) => (
-    <span onMouseDown={e => { e.stopPropagation(); makeResizer(col)(e); }} style={{ cursor:"col-resize", marginLeft:"4px", color:"#334155", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
+    <span onMouseDown={e => { e.stopPropagation(); makeResizer(col)(e); }} style={{ cursor:"col-resize", marginLeft:"4px", color:"#003875", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
   );
 
   return (
@@ -2625,18 +2625,18 @@ function SamGovView() {
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", flexShrink:0 }}>
         <div>
-          <h2 style={{ color:"#f8fafc", fontSize:"20px", fontWeight:700, margin:0 }}>SAM.gov Bid Browser</h2>
-          <div style={{ color:"#64748b", fontSize:"13px", marginTop:"4px" }}>Federal contract opportunities • last 30 days</div>
+          <h2 style={{ color:"#ffffff", fontSize:"20px", fontWeight:700, margin:0 }}>SAM.gov Bid Browser</h2>
+          <div style={{ color:"#B0B7BC", fontSize:"13px", marginTop:"4px" }}>Federal contract opportunities • last 30 days</div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
           {apiKey && (
             <button onClick={() => { setKeyInput(apiKey); setShowKeyPrompt(true); }}
-              style={{ padding:"6px 12px", borderRadius:"8px", background:"#1e293b", border:"1px solid #334155", color:"#64748b", fontSize:"12px", cursor:"pointer" }}>
+              style={{ padding:"6px 12px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
               Change API Key
             </button>
           )}
           <button onClick={handleFetchClick} disabled={fetching}
-            style={{ padding:"8px 16px", borderRadius:"8px", background: fetching ? "#334155" : "linear-gradient(135deg,#3b82f6,#6366f1)", border:"none", color:"#fff", fontSize:"12px", fontWeight:700, cursor: fetching ? "not-allowed" : "pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            style={{ padding:"8px 16px", borderRadius:"8px", background: fetching ? "#003875" : "linear-gradient(135deg,#B0B7BC,#C60C30)", border:"none", color:"#fff", fontSize:"12px", fontWeight:700, cursor: fetching ? "not-allowed" : "pointer", display:"flex", alignItems:"center", gap:"6px" }}>
             <RefreshCw size={13} style={{ animation: fetching ? "spin 1s linear infinite" : "none" }} />
             {fetching ? (fetchMsg || "Fetching…") : "Fetch Latest"}
           </button>
@@ -2646,30 +2646,30 @@ function SamGovView() {
       {/* Filter bar */}
       <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"12px", flexShrink:0, flexWrap:"wrap" }}>
         <div style={{ position:"relative" }}>
-          <Search size={13} color="#64748b" style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)" }} />
+          <Search size={13} color="#B0B7BC" style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)" }} />
           <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search title, agency, type…"
-            style={{ background:"#1e293b", border:"1px solid #334155", color:"#f8fafc", padding:"6px 12px 6px 30px", borderRadius:"8px", fontSize:"12px", outline:"none", width:"220px" }} />
+            style={{ background:"#003366", border:"1px solid #003875", color:"#ffffff", padding:"6px 12px 6px 30px", borderRadius:"8px", fontSize:"12px", outline:"none", width:"220px" }} />
         </div>
         <select value={dateFilter} onChange={e => setDateFilter(e.target.value)}
-          style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
           <option value="">All Posted Dates</option>
           {dateOptions.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
         <button onClick={() => setShowRemoved(v => !v)}
-          style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#334155" : "#1e293b", border:"1px solid #334155", color: showRemoved ? "#f8fafc" : "#64748b", fontSize:"12px", cursor:"pointer" }}>
+          style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#003875" : "#003366", border:"1px solid #003875", color: showRemoved ? "#ffffff" : "#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
           {showRemoved ? "Hide removed" : "Show removed"}
         </button>
-        {rows.length > 0 && <span style={{ color:"#64748b", fontSize:"12px", marginLeft:"auto" }}>{displayed.length} of {rows.length} rows</span>}
+        {rows.length > 0 && <span style={{ color:"#B0B7BC", fontSize:"12px", marginLeft:"auto" }}>{displayed.length} of {rows.length} rows</span>}
       </div>
 
       {rows.length === 0 && !fetching && (
-        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#475569", fontSize:"14px" }}>
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#4a6080", fontSize:"14px" }}>
           Click "Fetch Latest" to pull SAM.gov opportunities.
         </div>
       )}
 
       {rows.length > 0 && (
-        <div style={{ flex:1, overflow:"auto", borderRadius:"10px", border:"1px solid #1e293b" }}>
+        <div style={{ flex:1, overflow:"auto", borderRadius:"10px", border:"1px solid #003366" }}>
           <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
             <colgroup>
               {cols.map(c => <col key={c} style={{ width: colWidths[c] + "px" }} />)}
@@ -2693,17 +2693,17 @@ function SamGovView() {
                 const srcSt = sourceStatus[row._id];
                 const isRemoved = row._removed;
                 return (
-                  <tr key={row._id} style={{ background: isRemoved ? "#0f1a2e" : idx % 2 === 0 ? "#0a0f1e" : "#0d1424", opacity: isRemoved ? 0.45 : 1 }}>
+                  <tr key={row._id} style={{ background: isRemoved ? "#001a33" : idx % 2 === 0 ? "#001a33" : "#001a33", opacity: isRemoved ? 0.45 : 1 }}>
                     <td style={colStyle} title={row["Title"]}>{row["Title"]}</td>
                     <td style={colStyle} title={row["Notice Type"]}>{row["Notice Type"]}</td>
                     <td style={colStyle} title={row["Posted Date"]}>{(row["Posted Date"] || "").slice(0,10)}</td>
                     <td style={colStyle} title={row["Due Date"]}>{(row["Due Date"] || "").slice(0,10)}</td>
                     <td style={colStyle} title={row["Institution"]}>{row["Institution"]}</td>
-                    <td style={colStyle}><span style={{ background:"rgba(99,102,241,0.15)", border:"1px solid rgba(99,102,241,0.35)", color:"#818cf8", fontSize:"10px", fontWeight:700, padding:"2px 6px", borderRadius:"4px" }}>Federal</span></td>
-                    <td style={colStyle}>{link ? <a href={link} target="_blank" rel="noreferrer" style={{ color:"#3b82f6", fontSize:"11px" }}>View</a> : "—"}</td>
+                    <td style={colStyle}><span style={{ background:"rgba(198,12,48,0.15)", border:"1px solid rgba(198,12,48,0.35)", color:"#B0B7BC", fontSize:"10px", fontWeight:700, padding:"2px 6px", borderRadius:"4px" }}>Federal</span></td>
+                    <td style={colStyle}>{link ? <a href={link} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a> : "—"}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
-                        style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
+                        style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
                         <option value="">—</option>
                         <option value="Bruce">Bruce</option>
                         <option value="Mike">Mike</option>
@@ -2711,7 +2711,7 @@ function SamGovView() {
                     </td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._status} onChange={e => updateRow(row._id, "_status", e.target.value)}
-                        style={{ background:"#1e293b", border:"1px solid #334155", color:"#cbd5e1", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
+                        style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
                         <option value="pending">Pending</option>
                         <option value="working">Working</option>
                         <option value="completed">Completed</option>
@@ -2720,7 +2720,7 @@ function SamGovView() {
                     </td>
                     <td style={{ ...colStyle, textAlign:"center", whiteSpace:"normal" }}>
                       <input type="checkbox" checked={row._hubspot} onChange={e => updateRow(row._id, "_hubspot", e.target.checked)}
-                        style={{ cursor:"pointer", accentColor:"#f59e0b" }} />
+                        style={{ cursor:"pointer", accentColor:"#C60C30" }} />
                     </td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
@@ -2728,18 +2728,18 @@ function SamGovView() {
                           <span style={{ color:"#10b981", fontSize:"11px" }}>✓ Source</span>
                         ) : (
                           <button onClick={() => addToSources(row)} disabled={srcSt === "adding" || !link}
-                            style={{ padding:"3px 10px", borderRadius:"5px", background: (!link || srcSt==="adding") ? "#1e293b" : "#1d4ed8", border:"none", color: (!link || srcSt==="adding") ? "#475569" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!link || srcSt==="adding") ? "not-allowed" : "pointer" }}>
+                            style={{ padding:"3px 10px", borderRadius:"5px", background: (!link || srcSt==="adding") ? "#003366" : "#C60C30", border:"none", color: (!link || srcSt==="adding") ? "#4a6080" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!link || srcSt==="adding") ? "not-allowed" : "pointer" }}>
                             {srcSt === "adding" ? "…" : "Add to Sources"}
                           </button>
                         )}
                         {!isRemoved ? (
                           <button onClick={() => removeRow(row._id)}
-                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#1e293b", border:"1px solid #334155", color:"#64748b", fontSize:"11px", cursor:"pointer" }}>
+                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>
                             Remove
                           </button>
                         ) : (
                           <button onClick={() => { setRows(prev => prev.map(r => r._id === row._id ? { ...r, _removed: false } : r)); saveMeta(row._notice_id, "removed", false); }}
-                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#1e293b", border:"1px solid #334155", color:"#94a3b8", fontSize:"11px", cursor:"pointer" }}>
+                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>
                             Restore
                           </button>
                         )}
@@ -2755,7 +2755,7 @@ function SamGovView() {
 
       {/* Toast */}
       {toast && (
-        <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: toast.color === "#f59e0b" ? "rgba(245,158,11,0.15)" : toast.color === "#ef4444" ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${toast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#f8fafc", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"360px" }}>
+        <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: toast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : toast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${toast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"360px" }}>
           {toast.msg}
         </div>
       )}
@@ -2764,11 +2764,11 @@ function SamGovView() {
       {showKeyPrompt && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9000, display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => { if (e.target === e.currentTarget) setShowKeyPrompt(false); }}>
-          <div style={{ background:"#1e293b", border:"1px solid #334155", borderRadius:"14px", padding:"28px", width:"420px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)" }}>
-            <div style={{ fontWeight:700, fontSize:"15px", color:"#f8fafc", marginBottom:"8px", display:"flex", alignItems:"center", gap:"8px" }}>
-              <Key size={15} color="#3b82f6" /> SAM.gov API Key
+          <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"14px", padding:"28px", width:"420px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)" }}>
+            <div style={{ fontWeight:700, fontSize:"15px", color:"#ffffff", marginBottom:"8px", display:"flex", alignItems:"center", gap:"8px" }}>
+              <Key size={15} color="#B0B7BC" /> SAM.gov API Key
             </div>
-            <p style={{ fontSize:"12px", color:"#64748b", marginBottom:"16px", lineHeight:1.5 }}>
+            <p style={{ fontSize:"12px", color:"#B0B7BC", marginBottom:"16px", lineHeight:1.5 }}>
               Enter your SAM.gov API key. It will be stored in your browser's local storage and never sent anywhere except SAM.gov.
             </p>
             <input
@@ -2778,15 +2778,15 @@ function SamGovView() {
               onChange={e => setKeyInput(e.target.value)}
               onKeyDown={e => { if (e.key === "Enter") handleKeySave(); if (e.key === "Escape") setShowKeyPrompt(false); }}
               placeholder="Paste your SAM.gov API key…"
-              style={{ width:"100%", background:"#0f172a", border:"1px solid #334155", color:"#f8fafc", padding:"10px 14px", borderRadius:"8px", fontSize:"13px", outline:"none", marginBottom:"16px" }}
+              style={{ width:"100%", background:"#002244", border:"1px solid #003875", color:"#ffffff", padding:"10px 14px", borderRadius:"8px", fontSize:"13px", outline:"none", marginBottom:"16px" }}
             />
             <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
               <button onClick={() => setShowKeyPrompt(false)}
-                style={{ padding:"8px 16px", borderRadius:"8px", background:"#0f172a", border:"1px solid #334155", color:"#64748b", fontSize:"12px", cursor:"pointer" }}>
+                style={{ padding:"8px 16px", borderRadius:"8px", background:"#002244", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
                 Cancel
               </button>
               <button onClick={handleKeySave} disabled={!keyInput.trim()}
-                style={{ padding:"8px 18px", borderRadius:"8px", background: keyInput.trim() ? "linear-gradient(135deg,#3b82f6,#6366f1)" : "#1e293b", border:"none", color: keyInput.trim() ? "#fff" : "#475569", fontSize:"12px", fontWeight:700, cursor: keyInput.trim() ? "pointer" : "not-allowed" }}>
+                style={{ padding:"8px 18px", borderRadius:"8px", background: keyInput.trim() ? "linear-gradient(135deg,#B0B7BC,#C60C30)" : "#003366", border:"none", color: keyInput.trim() ? "#fff" : "#4a6080", fontSize:"12px", fontWeight:700, cursor: keyInput.trim() ? "pointer" : "not-allowed" }}>
                 Save & Fetch
               </button>
             </div>
@@ -2955,7 +2955,7 @@ function App() {
   return (
     <div style={{
       display:"flex", flexDirection:"column", height:"100vh", width:"100%",
-      background:"#0a0f1e", color:"#f8fafc",
+      background:"#001a33", color:"#ffffff",
       fontFamily:"'Segoe UI', system-ui, -apple-system, sans-serif"
     }}>
       <style>{`
@@ -2963,9 +2963,9 @@ function App() {
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes pulse { 0%,100% { box-shadow: 0 4px 15px rgba(16,185,129,0.4); } 50% { box-shadow: 0 4px 25px rgba(16,185,129,0.8); } }
         ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: #0f172a; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-        select option { background: #1e293b; color: #f8fafc; }
+        ::-webkit-scrollbar-track { background: #002244; }
+        ::-webkit-scrollbar-thumb { background: #003875; border-radius: 3px; }
+        select option { background: #003366; color: #ffffff; }
       `}</style>
 
       <TopBar stateFilter={stateFilter} setStateFilter={setStateFilter} entityFilter={entityFilter} setEntityFilter={setEntityFilter} onRunScan={runScan} scanning={scanning} scanProgress={scanProgress} onHamburger={() => setSidebarOpen(true)} />
@@ -2973,7 +2973,7 @@ function App() {
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <Sidebar active={page} setActive={(p) => { setPage(p); setSidebarOpen(false); }} onRunScan={runScan} scanning={scanning} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
-        <main style={{ flex:1, display:"flex", overflow:"hidden", background:"#0a0f1e" }}>
+        <main style={{ flex:1, display:"flex", overflow:"hidden", background:"#001a33" }}>
           {page==="dashboard"  && <DashboardView onNavigate={setPage} onRunScan={runScan} scanning={scanning} />}
           {page==="hot_leads"  && <HotLeadsView stateFilter={stateFilter} />}
           {page==="all_bids"   && <HotLeadsView stateFilter={stateFilter} allBids />}
@@ -2990,7 +2990,7 @@ function App() {
       {toast && (
         <div style={{
           position:"fixed", bottom:"24px", right:"24px",
-          background: toast.type==="success" ? "#10b981" : "#ef4444",
+          background: toast.type==="success" ? "#10b981" : "#C60C30",
           color:"#fff", padding:"12px 20px", borderRadius:"10px",
           fontSize:"13px", fontWeight:600, boxShadow:"0 8px 24px rgba(0,0,0,0.4)",
           display:"flex", alignItems:"center", gap:"8px", zIndex:9999,
@@ -3023,24 +3023,24 @@ else {
 }
 </script>
 
-<div id="mobile-nav" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#0f172a;border-top:1px solid #1e293b;padding:6px 0 8px;z-index:9999;justify-content:space-around;align-items:center;">
-  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'dashboard'}))" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+<div id="mobile-nav" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#002244;border-top:1px solid #003366;padding:6px 0 8px;z-index:9999;justify-content:space-around;align-items:center;">
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'dashboard'}))" style="background:none;border:none;color:#B0B7BC;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     <span style="font-size:9px;font-weight:600">HOME</span>
   </button>
-  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'hot_leads'}))" style="background:none;border:none;color:#ef4444;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'hot_leads'}))" style="background:none;border:none;color:#C60C30;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8.5 14.5A2.5 2.5 0 0011 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 11-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 002.5 2.5z"/></svg>
     <span style="font-size:9px;font-weight:600">HOT</span>
   </button>
-  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'all_bids'}))" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'all_bids'}))" style="background:none;border:none;color:#B0B7BC;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
     <span style="font-size:9px;font-weight:600">ALL BIDS</span>
   </button>
-  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'sources'}))" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'sources'}))" style="background:none;border:none;color:#B0B7BC;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
     <span style="font-size:9px;font-weight:600">SOURCES</span>
   </button>
-  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'settings'}))" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
+  <button onclick="document.dispatchEvent(new CustomEvent('mobileNav',{detail:'settings'}))" style="background:none;border:none;color:#B0B7BC;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px 8px;">
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
     <span style="font-size:9px;font-weight:600">SETTINGS</span>
   </button>
