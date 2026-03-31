@@ -2140,6 +2140,14 @@ function RFPBidsView() {
     });
 
   // ── Doc type badge helper ────────────────────────────────────────────────────
+  function isDocUrl(url) {
+    if (!url) return false;
+    const u = url.toLowerCase();
+    return u.includes(".pdf") || u.match(/\.docx?(\?|$)/) || u.includes(".docx") || u.includes(".doc") ||
+           u.match(/\.xlsx?(\?|$)/) || u.includes(".xlsx") || u.includes(".xls") ||
+           u.includes("document") || u.includes("filedownload") || u.includes("download");
+  }
+
   function docBadge(url) {
     if (!url) return null;
     const u = url.toLowerCase();
@@ -2260,7 +2268,7 @@ function RFPBidsView() {
                     <td style={{ ...colStyle, whiteSpace:"normal" }} title={docUrl}>
                       <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
                         {docUrl ? <a href={docUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a> : <span style={{ color:"#4a6080" }}>—</span>}
-                        {docUrl && (
+                        {isDocUrl(docUrl) && (
                           <button onClick={() => extractContact(row)}
                             style={{ padding:"2px 7px", borderRadius:"4px", background:"#003366", border:"1px solid #C60C30", color:"#B0B7BC", fontSize:"10px", cursor:"pointer", fontWeight:600 }}>
                             Extract
