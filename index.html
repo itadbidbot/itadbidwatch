@@ -19,8 +19,25 @@ input:focus,textarea:focus{border-color:#f59e0b !important}
 </style>
 
 <style>
+@keyframes slideInLeft { from { transform: translateX(-100%); } to { transform: translateX(0); } }
+.hamburger-btn { display: none; background: none; border: none; color: #f8fafc; font-size: 22px; cursor: pointer; padding: 4px 8px; line-height: 1; }
+.sidebar-backdrop { display: none; }
+.sidebar-close-btn { display: none; }
 @media (max-width: 768px) {
   nav[style] { display: none !important; }
+  nav[style].sidebar-open {
+    display: flex !important;
+    position: fixed !important;
+    top: 0 !important; left: 0 !important;
+    height: 100vh !important;
+    z-index: 10000 !important;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.6) !important;
+    animation: slideInLeft 0.25s ease;
+  }
+  .sidebar-backdrop { display: none; }
+  .sidebar-backdrop.open { display: block !important; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.55); z-index: 9999; }
+  .hamburger-btn { display: flex !important; align-items: center; }
+  .sidebar-close-btn { display: flex !important; align-items: center; justify-content: flex-end; padding: 10px 16px 4px; background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; width: 100%; }
   main[style] { width: 100vw !important; }
   header[style] { height: auto !important; flex-wrap: wrap !important; padding: 8px 12px !important; gap: 6px !important; }
   header[style] > div:nth-child(4), header[style] > div:nth-child(5) { display: none !important; }
@@ -152,13 +169,15 @@ const FILTER_CATEGORIES = [
 
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
 
-function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, onRunScan, scanning, scanProgress }) {
+function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, onRunScan, scanning, scanProgress, onHamburger }) {
   return (
     <header style={{
       background:"#0f172a", borderBottom:"1px solid #1e293b",
       display:"flex", alignItems:"center", gap:"16px",
       padding:"0 24px", height:"56px", flexShrink:0, zIndex:10
     }}>
+      {/* Hamburger — mobile only */}
+      <button className="hamburger-btn" onClick={onHamburger} aria-label="Open menu">☰</button>
       {/* Logo */}
       <div style={{ display:"flex", alignItems:"center", gap:"10px", marginRight:"8px" }}>
         <div style={{ width:"32px", height:"32px", background:"linear-gradient(135deg,#f59e0b,#ef4444)", borderRadius:"8px", display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -239,7 +258,7 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
   );
 }
 
-function Sidebar({ active, setActive, onRunScan, scanning }) {
+function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose }) {
   const nav = [
     { key:"dashboard", label:"Dashboard", icon:Home },
     { key:"hot_leads", label:"Daily Hot Leads", icon:Flame },
@@ -253,10 +272,13 @@ function Sidebar({ active, setActive, onRunScan, scanning }) {
   ];
 
   return (
-    <nav style={{
-      width:"240px", flexShrink:0, background:"#0f172a", borderRight:"1px solid #1e293b",
-      display:"flex", flexDirection:"column", padding:"16px 0", overflowY:"auto"
-    }}>
+    <>
+      <div className={isOpen ? "sidebar-backdrop open" : "sidebar-backdrop"} onClick={onClose} />
+      <nav className={isOpen ? "sidebar-open" : ""} style={{
+        width:"240px", flexShrink:0, background:"#0f172a", borderRight:"1px solid #1e293b",
+        display:"flex", flexDirection:"column", padding:"16px 0", overflowY:"auto"
+      }}>
+      <button className="sidebar-close-btn" onClick={onClose} aria-label="Close menu">✕</button>
       <div style={{ padding:"0 12px", marginBottom:"8px" }}>
         <div style={{ fontSize:"9px", color:"#334155", fontWeight:700, letterSpacing:"0.15em", textTransform:"uppercase", padding:"0 8px 8px" }}>Navigation</div>
       </div>
@@ -309,6 +331,7 @@ function Sidebar({ active, setActive, onRunScan, scanning }) {
         </button>
       </div>
     </nav>
+    </>
   );
 }
 
@@ -2785,6 +2808,7 @@ function App() {
   const [entityFilter, setEntityFilter] = useState("all");
   const [scanning, setScanning] = useState(false);
   const [toast, setToast] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   React.useEffect(() => { window._bidbotSetPage = setPage; }, []);
 
@@ -2944,10 +2968,10 @@ function App() {
         select option { background: #1e293b; color: #f8fafc; }
       `}</style>
 
-      <TopBar stateFilter={stateFilter} setStateFilter={setStateFilter} entityFilter={entityFilter} setEntityFilter={setEntityFilter} onRunScan={runScan} scanning={scanning} scanProgress={scanProgress} />
+      <TopBar stateFilter={stateFilter} setStateFilter={setStateFilter} entityFilter={entityFilter} setEntityFilter={setEntityFilter} onRunScan={runScan} scanning={scanning} scanProgress={scanProgress} onHamburger={() => setSidebarOpen(true)} />
 
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
-        <Sidebar active={page} setActive={setPage} onRunScan={runScan} scanning={scanning} />
+        <Sidebar active={page} setActive={(p) => { setPage(p); setSidebarOpen(false); }} onRunScan={runScan} scanning={scanning} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <main style={{ flex:1, display:"flex", overflow:"hidden", background:"#0a0f1e" }}>
           {page==="dashboard"  && <DashboardView onNavigate={setPage} onRunScan={runScan} scanning={scanning} />}
