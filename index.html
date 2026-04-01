@@ -1874,8 +1874,8 @@ function RFPBidsView() {
 
   // ── Upsert CSV rows to rfp_bids ─────────────────────────────────────────────
   async function upsertRfpRows(parsed, fDate) {
-    if (!parsed.length) return;
-    const records = parsed.map(r => ({
+    if (!parsed.length) return { saved: 0, duplicates: 0 };
+    const allRecords = parsed.map(r => ({
       bid_url:        (r["Bid URL"]        || r["bid_url"]        || "").slice(0, 2000),
       title:          (r["Title"]          || r["title"]          || "").slice(0, 500),
       document_url:   (r["Doc URL"]        || r["doc_url"]        || r["Document URL"] || "").slice(0, 2000),
@@ -1891,10 +1891,50 @@ function RFPBidsView() {
       file_date:      fDate || null,
       doc_id:         (r["Doc ID"]         || r["doc_id"]         || "").slice(0, 200),
     })).filter(r => r.bid_url);
-    if (!records.length) return;
-    const { data: upsertData, error: upsertErr } = await window._db.from("rfp_bids").upsert(records, { onConflict: "doc_id" });
+    if (!allRecords.length) return { saved: 0, duplicates: 0 };
+
+    // Deduplicate within the CSV itself (title+institution, case-insensitive, keep first)
+    let csvDuplicates = 0;
+    const csvSeen = new Set();
+    const records = [];
+    for (const rec of allRecords) {
+      const key = (rec.title || "").toLowerCase() + "||" + (rec.institution || "").toLowerCase();
+      if (csvSeen.has(key)) { csvDuplicates++; continue; }
+      csvSeen.add(key);
+      records.push(rec);
+    }
+
+    // Check existing rows in rfp_bids for matching title+institution
+    const titles      = [...new Set(records.map(r => r.title).filter(Boolean))];
+    const institutions = [...new Set(records.map(r => r.institution).filter(Boolean))];
+    let existingKeys = new Set();
+    if (titles.length) {
+      const { data: existing } = await window._db
+        .from("rfp_bids")
+        .select("title, institution")
+        .in("title", titles);
+      if (existing) {
+        for (const row of existing) {
+          existingKeys.add((row.title || "").toLowerCase() + "||" + (row.institution || "").toLowerCase());
+        }
+      }
+    }
+
+    let dbDuplicates = 0;
+    const toInsert = [];
+    for (const rec of records) {
+      const key = (rec.title || "").toLowerCase() + "||" + (rec.institution || "").toLowerCase();
+      if (existingKeys.has(key)) { dbDuplicates++; continue; }
+      toInsert.push(rec);
+    }
+
+    const totalDuplicates = csvDuplicates + dbDuplicates;
+    if (!toInsert.length) return { saved: 0, duplicates: totalDuplicates };
+
+    const { data: upsertData, error: upsertErr } = await window._db.from("rfp_bids").upsert(toInsert, { onConflict: "doc_id" });
     if (upsertErr) console.error("upsertRfpRows error:", JSON.stringify(upsertErr), upsertErr);
-    else console.log("upsertRfpRows: saved", records.length, "rows to rfp_bids", upsertData);
+    else console.log("upsertRfpRows: saved", toInsert.length, "rows, skipped", totalDuplicates, "duplicates");
+    return { saved: toInsert.length, duplicates: totalDuplicates };
   }
 
   function handleFile(e) {
@@ -1913,8 +1953,9 @@ function RFPBidsView() {
     reader.onload = async ev => {
       const parsed = parseCSV(ev.target.result);
       console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
-      await upsertRfpRows(parsed, fDate);
+      const { saved, duplicates } = await upsertRfpRows(parsed, fDate);
       loadAllRows();
+      showRfpToast(`Loaded ${saved} bids, ${duplicates} duplicate${duplicates !== 1 ? "s" : ""} skipped`);
     };
     reader.readAsText(file);
     e.target.value = "";
