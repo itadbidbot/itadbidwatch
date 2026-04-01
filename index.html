@@ -1843,6 +1843,7 @@ function RFPBidsView() {
   });
   const [extractModal, setExtractModal] = useState({ open: false, loading: false, row: null, contact: null, error: null });
   const [scanDateFilter, setScanDateFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
   const [sortCol, setSortCol] = useState("Scan Date");
   const [sortDir, setSortDir] = useState("desc");
   const fileInputRef = useRef(null);
@@ -2129,7 +2130,8 @@ function RFPBidsView() {
       const matchState = !stateFilter || (r["State"] || r["state"] || "") === stateFilter;
       const matchSector = !sectorFilter || (r["Market Sectors"] || r["market_sectors"] || "") === sectorFilter;
       const matchScanDate = !scanDateFilter || (r["Scan Date"] || "") === scanDateFilter;
-      return matchText && matchState && matchSector && matchScanDate;
+      const matchStatus = !statusFilter || (r._status || "pending").toLowerCase() === statusFilter.toLowerCase();
+      return matchText && matchState && matchSector && matchScanDate && matchStatus;
     })
     .slice()
     .sort((a, b) => {
@@ -2213,6 +2215,14 @@ function RFPBidsView() {
           style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
           <option value="">All Dates</option>
           {scanDateOptions.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="working">Working</option>
+          <option value="completed">Completed</option>
+          <option value="dead">Dead</option>
         </select>
         <button onClick={() => setShowRemoved(v => !v)}
           style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#003875" : "#003366", border:"1px solid #003875", color: showRemoved ? "#ffffff" : "#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
