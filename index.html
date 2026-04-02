@@ -2527,14 +2527,32 @@ function BidPrimeView() {
       const title = titleEl ? titleEl.textContent.trim() : "";
       if (!title) continue;
 
+      const isFirst = bids.length === 0;
+      if (isFirst) {
+        console.log("[BidPrime] First bid container innerHTML:", container.innerHTML);
+        console.log("[BidPrime] uuid:", uuid);
+        console.log("[BidPrime] title:", title);
+        console.log("[BidPrime] All links in container:", Array.from(container.querySelectorAll('a[href]')).map(a => ({ text: a.textContent.trim(), href: a.getAttribute('href') })));
+        console.log("[BidPrime] All bold/strong in container:", Array.from(container.querySelectorAll('b, strong')).map(b => b.textContent.trim()));
+        console.log("[BidPrime] All styled divs in container:", Array.from(container.querySelectorAll('div[style]')).map(d => ({ style: d.getAttribute('style'), text: d.textContent.trim() })));
+      }
+
       // View link: anchor to /member/inbox/?bid=uuid
       const viewEl = container.querySelector(`a[href*="member/inbox"][href*="${uuid}"]`) ||
                      container.querySelector('a[href*="member/inbox"]');
       const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
 
-      // Doc link: /api/v2/document/download or /member/request-documents
-      const docEl = container.querySelector('a[href*="/api/v2/document/download"], a[href*="/member/request-documents"]');
+      // Doc link: /api/v2/document/download or /member/request-documents, with fallbacks
+      const docEl = container.querySelector('a[href*="/api/v2/document/download"]') ||
+                    container.querySelector('a[href*="/member/request-documents"]') ||
+                    container.querySelector('a[href*="request-documents"]') ||
+                    container.querySelector('a[href*="document"]');
       const doc_link = docEl ? (docEl.getAttribute('href') || "") : "";
+
+      if (isFirst) {
+        console.log("[BidPrime] view_link:", view_link);
+        console.log("[BidPrime] doc_link:", doc_link, "| docEl href:", docEl ? docEl.getAttribute('href') : null);
+      }
 
       // State/agency: bold element matching "XX - AGENCY NAME"
       let state = "", agency = "";
@@ -2542,6 +2560,14 @@ function BidPrimeView() {
         const m = b.textContent.trim().match(/^([A-Z]{2})\s*-\s*(.+)$/);
         if (m) { state = m[1]; agency = m[2].trim(); break; }
       }
+      // Fallback: regex on full text content
+      if (!state) {
+        const fullText = container.textContent || "";
+        const m = fullText.match(/\b([A-Z]{2})\s+-\s+([A-Z][A-Z\s,./]+)/);
+        if (m) { state = m[1]; agency = m[2].trim(); }
+      }
+
+      if (isFirst) console.log("[BidPrime] state:", state, "| agency:", agency);
 
       // Due date: div with width:90px containing a date
       let due_date = "";
@@ -2550,6 +2576,13 @@ function BidPrimeView() {
         const m = d.textContent.trim().match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
         if (m) { due_date = m[1]; break; }
       }
+      // Fallback: any date in container text
+      if (!due_date) {
+        const m = (container.textContent || "").match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+        if (m) due_date = m[1];
+      }
+
+      if (isFirst) console.log("[BidPrime] due_date:", due_date);
 
       bids.push({ id: uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
     }
