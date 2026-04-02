@@ -2505,54 +2505,53 @@ function BidPrimeView() {
     const doc = parser.parseFromString(html, "text/html");
     const bids = [];
 
-    // Title links: anchors pointing to bidprime.com/.../member/link
-    const titleAnchors = Array.from(doc.querySelectorAll('a[href]')).filter(a => {
-      const href = a.getAttribute('href') || "";
-      return href.includes('bidprime.com') && href.includes('/member/link');
-    });
+    // Walk all comment nodes — each bid block starts with <!-- uuid -->
+    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let commentNode;
+    while ((commentNode = walker.nextNode())) {
+      const uuid = commentNode.nodeValue.trim();
+      if (!uuidRe.test(uuid)) continue;
 
-    for (const titleEl of titleAnchors) {
-      const title = titleEl.textContent.trim();
+      // Find the containing bid block — walk up until we have ≥2 links
+      let container = commentNode.parentElement;
+      for (let i = 0; i < 6; i++) {
+        if (!container || container.tagName === 'BODY') break;
+        if (container.querySelectorAll('a[href]').length >= 2) break;
+        container = container.parentElement;
+      }
+      if (!container) continue;
+
+      // Title: bold green anchor to /api/v1/member/link
+      const titleEl = container.querySelector('a[href*="/api/v1/member/link"]');
+      const title = titleEl ? titleEl.textContent.trim() : "";
       if (!title) continue;
 
-      // Walk up until container has ≥2 links and state/date patterns
-      let container = titleEl;
-      for (let i = 0; i < 10; i++) {
-        const p = container.parentElement;
-        if (!p || p.tagName === 'BODY') break;
-        container = p;
-        const txt = container.textContent || "";
-        if (container.querySelectorAll('a[href]').length >= 2 &&
-            (txt.match(/[A-Z]{2}\s*[-–]/) || txt.match(/\d{1,2}\/\d{1,2}\/\d{4}/))) break;
-      }
-
-      const containerLinks = Array.from(container.querySelectorAll('a[href]'));
-
-      // View link: "View in BidPrime"
-      const viewEl = containerLinks.find(a => /view\s+in\s+bidprime/i.test(a.textContent.trim()));
+      // View link: anchor to /member/inbox/?bid=uuid
+      const viewEl = container.querySelector(`a[href*="member/inbox"][href*="${uuid}"]`) ||
+                     container.querySelector('a[href*="member/inbox"]');
       const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
 
-      // Doc link: "Request documents" / download / file extension
-      const docEl = containerLinks.find(a => {
-        const t = a.textContent.trim().toLowerCase();
-        const h = (a.getAttribute('href') || "").toLowerCase();
-        return /request\s+doc/i.test(t) || /download/i.test(t) ||
-               h.includes('.pdf') || h.includes('.docx') || h.includes('download') || h.includes('document');
-      });
+      // Doc link: /api/v2/document/download or /member/request-documents
+      const docEl = container.querySelector('a[href*="/api/v2/document/download"], a[href*="/member/request-documents"]');
       const doc_link = docEl ? (docEl.getAttribute('href') || "") : "";
 
-      // State/agency: "XX - Agency Name"
-      const txt = container.textContent || "";
-      const saMatch = txt.match(/([A-Z]{2})\s*[-–]\s*([^\n\r\t<|]{3,80})/);
-      const state_agency = saMatch ? `${saMatch[1]} - ${saMatch[2].trim()}` : "";
-      const state = saMatch ? saMatch[1] : "";
-      const agency = saMatch ? saMatch[2].trim() : "";
+      // State/agency: bold element matching "XX - AGENCY NAME"
+      let state = "", agency = "";
+      for (const b of container.querySelectorAll('b, strong')) {
+        const m = b.textContent.trim().match(/^([A-Z]{2})\s*-\s*(.+)$/);
+        if (m) { state = m[1]; agency = m[2].trim(); break; }
+      }
 
-      // Due date
-      const dueDateMatch = txt.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-      const due_date = dueDateMatch ? dueDateMatch[1] : "";
+      // Due date: div with width:90px containing a date
+      let due_date = "";
+      for (const d of container.querySelectorAll('div[style]')) {
+        if (!(d.getAttribute('style') || "").includes('90px')) continue;
+        const m = d.textContent.trim().match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+        if (m) { due_date = m[1]; break; }
+      }
 
-      bids.push({ title, view_link, doc_link, state_agency, state, agency, due_date, alert_date: aDate });
+      bids.push({ id: uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
     }
 
     return bids;
@@ -2592,37 +2591,33 @@ function BidPrimeView() {
   async function upsertBids(parsed) {
     if (!parsed.length) return { saved: 0, duplicates: 0 };
 
+    // Deduplicate within the parsed set by UUID
     let csvDups = 0;
     const seen = new Set();
     const records = [];
     for (const r of parsed) {
-      const key = (r.title||"").toLowerCase() + "||" + (r.agency||"").toLowerCase();
-      if (seen.has(key)) { csvDups++; continue; }
-      seen.add(key);
+      if (!r.id || seen.has(r.id)) { csvDups++; continue; }
+      seen.add(r.id);
       records.push(r);
     }
 
-    const titles = [...new Set(records.map(r => r.title).filter(Boolean))];
-    let existingKeys = new Set();
-    if (titles.length) {
+    // Check existing rows in DB by UUID
+    const ids = records.map(r => r.id).filter(Boolean);
+    let existingIds = new Set();
+    if (ids.length) {
       const { data: existing } = await window._db
         .from("bidprime_bids")
-        .select("title, agency")
-        .in("title", titles);
-      if (existing) {
-        for (const row of existing) {
-          existingKeys.add((row.title||"").toLowerCase() + "||" + (row.agency||"").toLowerCase());
-        }
-      }
+        .select("id")
+        .in("id", ids);
+      if (existing) existing.forEach(row => existingIds.add(row.id));
     }
 
     let dbDups = 0;
     const toInsert = [];
     for (const r of records) {
-      const key = (r.title||"").toLowerCase() + "||" + (r.agency||"").toLowerCase();
-      if (existingKeys.has(key)) { dbDups++; continue; }
+      if (existingIds.has(r.id)) { dbDups++; continue; }
       toInsert.push({
-        id:         btoa(r.title + r.agency).replace(/[^a-z0-9]/gi, '').slice(0, 32),
+        id:         r.id,
         title:      (r.title||"").slice(0, 500),
         state:      (r.state||"").slice(0, 10),
         agency:     (r.agency||"").slice(0, 300),
