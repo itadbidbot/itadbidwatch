@@ -57,6 +57,17 @@ const _db = supabase.createClient(
   "sb_publishable_P_iPFer-s3i8zV8106O_zQ_McYNHXeJ"
 );
 window._db = _db;
+// If Supabase returned an OAuth session via URL hash, parse it now before React mounts
+// so that getSession() inside the React useEffect finds it immediately.
+if (window.location.hash && window.location.hash.includes('access_token')) {
+  _db.auth.getSession().then(function(res) {
+    if (res.data && res.data.session) {
+      // Session stored; strip the hash so the router doesn't misinterpret it
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  });
+}
+
 // Mount immediately; all data loads after auth state is confirmed
 window._bidbotData.ready = true;
 if (window._bidbotData.onReady) window._bidbotData.onReady();
@@ -3442,7 +3453,7 @@ function LoginScreen() {
     try {
       const { error: oauthErr } = await window._db.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.href.split('#')[0] }
+        options: { redirectTo: window.location.origin }
       });
       if (oauthErr) throw oauthErr;
     } catch(e) {
