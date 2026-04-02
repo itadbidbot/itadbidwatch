@@ -203,13 +203,19 @@ function badgeLink(url, label, bg, border, color) {
 function bidUrlCell(url) {
   if (!url) return <span style={{ color:"#4a6080" }}>—</span>;
   const u = url.toLowerCase();
-  if (u.includes("bidnetdirect.com"))  return badgeLink(url, "BidNet",     "rgba(59,130,246,0.15)",  "rgba(59,130,246,0.35)",  "#3b82f6");
-  if (u.includes("bonfirehub.com"))    return badgeLink(url, "Bonfire",    "rgba(249,115,22,0.15)",  "rgba(249,115,22,0.35)",  "#f97316");
-  if (u.includes("govdeals.com"))      return badgeLink(url, "GovDeals",   "rgba(16,185,129,0.15)",  "rgba(16,185,129,0.35)",  "#10b981");
-  if (u.includes("bidprime.com"))      return badgeLink(url, "BidPrime",   "rgba(168,85,247,0.15)",  "rgba(168,85,247,0.35)",  "#a855f7");
-  if (u.includes("demandstar.com"))    return badgeLink(url, "DemandStar", "rgba(20,184,166,0.15)",  "rgba(20,184,166,0.35)",  "#14b8a6");
-  if (u.includes("ionwave.net"))       return badgeLink(url, "IonWave",    "rgba(234,179,8,0.15)",   "rgba(234,179,8,0.35)",   "#eab308");
-  if (u.includes("sam.gov"))           return badgeLink(url, "SAM.gov",    "rgba(198,12,48,0.15)",   "rgba(198,12,48,0.35)",   "#C60C30");
+  if (u.includes("bidnetdirect.com"))              return badgeLink(url, "BidNet",        "rgba(59,130,246,0.15)",  "rgba(59,130,246,0.35)",  "#3b82f6");
+  if (u.includes("bonfirehub.com"))                return badgeLink(url, "Bonfire",       "rgba(249,115,22,0.15)",  "rgba(249,115,22,0.35)",  "#f97316");
+  if (u.includes("govdeals.com"))                  return badgeLink(url, "GovDeals",      "rgba(16,185,129,0.15)",  "rgba(16,185,129,0.35)",  "#10b981");
+  if (u.includes("bidprime.com"))                  return badgeLink(url, "BidPrime",      "rgba(168,85,247,0.15)",  "rgba(168,85,247,0.35)",  "#a855f7");
+  if (u.includes("demandstar.com"))                return badgeLink(url, "DemandStar",    "rgba(20,184,166,0.15)",  "rgba(20,184,166,0.35)",  "#14b8a6");
+  if (u.includes("ionwave.net"))                   return badgeLink(url, "IonWave",       "rgba(234,179,8,0.15)",   "rgba(234,179,8,0.35)",   "#eab308");
+  if (u.includes("sam.gov"))                       return badgeLink(url, "SAM.gov",       "rgba(198,12,48,0.15)",   "rgba(198,12,48,0.35)",   "#C60C30");
+  if (u.includes("planetbids.com"))                return badgeLink(url, "PlanetBids",    "rgba(168,85,247,0.15)",  "rgba(168,85,247,0.35)",  "#a855f7");
+  if (u.includes("publicpurchase.com"))            return badgeLink(url, "PublicPurchase","rgba(20,184,166,0.15)",  "rgba(20,184,166,0.35)",  "#14b8a6");
+  if (u.includes("periscope.com") || u.includes("bids.periscope")) return badgeLink(url, "Periscope", "rgba(234,179,8,0.15)", "rgba(234,179,8,0.35)", "#eab308");
+  if (u.includes("bidsync.com"))                   return badgeLink(url, "BidSync",       "rgba(59,130,246,0.15)",  "rgba(59,130,246,0.35)",  "#3b82f6");
+  if (u.includes("onvia.com"))                     return badgeLink(url, "Onvia",         "rgba(16,185,129,0.15)",  "rgba(16,185,129,0.35)",  "#10b981");
+  if (u.includes("sciquest.com"))                  return badgeLink(url, "SciQuest",      "rgba(249,115,22,0.15)",  "rgba(249,115,22,0.35)",  "#f97316");
   return null; // standard website → show nothing
 }
 
@@ -230,10 +236,10 @@ function docUrlCell(url, onExtract) {
     return badgeLink(url, "DOC", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
   if (u.match(/\.xlsx?(\?|$)/) || u.includes(".xlsx") || u.includes(".xls"))
     return badgeLink(url, "XLS", "rgba(16,185,129,0.15)", "rgba(16,185,129,0.35)", "#10b981");
-  if (u.includes("drive.google.com")) return badgeLink(url, "Drive",   "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
+  if (u.includes("docs.google.com") || u.includes("drive.google.com")) return badgeLink(url, "Google Drive", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
   if (u.includes("box.com"))          return badgeLink(url, "Box",     "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
   if (u.includes("dropbox.com"))      return badgeLink(url, "Dropbox", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
-  return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"none" }}>Link</a>;
+  return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"underline" }}>View</a>;
 }
 
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
@@ -2414,7 +2420,6 @@ function RFPBidsView() {
                     <td style={colStyle} title={row["Due Date"] || ""}>{row["Due Date"] || ""}</td>
                     <td style={colStyle} title={row["Institution"] || ""}>
                       <span>{row["Institution"] || ""}</span>
-                      {docBadge(docUrl || bidDocUrl)}
                     </td>
                     <td style={colStyle} title={bidUrl}>{bidUrlCell(bidUrl)}</td>
                     <td style={colStyle} title={docUrl}>{docUrlCell(docUrl, docUrl ? () => extractContact(row) : null)}</td>
