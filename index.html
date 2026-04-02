@@ -3533,10 +3533,17 @@ function App() {
   const [dataVersion, setDataVersion] = useState(0);
 
   async function _loadAppData(enriched) {
-    if (!window._db || !enriched) return;
+    if (!window._db || !enriched) {
+      console.warn("[loadAppData] aborted — _db:", !!window._db, "enriched:", !!enriched);
+      return;
+    }
     const role = enriched.role || 'user';
     const email = (enriched.email || '').toLowerCase();
     const firstName = email.split('@')[0].split('.')[0];
+
+    // 1. Confirm session is live at query time
+    const { data: { session: activeSession } } = await window._db.auth.getSession();
+    console.log("[loadAppData] user=", email, "role=", role, "activeSession=", !!activeSession, activeSession ? ("uid=" + activeSession.user.id) : "NO SESSION");
 
     let leadsQ = window._db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500);
     if (role !== 'admin' && firstName) leadsQ = leadsQ.or(`assignee.ilike.%${firstName}%,assignee.ilike.%${email}%`);
@@ -3547,6 +3554,14 @@ function App() {
       window._db.from("sources").select("*"),
       window._db.from("scans").select("*").order("started_at",{ascending:false}).limit(30),
     ]);
+
+    // 2. Log leads query result
+    console.log("[loadAppData] leads query — count:", (leadsRes.data||[]).length, "error:", leadsRes.error || null);
+    console.log("[loadAppData] leads date query — latest:", dateRes.data?.[0]?.scan_date || null, "error:", dateRes.error || null);
+
+    // 3. Log sources query result
+    console.log("[loadAppData] sources query — count:", (sourcesRes.data||[]).length, "error:", sourcesRes.error || null);
+    console.log("[loadAppData] scans query  — count:", (scansRes.data||[]).length,   "error:", scansRes.error  || null);
 
     const allLeads = leadsRes.data || [];
     const latestDate = dateRes.data?.[0]?.scan_date || null;
@@ -3567,7 +3582,7 @@ function App() {
     if (allLeads.length) {
       MOCK_HOT_LEADS.length = 0; (window._LIVE_HOT || []).forEach(x => MOCK_HOT_LEADS.push(x));
     }
-    console.log("ITAD Bid Watch: latest=", latestDate, "hot=", (window._LIVE_HOT||[]).length, "leads=", allLeads.length, "sources=", (sourcesRes.data||[]).length);
+    console.log("[loadAppData] done — latest=", latestDate, "hot=", (window._LIVE_HOT||[]).length, "leads=", allLeads.length, "sources=", (sourcesRes.data||[]).length);
     setDataVersion(v => v + 1);
   }
 
