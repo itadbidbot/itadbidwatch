@@ -2622,6 +2622,7 @@ function BidPrimeView() {
       const key = (r.title||"").toLowerCase() + "||" + (r.agency||"").toLowerCase();
       if (existingKeys.has(key)) { dbDups++; continue; }
       toInsert.push({
+        id:         btoa(r.title + r.agency).replace(/[^a-z0-9]/gi, '').slice(0, 32),
         title:      (r.title||"").slice(0, 500),
         state:      (r.state||"").slice(0, 10),
         agency:     (r.agency||"").slice(0, 300),
