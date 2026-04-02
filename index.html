@@ -168,9 +168,28 @@ const FILTER_CATEGORIES = [
   { value:"network_gear", label:"Network Gear", keys:["network","networking","switch","switches","router","access point"] },
 ];
 
+// ─── PLATFORM BADGE ───────────────────────────────────────────────────────────
+function getPlatformBadge(url) {
+  if (!url) return null;
+  const u = url.toLowerCase();
+  let label, bg, border, color;
+  if (u.includes("bidnetdirect.com"))      { label="BidNet";      bg="rgba(59,130,246,0.15)";  border="rgba(59,130,246,0.35)";  color="#3b82f6"; }
+  else if (u.includes("govdeals.com"))     { label="GovDeals";    bg="rgba(16,185,129,0.15)";  border="rgba(16,185,129,0.35)";  color="#10b981"; }
+  else if (u.includes("bonfirehub.com"))   { label="Bonfire";     bg="rgba(249,115,22,0.15)";  border="rgba(249,115,22,0.35)";  color="#f97316"; }
+  else if (u.includes("bidprime.com"))     { label="BidPrime";    bg="rgba(168,85,247,0.15)";  border="rgba(168,85,247,0.35)";  color="#a855f7"; }
+  else if (u.includes("demandstar.com"))   { label="DemandStar";  bg="rgba(20,184,166,0.15)";  border="rgba(20,184,166,0.35)";  color="#14b8a6"; }
+  else if (u.includes("ionwave.net"))      { label="IonWave";     bg="rgba(234,179,8,0.15)";   border="rgba(234,179,8,0.35)";   color="#eab308"; }
+  else if (u.includes("drive.google.com")) { label="Google Drive";bg="rgba(59,130,246,0.15)";  border="rgba(59,130,246,0.35)";  color="#3b82f6"; }
+  else if (u.includes("box.com"))          { label="Box";         bg="rgba(59,130,246,0.15)";  border="rgba(59,130,246,0.35)";  color="#3b82f6"; }
+  else if (u.includes("dropbox.com"))      { label="Dropbox";     bg="rgba(59,130,246,0.15)";  border="rgba(59,130,246,0.35)";  color="#3b82f6"; }
+  else if (u.match(/school|district|k12|\.edu/)) { label="Website"; bg="rgba(148,163,184,0.15)"; border="rgba(148,163,184,0.35)"; color="#94a3b8"; }
+  else                                     { label="Link";        bg="rgba(148,163,184,0.15)"; border="rgba(148,163,184,0.35)"; color="#94a3b8"; }
+  return <span style={{ display:"inline-block", background:bg, border:`1px solid ${border}`, color, fontSize:"9px", fontWeight:700, padding:"1px 5px", borderRadius:"3px", letterSpacing:"0.05em", marginLeft:"4px", verticalAlign:"middle", whiteSpace:"nowrap" }}>{label}</span>;
+}
+
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
 
-function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, onRunScan, scanning, scanProgress, onHamburger }) {
+function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, onRunScan, scanning, scanProgress, onHamburger, currentUser, onSignOut }) {
   return (
     <header style={{
       background:"#002244", borderBottom:"1px solid #003366",
@@ -229,6 +248,26 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
       </div>
 
       <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:"12px" }}>
+        {/* User info */}
+        {currentUser && (
+          <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
+            {currentUser.user_metadata?.avatar_url ? (
+              <img src={currentUser.user_metadata.avatar_url} alt="avatar"
+                style={{ width:"28px", height:"28px", borderRadius:"50%", border:"2px solid #003875", objectFit:"cover" }} />
+            ) : (
+              <div style={{ width:"28px", height:"28px", borderRadius:"50%", background:"#003875", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"12px", fontWeight:700, color:"#B0B7BC" }}>
+                {(currentUser.email || "U")[0].toUpperCase()}
+              </div>
+            )}
+            <span style={{ fontSize:"11px", color:"#B0B7BC", maxWidth:"140px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {currentUser.email}
+            </span>
+            <button onClick={onSignOut} style={{ padding:"4px 10px", borderRadius:"6px", background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", cursor:"pointer", whiteSpace:"nowrap" }}>
+              Sign Out
+            </button>
+          </div>
+        )}
+        <div style={{ width:"1px", height:"20px", background:"#003366" }} />
         {/* Global Scan Now */}
         <button
           onClick={onRunScan}
@@ -259,19 +298,21 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
   );
 }
 
-function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose }) {
-  const nav = [
-    { key:"dashboard", label:"Dashboard", icon:Home },
-    { key:"hot_leads", label:"Daily Hot Leads", icon:Flame },
-    { key:"all_bids", label:"All Bids", icon:List },
-    { key:"sources", label:"Bid Scan Sources", icon:Globe },
-    { key:"keywords", label:"Keywords & Scoring", icon:Key },
-    { key:"history", label:"Scan History", icon:Clock },
-    { key:"rfp_bids",  label:"RFP School Watch", icon:FileText },
-    { key:"bidprime",  label:"BidPrime",         icon:Mail },
-    { key:"samgov",    label:"SAM.gov",          icon:Search },
-    { key:"settings", label:"Settings", icon:Settings },
+function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose, userRole }) {
+  const isAdmin = userRole === 'admin';
+  const allNav = [
+    { key:"dashboard", label:"Dashboard",         icon:Home,     adminOnly:false },
+    { key:"hot_leads", label:"Daily Hot Leads",   icon:Flame,    adminOnly:false },
+    { key:"all_bids",  label:"All Bids",          icon:List,     adminOnly:false },
+    { key:"sources",   label:"Bid Scan Sources",  icon:Globe,    adminOnly:true  },
+    { key:"keywords",  label:"Keywords & Scoring",icon:Key,      adminOnly:true  },
+    { key:"history",   label:"Scan History",      icon:Clock,    adminOnly:true  },
+    { key:"rfp_bids",  label:"RFP School Watch",  icon:FileText, adminOnly:false },
+    { key:"bidprime",  label:"BidPrime",          icon:Mail,     adminOnly:false },
+    { key:"samgov",    label:"SAM.gov",           icon:Search,   adminOnly:false },
+    { key:"settings",  label:"Settings",          icon:Settings, adminOnly:true  },
   ];
+  const nav = allNav.filter(n => isAdmin || !n.adminOnly);
 
   return (
     <>
@@ -472,7 +513,7 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
               <tr key={lead.id} style={{ borderTop:"1px solid #003366", background: i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
                 <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC", maxWidth:"280px" }}>
                   <div style={{ fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
-                  <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.matched_positive || lead.keywords || ""}</div>
+                  <div style={{ fontSize:"11px", color:"#94a3b8", marginTop:"2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.matched_positive || lead.keywords || ""}</div>
                 </td>
                 <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC", whiteSpace:"nowrap" }}>{lead.institution}</td>
                 <td style={{ padding:"12px 16px" }}><span style={{ background:"#003875", color:"#B0B7BC", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
@@ -623,7 +664,7 @@ function HotLeadsView({ stateFilter, allBids=false }) {
                 <td style={{ padding:"12px 16px", maxWidth:"300px" }}>
                   <div style={{ fontSize:"13px", color:"#ffffff", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
                   <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"3px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.memo || lead.source_name || ""}</div>
-                  <div style={{ fontSize:"10px", color:"#003875", marginTop:"2px", fontFamily:"monospace" }}>Keywords: {lead.matched_positive || lead.keywords || ""}</div>
+                  <div style={{ fontSize:"10px", color:"#94a3b8", marginTop:"2px", fontFamily:"monospace" }}>Keywords: {lead.matched_positive || lead.keywords || ""}</div>
                 </td>
                 <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC", whiteSpace:"nowrap" }}>{lead.institution}</td>
                 <td style={{ padding:"12px 16px" }}><span style={{ background:"#003875", color:"#B0B7BC", fontSize:"11px", fontWeight:700, padding:"2px 7px", borderRadius:"4px", fontFamily:"monospace" }}>{lead.state}</span></td>
@@ -634,13 +675,19 @@ function HotLeadsView({ stateFilter, allBids=false }) {
                 </td>
                 <td style={{ padding:"12px 16px" }}>
                   {lead.source_url
-                    ? <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> View</a>
+                    ? <span style={{ display:"flex", alignItems:"center", gap:"4px" }}>
+                        <a href={lead.source_url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> View</a>
+                        {getPlatformBadge(lead.source_url)}
+                      </span>
                     : <span style={{ color:"#003875", fontSize:"12px" }}>—</span>
                   }
                 </td>
                 <td style={{ padding:"12px 16px" }}>
                   {(lead.pdf_url || lead.direct_link)
-                    ? <a href={lead.pdf_url || lead.direct_link} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> Open</a>
+                    ? <span style={{ display:"flex", alignItems:"center", gap:"4px" }}>
+                        <a href={lead.pdf_url || lead.direct_link} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", display:"flex", alignItems:"center", gap:"4px", fontSize:"12px", textDecoration:"none" }}><ExternalLink size={12} /> Open</a>
+                        {getPlatformBadge(lead.pdf_url || lead.direct_link)}
+                      </span>
                     : <span style={{ color:"#003875", fontSize:"12px" }}>—</span>
                   }
                 </td>
@@ -1877,6 +1924,7 @@ function RFPBidsView() {
   // ── Upsert CSV rows to rfp_bids ─────────────────────────────────────────────
   async function upsertRfpRows(parsed, fDate) {
     if (!parsed.length) return { saved: 0, duplicates: 0 };
+    const _orgId = (window._currentUser && window._currentUser.org_id) || '';
     const allRecords = parsed.map(r => ({
       bid_url:        (r["Bid URL"]        || r["bid_url"]        || "").slice(0, 2000),
       title:          (r["Title"]          || r["title"]          || "").slice(0, 500),
@@ -1892,6 +1940,7 @@ function RFPBidsView() {
       market_sectors: (r["Market Sectors"] || r["market_sectors"] || "").slice(0, 500),
       file_date:      fDate || null,
       doc_id:         (r["Doc ID"]         || r["doc_id"]         || "").slice(0, 200),
+      org_id:         _orgId,
     })).filter(r => r.bid_url);
     if (!allRecords.length) return { saved: 0, duplicates: 0 };
 
@@ -1970,11 +2019,10 @@ function RFPBidsView() {
       else console.warn("RFP load: window._db never became available after 5 retries");
       return;
     }
-    const { data, error } = await window._db
-      .from("rfp_bids")
-      .select("*")
-      .order("file_date", { ascending: false })
-      .limit(2000);
+    const _orgId = (window._currentUser && window._currentUser.org_id) || '';
+    let rfpQuery = window._db.from("rfp_bids").select("*").order("file_date", { ascending: false }).limit(2000);
+    if (_orgId) rfpQuery = rfpQuery.eq("org_id", _orgId);
+    const { data, error } = await rfpQuery;
     if (error) { console.error("RFP load error:", error); return; }
     console.log("RFP bids loaded from Supabase:", data ? data.length : 0, "rows");
     if (!data || !data.length) return;
@@ -2317,10 +2365,10 @@ function RFPBidsView() {
                       <span>{row["Institution"] || ""}</span>
                       {docBadge(docUrl || bidDocUrl)}
                     </td>
-                    <td style={colStyle} title={bidUrl}>{bidUrl ? <a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a> : "—"}</td>
+                    <td style={colStyle} title={bidUrl}>{bidUrl ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a>{getPlatformBadge(bidUrl)}</span> : "—"}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }} title={docUrl}>
                       <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
-                        {docUrl ? <a href={docUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a> : <span style={{ color:"#4a6080" }}>—</span>}
+                        {docUrl ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={docUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a>{getPlatformBadge(docUrl)}</span> : <span style={{ color:"#4a6080" }}>—</span>}
                         {isDocUrl(docUrl) && (
                           <button onClick={() => extractContact(row)}
                             style={{ padding:"2px 7px", borderRadius:"4px", background:"#003366", border:"1px solid #C60C30", color:"#B0B7BC", fontSize:"10px", cursor:"pointer", fontWeight:600 }}>
@@ -2329,7 +2377,7 @@ function RFPBidsView() {
                         )}
                       </div>
                     </td>
-                    <td style={colStyle} title={bidDocUrl}>{bidDocUrl ? <a href={bidDocUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Docs →</a> : "—"}</td>
+                    <td style={colStyle} title={bidDocUrl}>{bidDocUrl ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={bidDocUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Docs →</a>{getPlatformBadge(bidDocUrl)}</span> : "—"}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
@@ -2662,6 +2710,7 @@ function BidPrimeView() {
       if (existing) existing.forEach(row => existingIds.add(row.id));
     }
 
+    const _orgId = (window._currentUser && window._currentUser.org_id) || '';
     let dbDups = 0;
     const toInsert = [];
     for (const r of records) {
@@ -2675,6 +2724,7 @@ function BidPrimeView() {
         view_link:  (r.view_link||"").slice(0, 2000),
         doc_link:   (r.doc_link||"").slice(0, 2000),
         alert_date: r.alert_date || null,
+        org_id:     _orgId,
       });
     }
 
@@ -2692,11 +2742,10 @@ function BidPrimeView() {
       if (attempt < 5) setTimeout(() => loadAllRows(attempt + 1), 1000);
       return;
     }
-    const { data, error } = await window._db
-      .from("bidprime_bids")
-      .select("*")
-      .order("alert_date", { ascending: false })
-      .limit(2000);
+    const _orgId = (window._currentUser && window._currentUser.org_id) || '';
+    let bpQuery = window._db.from("bidprime_bids").select("*").order("alert_date", { ascending: false }).limit(2000);
+    if (_orgId) bpQuery = bpQuery.eq("org_id", _orgId);
+    const { data, error } = await bpQuery;
     if (error) { console.error("BidPrime load error:", error); return; }
     if (!data || !data.length) return;
     setRows(data.map((r, i) => ({
@@ -2925,8 +2974,8 @@ function BidPrimeView() {
                     <td style={colStyle}>{row.State}</td>
                     <td style={colStyle} title={row.Agency}>{row.Agency}</td>
                     <td style={colStyle}>{row["Due Date"]}</td>
-                    <td style={colStyle}>{row["View Link"] ? <a href={row["View Link"]} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a> : "—"}</td>
-                    <td style={colStyle}>{row["Doc Link"] ? <a href={row["Doc Link"]} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a> : "—"}</td>
+                    <td style={colStyle}>{row["View Link"] ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={row["View Link"]} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a>{getPlatformBadge(row["View Link"])}</span> : "—"}</td>
+                    <td style={colStyle}>{row["Doc Link"] ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={row["Doc Link"]} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a>{getPlatformBadge(row["Doc Link"])}</span> : "—"}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
@@ -3029,11 +3078,10 @@ function SamGovView() {
       if (attempt < 5) setTimeout(() => loadRows(attempt + 1), 1000);
       return;
     }
-    const { data, error } = await window._db
-      .from("sam_gov_bids")
-      .select("*")
-      .order("posted_date", { ascending: false })
-      .limit(2000);
+    const _orgId = (window._currentUser && window._currentUser.org_id) || '';
+    let samQuery = window._db.from("sam_gov_bids").select("*").order("posted_date", { ascending: false }).limit(2000);
+    if (_orgId) samQuery = samQuery.eq("org_id", _orgId);
+    const { data, error } = await samQuery;
     if (error) { console.error("SAM.gov load error:", error); return; }
     if (!data || !data.length) return;
     setRows(data.map((r, i) => ({
@@ -3104,6 +3152,7 @@ function SamGovView() {
       setFetchMsg(`Got ${opps.length} results — saving…`);
       if (!opps.length) { showToast("No results returned", "#C60C30"); setFetching(false); return; }
 
+      const _orgId = (window._currentUser && window._currentUser.org_id) || '';
       const records = opps.map(o => ({
         notice_id:          (o.noticeId || o.solicitationNumber || o.id || "").slice(0, 200),
         title:              (o.title || "").slice(0, 500),
@@ -3112,6 +3161,7 @@ function SamGovView() {
         response_deadline:  (o.responseDeadLine || o.archiveDate || "").slice(0, 30),
         department:         (o.fullParentPathName || o.departmentName || o.organizationName || "").slice(0, 500),
         link:               (o.uiLink || "").slice(0, 2000),
+        org_id:             _orgId,
       })).filter(r => r.notice_id);
 
       const { error: upsertErr } = await window._db.from("sam_gov_bids").upsert(records, { onConflict: "notice_id" });
@@ -3296,7 +3346,7 @@ function SamGovView() {
                     <td style={colStyle} title={row["Due Date"]}>{(row["Due Date"] || "").slice(0,10)}</td>
                     <td style={colStyle} title={row["Institution"]}>{row["Institution"]}</td>
                     <td style={colStyle}><span style={{ background:"rgba(198,12,48,0.15)", border:"1px solid rgba(198,12,48,0.35)", color:"#B0B7BC", fontSize:"10px", fontWeight:700, padding:"2px 6px", borderRadius:"4px" }}>Federal</span></td>
-                    <td style={colStyle}>{link ? <a href={link} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a> : "—"}</td>
+                    <td style={colStyle}>{link ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={link} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a>{getPlatformBadge(link)}</span> : "—"}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
@@ -3393,6 +3443,71 @@ function SamGovView() {
   );
 }
 
+// ─── LOGIN SCREEN ─────────────────────────────────────────────────────────────
+function LoginScreen() {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleGoogleLogin() {
+    setLoading(true);
+    setError("");
+    try {
+      const { error: oauthErr } = await window._db.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: window.location.href.split('#')[0] }
+      });
+      if (oauthErr) throw oauthErr;
+    } catch(e) {
+      setError(e.message || "Login failed. Please try again.");
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"#001a33", display:"flex", alignItems:"center", justifyContent:"center", zIndex:99999 }}>
+      <div style={{ background:"#002244", border:"1px solid #003366", borderRadius:"20px", padding:"48px 40px", width:"400px", maxWidth:"95vw", textAlign:"center" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:"12px", marginBottom:"32px" }}>
+          <div style={{ width:"44px", height:"44px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", borderRadius:"12px", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Zap size={24} color="#fff" />
+          </div>
+          <div style={{ textAlign:"left" }}>
+            <div style={{ fontFamily:"'Courier New',monospace", fontWeight:700, fontSize:"18px", color:"#ffffff", letterSpacing:"0.05em" }}>ITAD</div>
+            <div style={{ fontFamily:"'Courier New',monospace", fontSize:"11px", color:"#C60C30", letterSpacing:"0.2em" }}>BID WATCH™</div>
+          </div>
+        </div>
+        <h2 style={{ color:"#ffffff", fontSize:"20px", fontWeight:700, marginBottom:"8px" }}>Sign In</h2>
+        <p style={{ color:"#B0B7BC", fontSize:"13px", marginBottom:"32px", lineHeight:"1.5" }}>Sign in with your Google account to access the bid intelligence platform.</p>
+        {error && (
+          <div style={{ background:"rgba(198,12,48,0.1)", border:"1px solid rgba(198,12,48,0.3)", borderRadius:"8px", padding:"10px 14px", color:"#ff8080", fontSize:"12px", marginBottom:"16px", textAlign:"left" }}>
+            {error}
+          </div>
+        )}
+        <button onClick={handleGoogleLogin} disabled={loading} style={{
+          width:"100%", padding:"14px 20px", borderRadius:"12px",
+          background: loading ? "#003366" : "#ffffff",
+          border: loading ? "1px solid #003875" : "none",
+          color: loading ? "#B0B7BC" : "#1a1a1a",
+          fontSize:"14px", fontWeight:700, cursor: loading ? "not-allowed" : "pointer",
+          display:"flex", alignItems:"center", justifyContent:"center", gap:"12px",
+          transition:"all 0.2s", boxShadow: loading ? "none" : "0 4px 20px rgba(255,255,255,0.15)"
+        }}>
+          {loading ? (
+            <><RefreshCw size={16} style={{ animation:"spin 1s linear infinite" }} /> Redirecting…</>
+          ) : (
+            <>
+              <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"/><path fill="#34A853" d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z"/><path fill="#FBBC05" d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z"/><path fill="#EA4335" d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z"/></svg>
+              Sign in with Google
+            </>
+          )}
+        </button>
+        <p style={{ color:"#4a6080", fontSize:"11px", marginTop:"20px" }}>
+          Access is restricted to authorized users only.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─── APP ROOT ──────────────────────────────────────────────────────────────────
 function App() {
   const [page, setPage] = useState(() => {
@@ -3405,6 +3520,68 @@ function App() {
   const [scanning, setScanning] = useState(false);
   const [toast, setToast] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // ── AUTH ────────────────────────────────────────────────────────────────────
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userRole, setUserRole] = useState('user');
+  const [authLoading, setAuthLoading] = useState(true);
+
+  async function resolveProfile(session) {
+    if (!session || !session.user) {
+      window._currentUser = null;
+      setCurrentUser(null);
+      setUserRole('user');
+      setAuthLoading(false);
+      return;
+    }
+    const user = session.user;
+    const emailDomain = (user.email || '').split('@')[1] || 'unknown';
+    try {
+      const { data: profile } = await window._db
+        .from('profiles')
+        .select('role, org_id')
+        .eq('id', user.id)
+        .single();
+      let role = 'user';
+      let org_id = emailDomain;
+      if (!profile) {
+        await window._db.from('profiles').insert({ id: user.id, email: user.email, role: 'user', org_id: emailDomain });
+      } else {
+        role = profile.role || 'user';
+        org_id = profile.org_id || emailDomain;
+      }
+      const enriched = { ...user, role, org_id };
+      window._currentUser = enriched;
+      setCurrentUser(enriched);
+      setUserRole(role);
+    } catch(e) {
+      // Fallback: still let user in with basic info
+      const enriched = { ...user, role: 'user', org_id: emailDomain };
+      window._currentUser = enriched;
+      setCurrentUser(enriched);
+      setUserRole('user');
+    }
+    setAuthLoading(false);
+  }
+
+  React.useEffect(() => {
+    // Check existing session on mount
+    window._db.auth.getSession().then(({ data: { session } }) => {
+      resolveProfile(session);
+    });
+    // Listen for auth state changes
+    const { data: { subscription } } = window._db.auth.onAuthStateChange((_event, session) => {
+      resolveProfile(session);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  async function handleSignOut() {
+    await window._db.auth.signOut();
+    window._currentUser = null;
+    setCurrentUser(null);
+    setUserRole('user');
+  }
 
   React.useEffect(() => { window._bidbotSetPage = setPage; }, []);
 
@@ -3548,6 +3725,19 @@ function App() {
     }
   };
 
+  // Auth guard
+  if (authLoading) {
+    return (
+      <div style={{ position:"fixed", inset:0, background:"#001a33", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"16px" }}>
+          <RefreshCw size={32} color="#C60C30" style={{ animation:"spin 1s linear infinite" }} />
+          <span style={{ color:"#B0B7BC", fontSize:"14px" }}>Loading…</span>
+        </div>
+      </div>
+    );
+  }
+  if (!currentUser) return <LoginScreen />;
+
   return (
     <div style={{
       display:"flex", flexDirection:"column", height:"100vh", width:"100%",
@@ -3564,10 +3754,10 @@ function App() {
         select option { background: #003366; color: #ffffff; }
       `}</style>
 
-      <TopBar stateFilter={stateFilter} setStateFilter={setStateFilter} entityFilter={entityFilter} setEntityFilter={setEntityFilter} onRunScan={runScan} scanning={scanning} scanProgress={scanProgress} onHamburger={() => setSidebarOpen(true)} />
+      <TopBar stateFilter={stateFilter} setStateFilter={setStateFilter} entityFilter={entityFilter} setEntityFilter={setEntityFilter} onRunScan={runScan} scanning={scanning} scanProgress={scanProgress} onHamburger={() => setSidebarOpen(true)} currentUser={currentUser} onSignOut={handleSignOut} />
 
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
-        <Sidebar active={page} setActive={(p) => { setPage(p); setSidebarOpen(false); }} onRunScan={runScan} scanning={scanning} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        <Sidebar active={page} setActive={(p) => { setPage(p); setSidebarOpen(false); }} onRunScan={runScan} scanning={scanning} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} userRole={userRole} />
 
         <main style={{ flex:1, display:"flex", overflow:"hidden", background:"#001a33" }}>
           {page==="dashboard"  && <DashboardView onNavigate={setPage} onRunScan={runScan} scanning={scanning} />}
