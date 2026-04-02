@@ -2021,7 +2021,8 @@ function RFPBidsView() {
     }
     const _orgId = (window._currentUser && window._currentUser.org_id) || '';
     let rfpQuery = window._db.from("rfp_bids").select("*").order("file_date", { ascending: false }).limit(2000);
-    if (_orgId) rfpQuery = rfpQuery.eq("org_id", _orgId);
+    if (_orgId) rfpQuery = rfpQuery.or(`org_id.eq.${_orgId},org_id.is.null`);
+    else rfpQuery = rfpQuery.is("org_id", null);
     const { data, error } = await rfpQuery;
     if (error) { console.error("RFP load error:", error); return; }
     console.log("RFP bids loaded from Supabase:", data ? data.length : 0, "rows");
@@ -2744,7 +2745,8 @@ function BidPrimeView() {
     }
     const _orgId = (window._currentUser && window._currentUser.org_id) || '';
     let bpQuery = window._db.from("bidprime_bids").select("*").order("alert_date", { ascending: false }).limit(2000);
-    if (_orgId) bpQuery = bpQuery.eq("org_id", _orgId);
+    if (_orgId) bpQuery = bpQuery.or(`org_id.eq.${_orgId},org_id.is.null`);
+    else bpQuery = bpQuery.is("org_id", null);
     const { data, error } = await bpQuery;
     if (error) { console.error("BidPrime load error:", error); return; }
     if (!data || !data.length) return;
@@ -3080,7 +3082,8 @@ function SamGovView() {
     }
     const _orgId = (window._currentUser && window._currentUser.org_id) || '';
     let samQuery = window._db.from("sam_gov_bids").select("*").order("posted_date", { ascending: false }).limit(2000);
-    if (_orgId) samQuery = samQuery.eq("org_id", _orgId);
+    if (_orgId) samQuery = samQuery.or(`org_id.eq.${_orgId},org_id.is.null`);
+    else samQuery = samQuery.is("org_id", null);
     const { data, error } = await samQuery;
     if (error) { console.error("SAM.gov load error:", error); return; }
     if (!data || !data.length) return;
