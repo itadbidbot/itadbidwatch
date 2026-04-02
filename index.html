@@ -57,27 +57,9 @@ const _db = supabase.createClient(
   "sb_publishable_P_iPFer-s3i8zV8106O_zQ_McYNHXeJ"
 );
 window._db = _db;
-Promise.all([
-  _db.from("leads").select("scan_date").order("scan_date",{ascending:false}).limit(1),
-  _db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500),
-  _db.from("sources").select("*"),
-  _db.from("scans").select("*").order("started_at",{ascending:false}).limit(30)
-]).then(function(r) {
-  var allLeads = r[1].data;
-  var latestDate = r[0].data && r[0].data.length ? r[0].data[0].scan_date : null;
-  if (latestDate && allLeads) {
-    window._LIVE_HOT = allLeads.filter(function(l){ return l.scan_date === latestDate && l.tier === "HOT"; });
-    window._LATEST_SCAN_DATE = latestDate;
-  }
-  if (allLeads && allLeads.length)   window._LIVE_LEADS   = allLeads;
-  if (r[2].data && r[2].data.length) window._LIVE_SOURCES = r[2].data;
-  if (r[3].data && r[3].data.length) window._LIVE_SCANS   = r[3].data;
-  console.log("ITAD Bid Watch: latest=", latestDate, "hot=", (window._LIVE_HOT||[]).length);
-}).catch(function(e){ console.warn("Supabase error", e); })
-.finally(function(){
-  window._bidbotData.ready = true;
-  if (window._bidbotData.onReady) window._bidbotData.onReady();
-});
+// Mount immediately; all data loads after auth state is confirmed
+window._bidbotData.ready = true;
+if (window._bidbotData.onReady) window._bidbotData.onReady();
 </script>
 </head>
 <body>
@@ -3531,18 +3513,45 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [userRole, setUserRole] = useState('user');
   const [authLoading, setAuthLoading] = useState(true);
+  const [dataVersion, setDataVersion] = useState(0);
 
-  function _applyLeadsRoleFilter(enriched) {
-    if (!enriched || enriched.role === 'admin') return; // admin sees all
-    const firstName = (enriched.email || '').split('@')[0].split('.')[0].toLowerCase();
+  async function _loadAppData(enriched) {
+    if (!window._db || !enriched) return;
+    const role = enriched.role || 'user';
     const email = (enriched.email || '').toLowerCase();
-    const match = arr => (arr || []).filter(l => {
-      const a = (l.assignee || '').toLowerCase();
-      return a.includes(firstName) || a.includes(email);
-    });
-    window._LIVE_LEADS = match(window._LIVE_LEADS);
-    window._LIVE_HOT   = match(window._LIVE_HOT);
-    window._ALL_LEADS  = match(window._ALL_LEADS);
+    const firstName = email.split('@')[0].split('.')[0];
+
+    let leadsQ = window._db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500);
+    if (role !== 'admin' && firstName) leadsQ = leadsQ.or(`assignee.ilike.%${firstName}%,assignee.ilike.%${email}%`);
+
+    const [dateRes, leadsRes, sourcesRes, scansRes] = await Promise.all([
+      window._db.from("leads").select("scan_date").order("scan_date",{ascending:false}).limit(1),
+      leadsQ,
+      window._db.from("sources").select("*"),
+      window._db.from("scans").select("*").order("started_at",{ascending:false}).limit(30),
+    ]);
+
+    const allLeads = leadsRes.data || [];
+    const latestDate = dateRes.data?.[0]?.scan_date || null;
+    if (latestDate && allLeads.length) {
+      window._LIVE_HOT = allLeads.filter(l => l.scan_date === latestDate && l.tier === "HOT");
+      window._LATEST_SCAN_DATE = latestDate;
+    }
+    window._LIVE_LEADS = allLeads;
+    window._ALL_LEADS  = allLeads;
+    if (sourcesRes.data?.length) {
+      window._LIVE_SOURCES = sourcesRes.data;
+      MOCK_SOURCES.length = 0; sourcesRes.data.forEach(x => MOCK_SOURCES.push(x));
+    }
+    if (scansRes.data?.length) {
+      window._LIVE_SCANS = scansRes.data;
+      MOCK_SCAN_HISTORY.length = 0; scansRes.data.forEach(x => MOCK_SCAN_HISTORY.push(x));
+    }
+    if (allLeads.length) {
+      MOCK_HOT_LEADS.length = 0; (window._LIVE_HOT || []).forEach(x => MOCK_HOT_LEADS.push(x));
+    }
+    console.log("ITAD Bid Watch: latest=", latestDate, "hot=", (window._LIVE_HOT||[]).length, "leads=", allLeads.length, "sources=", (sourcesRes.data||[]).length);
+    setDataVersion(v => v + 1);
   }
 
   async function resolveProfile(session) {
@@ -3575,7 +3584,7 @@ function App() {
       window._currentUser = enriched;
       setCurrentUser(enriched);
       setUserRole(role);
-      _applyLeadsRoleFilter(enriched);
+      _loadAppData(enriched);
     } catch(e) {
       // Fallback: still let user in with basic info
       const fallbackRole = user.email === 'itadbidbot@gmail.com' ? 'admin' : 'user';
@@ -3583,7 +3592,7 @@ function App() {
       window._currentUser = enriched;
       setCurrentUser(enriched);
       setUserRole(fallbackRole);
-      _applyLeadsRoleFilter(enriched);
+      _loadAppData(enriched);
     }
     setAuthLoading(false);
   }
@@ -3608,6 +3617,7 @@ function App() {
   }
 
   React.useEffect(() => { window._bidbotSetPage = setPage; }, []);
+  React.useEffect(() => { window._bidbotRefresh = () => setDataVersion(v => v + 1); }, []);
 
   // Sync page to URL hash so refresh stays on same page
   React.useEffect(() => { window.location.hash = page; }, [page]);
@@ -3729,25 +3739,9 @@ function App() {
     setScanProgress(0);
     setScanStatus("");
     // Reload live data from Supabase
-    if (window._db) {
-      Promise.all([
-        window._db.from("leads").select("scan_date").order("scan_date",{ascending:false}).limit(1),
-        window._db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500),
-        window._db.from("scans").select("*").order("started_at",{ascending:false}).limit(30)
-      ]).then(([dateRes, leadsRes, scansRes]) => {
-        const latestDate = dateRes.data?.[0]?.scan_date || null;
-        if (latestDate && leadsRes.data) {
-          window._LIVE_HOT = leadsRes.data.filter(l => l.scan_date === latestDate && l.tier === "HOT");
-          window._LATEST_SCAN_DATE = latestDate;
-          window._LIVE_LEADS = leadsRes.data;
-          window._ALL_LEADS = leadsRes.data;
-          _applyLeadsRoleFilter(window._currentUser);
-        }
-        if (scansRes.data) window._LIVE_SCANS = scansRes.data;
-        // Force re-render
-        window._bidbotSetPage && window._bidbotSetPage("dashboard");
-      });
-    }
+    _loadAppData(window._currentUser).then(() => {
+      window._bidbotSetPage && window._bidbotSetPage("dashboard");
+    });
   };
 
   // Auth guard
