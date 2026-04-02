@@ -219,9 +219,17 @@ function bidUrlCell(url) {
   return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"underline" }}>View</a>;
 }
 
+// Availability indicator for Box links: true=✓ false=✕ null=?
+function docAvailBadge(docAvailable) {
+  if (docAvailable === true)  return <span title="Document available"    style={{ color:"#10b981", fontWeight:700, fontSize:"11px", marginLeft:"3px" }}>✓</span>;
+  if (docAvailable === false) return <span title="Document unavailable"  style={{ color:"#C60C30", fontWeight:700, fontSize:"11px", marginLeft:"3px" }}>✕</span>;
+  return                             <span title="Availability unknown"  style={{ color:"#4a6080", fontWeight:700, fontSize:"11px", marginLeft:"3px" }}>?</span>;
+}
+
 // DOC URL / BID DOC cell — file type badges + platform badges
 // Pass onExtract to get a "→" arrow on PDFs that triggers contact extraction
-function docUrlCell(url, onExtract) {
+// Pass docAvailable (true/false/null) to show availability indicator on Box links
+function docUrlCell(url, onExtract, docAvailable) {
   if (!url) return <span style={{ color:"#4a6080" }}>—</span>;
   const u = url.toLowerCase();
   if (u.includes(".pdf")) {
@@ -237,7 +245,7 @@ function docUrlCell(url, onExtract) {
   if (u.match(/\.xlsx?(\?|$)/) || u.includes(".xlsx") || u.includes(".xls"))
     return badgeLink(url, "XLS", "rgba(16,185,129,0.15)", "rgba(16,185,129,0.35)", "#10b981");
   if (u.includes("docs.google.com") || u.includes("drive.google.com")) return badgeLink(url, "Google Drive", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
-  if (u.includes("box.com"))          return badgeLink(url, "Box",     "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
+  if (u.includes("box.com"))          return <span style={{ display:"inline-flex", alignItems:"center" }}>{badgeLink(url, "Box", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6")}{docAvailBadge(docAvailable)}</span>;
   if (u.includes("dropbox.com"))      return badgeLink(url, "Dropbox", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
   return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"underline" }}>View</a>;
 }
@@ -2095,6 +2103,7 @@ function RFPBidsView() {
       "Bid URL":        r.bid_url        || "",
       "Doc URL":        r.document_url   || "",
       "Bid Documents":  r.bid_documents  || "",
+      _doc_available:   r.doc_available  ?? null,
       "Publish Date":   r.publish_date   || "",
       "Pre-bid Date":   r.pre_bid_date   || "",
       "Due Date":       r.due_date       || "",
@@ -2423,7 +2432,7 @@ function RFPBidsView() {
                     </td>
                     <td style={colStyle} title={bidUrl}>{bidUrlCell(bidUrl)}</td>
                     <td style={colStyle} title={docUrl}>{docUrlCell(docUrl, docUrl ? () => extractContact(row) : null)}</td>
-                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null)}</td>
+                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null, row._doc_available)}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
