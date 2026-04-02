@@ -216,7 +216,7 @@ function bidUrlCell(url) {
   if (u.includes("bidsync.com"))                   return badgeLink(url, "BidSync",       "rgba(59,130,246,0.15)",  "rgba(59,130,246,0.35)",  "#3b82f6");
   if (u.includes("onvia.com"))                     return badgeLink(url, "Onvia",         "rgba(16,185,129,0.15)",  "rgba(16,185,129,0.35)",  "#10b981");
   if (u.includes("sciquest.com"))                  return badgeLink(url, "SciQuest",      "rgba(249,115,22,0.15)",  "rgba(249,115,22,0.35)",  "#f97316");
-  return null; // standard website → show nothing
+  return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"underline" }}>View</a>;
 }
 
 // DOC URL / BID DOC cell — file type badges + platform badges
