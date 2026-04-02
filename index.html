@@ -2518,21 +2518,18 @@ function BidPrimeView() {
 
   // ── Extract bids from HTML ─────────────────────────────────────────────────
   function extractBids(html, aDate) {
-    console.log("[BidPrime] extractBids: html length:", html.length, "| first 400:", html.slice(0, 400));
+    console.log("[BidPrime] extractBids: html length:", html.length);
 
-    // Find UUID comment positions in the raw HTML string — DOMParser may strip comments
+    // Find UUID comment positions in the raw HTML string (DOMParser strips comments)
     const commentRe = /<!--\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*-->/gi;
     const positions = [];
     let cm;
     while ((cm = commentRe.exec(html)) !== null) {
       positions.push({ uuid: cm[1], index: cm.index });
     }
-    console.log("[BidPrime] UUID comments found in raw HTML:", positions.length,
-      positions.slice(0, 3).map(p => p.uuid));
-
+    console.log("[BidPrime] UUID comments found:", positions.length, positions.slice(0, 3).map(p => p.uuid));
     if (!positions.length) {
-      // Log a broader sample so we can see what's actually in the HTML
-      console.warn("[BidPrime] No UUID comments found. HTML sample (0-1000):", html.slice(0, 1000));
+      console.warn("[BidPrime] No UUIDs. HTML sample:", html.slice(0, 1000));
       return [];
     }
 
@@ -2541,70 +2538,68 @@ function BidPrimeView() {
 
     for (let i = 0; i < positions.length; i++) {
       const { uuid, index } = positions[i];
+      // Include up to the next comment or end of HTML — capture all 3 sibling divs
       const nextIndex = i < positions.length - 1 ? positions[i + 1].index : html.length;
       const blockHtml = html.slice(index, nextIndex);
 
-      // Wrap in a table cell so the block parses with its intended structure
-      const blockDoc = parser.parseFromString(
-        `<table><tbody><tr><td>${blockHtml}</td></tr></tbody></table>`, "text/html"
-      );
-      const container = blockDoc.body.querySelector('td');
-      if (!container) continue;
+      // Parse into a div wrapper — siblings land as direct children
+      const blockDoc = parser.parseFromString(`<div>${blockHtml}</div>`, "text/html");
+      const wrapper = blockDoc.body.firstElementChild;
+      if (!wrapper) continue;
 
+      // The three sibling divs (comment is stripped by DOMParser, divs remain)
+      const divs = Array.from(wrapper.children);
       const isFirst = i === 0;
       if (isFirst) {
-        console.log("[BidPrime] First block raw HTML (600):", blockHtml.slice(0, 600));
-        console.log("[BidPrime] All links:", Array.from(container.querySelectorAll('a[href]')).map(a => ({
-          text: a.textContent.trim().slice(0, 60), href: (a.getAttribute('href') || "").slice(0, 100)
-        })));
-        console.log("[BidPrime] Bold/strong:", Array.from(container.querySelectorAll('b,strong')).map(b => b.textContent.trim()));
-        console.log("[BidPrime] Styled divs:", Array.from(container.querySelectorAll('div[style]')).slice(0, 10).map(d => ({
-          style: d.getAttribute('style'), text: d.textContent.trim().slice(0, 60)
-        })));
-        console.log("[BidPrime] Full text:", container.textContent.trim().slice(0, 400));
+        console.log("[BidPrime] Block child count:", divs.length);
+        divs.forEach((d, idx) => console.log(`[BidPrime] div[${idx}] HTML:`, d.outerHTML.slice(0, 300)));
       }
 
-      // Title: anchor to /api/v1/member/link
-      const titleEl = container.querySelector('a[href*="/api/v1/member/link"]');
+      // div0: title + view link
+      const div0 = divs[0];
+      if (!div0) continue;
+      const titleEl = div0.querySelector('a[href*="/api/v1/member/link"]');
       const title = titleEl ? titleEl.textContent.trim() : "";
-      if (!title) { if (isFirst) console.log("[BidPrime] No title found for first block"); continue; }
-
-      // View link: anchor containing member/inbox
-      const viewEl = container.querySelector('a[href*="member/inbox"]');
+      if (!title) { if (isFirst) console.log("[BidPrime] No title in div0"); continue; }
+      const viewEl = div0.querySelector('a[href*="member/inbox"]');
       const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
 
-      // Doc link: try specific patterns first, then broader fallbacks
-      const docEl = container.querySelector('a[href*="/api/v2/document/download"]') ||
-                    container.querySelector('a[href*="request-documents"]') ||
-                    container.querySelector('a[href*="document"]');
-      const doc_link = docEl ? (docEl.getAttribute('href') || "") : "";
-
-      // State/agency: bold/strong element matching "XX - ..."
-      let state = "", agency = "";
-      for (const b of container.querySelectorAll('b, strong')) {
-        const m = b.textContent.trim().match(/^([A-Z]{2})\s*-\s*(.+)$/);
-        if (m) { state = m[1]; agency = m[2].trim(); break; }
-      }
-      // Fallback: regex on full text content
-      if (!state) {
-        const m = (container.textContent || "").match(/\b([A-Z]{2})\s+-\s+([A-Z][A-Z\s,./]+)/);
-        if (m) { state = m[1]; agency = m[2].trim(); }
-      }
-
-      // Due date: div with width:90px
-      let due_date = "";
-      for (const d of container.querySelectorAll('div[style]')) {
-        if (!(d.getAttribute('style') || "").includes('90px')) continue;
-        const m = d.textContent.trim().match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-        if (m) { due_date = m[1]; break; }
-      }
-      // Fallback: any date in container
-      if (!due_date) {
-        const m = (container.textContent || "").match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-        if (m) due_date = m[1];
+      // div1: state/agency + due date
+      const div1 = div0.nextElementSibling;
+      let state = "", agency = "", due_date = "";
+      if (div1) {
+        for (const b of div1.querySelectorAll('b, strong')) {
+          const m = b.textContent.trim().match(/^([A-Z]{2})\s*-\s*(.+)$/);
+          if (m) { state = m[1]; agency = m[2].trim(); break; }
+        }
+        if (!state) {
+          const m = div1.textContent.match(/\b([A-Z]{2})\s+-\s+([A-Z][A-Z\s,./]+)/);
+          if (m) { state = m[1]; agency = m[2].trim(); }
+        }
+        for (const d of div1.querySelectorAll('div[style]')) {
+          if (!(d.getAttribute('style') || "").includes('90px')) continue;
+          const m = d.textContent.trim().match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+          if (m) { due_date = m[1]; break; }
+        }
+        if (!due_date) {
+          const m = div1.textContent.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+          if (m) due_date = m[1];
+        }
+        if (isFirst) console.log("[BidPrime] div1 text:", div1.textContent.trim().slice(0, 200));
       }
 
-      if (isFirst) console.log("[BidPrime] Extracted first bid:", { uuid, title, state, agency, due_date, view_link, doc_link });
+      // div2: doc link
+      const div2 = div1 ? div1.nextElementSibling : null;
+      let doc_link = "";
+      if (div2) {
+        const docEl = div2.querySelector('a[href*="/api/v2/document/download"]') ||
+                      div2.querySelector('a[href*="request-documents"]') ||
+                      div2.querySelector('a[href*="document"]');
+        doc_link = docEl ? (docEl.getAttribute('href') || "") : "";
+        if (isFirst) console.log("[BidPrime] div2 links:", Array.from(div2.querySelectorAll('a[href]')).map(a => a.getAttribute('href')));
+      }
+
+      if (isFirst) console.log("[BidPrime] Extracted:", { uuid, title, state, agency, due_date, view_link, doc_link });
 
       bids.push({ id: uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
     }
