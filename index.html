@@ -190,6 +190,52 @@ function getPlatformBadge(url) {
   return <span style={{ display:"inline-block", background:bg, border:`1px solid ${border}`, color, fontSize:"9px", fontWeight:700, padding:"1px 5px", borderRadius:"3px", letterSpacing:"0.05em", marginLeft:"4px", verticalAlign:"middle", whiteSpace:"nowrap" }}>{label}</span>;
 }
 
+// ─── LINK BADGE HELPERS ───────────────────────────────────────────────────────
+function badgeLink(url, label, bg, border, color) {
+  return (
+    <a href={url} target="_blank" rel="noreferrer" style={{ textDecoration:"none" }}>
+      <span style={{ display:"inline-block", background:bg, border:`1px solid ${border}`, color, fontSize:"9px", fontWeight:700, padding:"1px 5px", borderRadius:"3px", letterSpacing:"0.05em", verticalAlign:"middle", whiteSpace:"nowrap" }}>{label}</span>
+    </a>
+  );
+}
+
+// BID URL cell — known platforms get a badge link; generic URLs show nothing
+function bidUrlCell(url) {
+  if (!url) return <span style={{ color:"#4a6080" }}>—</span>;
+  const u = url.toLowerCase();
+  if (u.includes("bidnetdirect.com"))  return badgeLink(url, "BidNet",     "rgba(59,130,246,0.15)",  "rgba(59,130,246,0.35)",  "#3b82f6");
+  if (u.includes("bonfirehub.com"))    return badgeLink(url, "Bonfire",    "rgba(249,115,22,0.15)",  "rgba(249,115,22,0.35)",  "#f97316");
+  if (u.includes("govdeals.com"))      return badgeLink(url, "GovDeals",   "rgba(16,185,129,0.15)",  "rgba(16,185,129,0.35)",  "#10b981");
+  if (u.includes("bidprime.com"))      return badgeLink(url, "BidPrime",   "rgba(168,85,247,0.15)",  "rgba(168,85,247,0.35)",  "#a855f7");
+  if (u.includes("demandstar.com"))    return badgeLink(url, "DemandStar", "rgba(20,184,166,0.15)",  "rgba(20,184,166,0.35)",  "#14b8a6");
+  if (u.includes("ionwave.net"))       return badgeLink(url, "IonWave",    "rgba(234,179,8,0.15)",   "rgba(234,179,8,0.35)",   "#eab308");
+  if (u.includes("sam.gov"))           return badgeLink(url, "SAM.gov",    "rgba(198,12,48,0.15)",   "rgba(198,12,48,0.35)",   "#C60C30");
+  return null; // standard website → show nothing
+}
+
+// DOC URL / BID DOC cell — file type badges + platform badges
+// Pass onExtract to get a "→" arrow on PDFs that triggers contact extraction
+function docUrlCell(url, onExtract) {
+  if (!url) return <span style={{ color:"#4a6080" }}>—</span>;
+  const u = url.toLowerCase();
+  if (u.includes(".pdf")) {
+    return (
+      <span style={{ display:"inline-flex", alignItems:"center", gap:"4px" }}>
+        {badgeLink(url, "PDF", "rgba(249,115,22,0.15)", "rgba(249,115,22,0.35)", "#f97316")}
+        {onExtract && <span onClick={onExtract} title="Extract contacts" style={{ cursor:"pointer", color:"#f97316", fontSize:"12px", fontWeight:700, lineHeight:1 }}>→</span>}
+      </span>
+    );
+  }
+  if (u.match(/\.docx?(\?|$)/) || u.includes(".docx") || u.includes(".doc"))
+    return badgeLink(url, "DOC", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
+  if (u.match(/\.xlsx?(\?|$)/) || u.includes(".xlsx") || u.includes(".xls"))
+    return badgeLink(url, "XLS", "rgba(16,185,129,0.15)", "rgba(16,185,129,0.35)", "#10b981");
+  if (u.includes("drive.google.com")) return badgeLink(url, "Drive",   "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
+  if (u.includes("box.com"))          return badgeLink(url, "Box",     "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
+  if (u.includes("dropbox.com"))      return badgeLink(url, "Dropbox", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
+  return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"none" }}>Link</a>;
+}
+
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
 
 function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, onRunScan, scanning, scanProgress, onHamburger, currentUser, onSignOut }) {
@@ -2370,19 +2416,9 @@ function RFPBidsView() {
                       <span>{row["Institution"] || ""}</span>
                       {docBadge(docUrl || bidDocUrl)}
                     </td>
-                    <td style={colStyle} title={bidUrl}>{bidUrl ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={bidUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a>{getPlatformBadge(bidUrl)}</span> : "—"}</td>
-                    <td style={{ ...colStyle, whiteSpace:"normal" }} title={docUrl}>
-                      <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
-                        {docUrl ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={docUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a>{getPlatformBadge(docUrl)}</span> : <span style={{ color:"#4a6080" }}>—</span>}
-                        {isDocUrl(docUrl) && (
-                          <button onClick={() => extractContact(row)}
-                            style={{ padding:"2px 7px", borderRadius:"4px", background:"#003366", border:"1px solid #C60C30", color:"#B0B7BC", fontSize:"10px", cursor:"pointer", fontWeight:600 }}>
-                            Extract
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                    <td style={colStyle} title={bidDocUrl}>{bidDocUrl ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={bidDocUrl} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Docs →</a>{getPlatformBadge(bidDocUrl)}</span> : "—"}</td>
+                    <td style={colStyle} title={bidUrl}>{bidUrlCell(bidUrl)}</td>
+                    <td style={colStyle} title={docUrl}>{docUrlCell(docUrl, docUrl ? () => extractContact(row) : null)}</td>
+                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null)}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
@@ -2981,8 +3017,8 @@ function BidPrimeView() {
                     <td style={colStyle}>{row.State}</td>
                     <td style={colStyle} title={row.Agency}>{row.Agency}</td>
                     <td style={colStyle}>{row["Due Date"]}</td>
-                    <td style={colStyle}>{row["View Link"] ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={row["View Link"]} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a>{getPlatformBadge(row["View Link"])}</span> : "—"}</td>
-                    <td style={colStyle}>{row["Doc Link"] ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={row["Doc Link"]} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a>{getPlatformBadge(row["Doc Link"])}</span> : "—"}</td>
+                    <td style={colStyle}>{bidUrlCell(row["View Link"])}</td>
+                    <td style={colStyle}>{docUrlCell(row["Doc Link"], null)}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
@@ -3355,7 +3391,7 @@ function SamGovView() {
                     <td style={colStyle} title={row["Due Date"]}>{(row["Due Date"] || "").slice(0,10)}</td>
                     <td style={colStyle} title={row["Institution"]}>{row["Institution"]}</td>
                     <td style={colStyle}><span style={{ background:"rgba(198,12,48,0.15)", border:"1px solid rgba(198,12,48,0.35)", color:"#B0B7BC", fontSize:"10px", fontWeight:700, padding:"2px 6px", borderRadius:"4px" }}>Federal</span></td>
-                    <td style={colStyle}>{link ? <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"3px" }}><a href={link} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a>{getPlatformBadge(link)}</span> : "—"}</td>
+                    <td style={colStyle}>{bidUrlCell(link)}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
