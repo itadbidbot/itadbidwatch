@@ -3519,13 +3519,7 @@ function LoginScreen() {
 
 // ─── APP ROOT ──────────────────────────────────────────────────────────────────
 function App() {
-  const [page, setPage] = useState(() => {
-    // Don't touch the hash if Supabase is mid-OAuth callback
-    if (window.location.hash.includes('access_token')) return "dashboard";
-    const hash = window.location.hash.replace("#", "");
-    const valid = ["dashboard","hot_leads","all_bids","sources","keywords","history","rfp_bids","bidprime","samgov","settings"];
-    return valid.includes(hash) ? hash : "dashboard";
-  });
+  const [page, setPage] = useState("dashboard");
   const [stateFilter, setStateFilter] = useState("all");
   const [entityFilter, setEntityFilter] = useState("all");
   const [scanning, setScanning] = useState(false);
@@ -3642,11 +3636,6 @@ function App() {
   React.useEffect(() => { window._bidbotSetPage = setPage; }, []);
   React.useEffect(() => { window._bidbotRefresh = () => setDataVersion(v => v + 1); }, []);
 
-  // Sync page to URL hash so refresh stays on same page — but never overwrite an OAuth callback hash
-  React.useEffect(() => {
-    if (window.location.hash.includes('access_token')) return;
-    window.location.hash = page;
-  }, [page]);
 
   const [scanProgress, setScanProgress] = React.useState(0);
   const [scanStatus, setScanStatus] = React.useState("");
