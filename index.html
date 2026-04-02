@@ -57,6 +57,16 @@ const _db = supabase.createClient(
   "sb_publishable_P_iPFer-s3i8zV8106O_zQ_McYNHXeJ"
 );
 window._db = _db;
+// Catch OAuth callback as early as possible, before React mounts
+_db.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_IN' && session) {
+    // Session is now stored; React's resolveProfile will pick it up via getSession()
+    if (window.location.hash && window.location.hash.includes('access_token')) {
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }
+});
+
 // If Supabase returned an OAuth session via URL hash, parse it now before React mounts
 // so that getSession() inside the React useEffect finds it immediately.
 if (window.location.hash && window.location.hash.includes('access_token')) {
@@ -3453,7 +3463,7 @@ function LoginScreen() {
     try {
       const { error: oauthErr } = await window._db.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: window.location.origin }
+        options: { redirectTo: 'https://app.stott.marketing' }
       });
       if (oauthErr) throw oauthErr;
     } catch(e) {
