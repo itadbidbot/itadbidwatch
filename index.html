@@ -2019,10 +2019,11 @@ function RFPBidsView() {
       else console.warn("RFP load: window._db never became available after 5 retries");
       return;
     }
-    const _orgId = (window._currentUser && window._currentUser.org_id) || '';
+    const _role = (window._currentUser && window._currentUser.role) || 'user';
+    const _email = (window._currentUser && window._currentUser.email) || '';
+    const _firstName = _email.split('@')[0].split('.')[0];
     let rfpQuery = window._db.from("rfp_bids").select("*").order("file_date", { ascending: false }).limit(2000);
-    if (_orgId) rfpQuery = rfpQuery.or(`org_id.eq.${_orgId},org_id.is.null`);
-    else rfpQuery = rfpQuery.is("org_id", null);
+    if (_role !== 'admin' && _firstName) rfpQuery = rfpQuery.or(`assignee.ilike.%${_firstName}%,assignee.ilike.%${_email}%`);
     const { data, error } = await rfpQuery;
     if (error) { console.error("RFP load error:", error); return; }
     console.log("RFP bids loaded from Supabase:", data ? data.length : 0, "rows");
@@ -2743,10 +2744,11 @@ function BidPrimeView() {
       if (attempt < 5) setTimeout(() => loadAllRows(attempt + 1), 1000);
       return;
     }
-    const _orgId = (window._currentUser && window._currentUser.org_id) || '';
+    const _role = (window._currentUser && window._currentUser.role) || 'user';
+    const _email = (window._currentUser && window._currentUser.email) || '';
+    const _firstName = _email.split('@')[0].split('.')[0];
     let bpQuery = window._db.from("bidprime_bids").select("*").order("alert_date", { ascending: false }).limit(2000);
-    if (_orgId) bpQuery = bpQuery.or(`org_id.eq.${_orgId},org_id.is.null`);
-    else bpQuery = bpQuery.is("org_id", null);
+    if (_role !== 'admin' && _firstName) bpQuery = bpQuery.or(`assignee.ilike.%${_firstName}%,assignee.ilike.%${_email}%`);
     const { data, error } = await bpQuery;
     if (error) { console.error("BidPrime load error:", error); return; }
     if (!data || !data.length) return;
@@ -3080,10 +3082,11 @@ function SamGovView() {
       if (attempt < 5) setTimeout(() => loadRows(attempt + 1), 1000);
       return;
     }
-    const _orgId = (window._currentUser && window._currentUser.org_id) || '';
+    const _role = (window._currentUser && window._currentUser.role) || 'user';
+    const _email = (window._currentUser && window._currentUser.email) || '';
+    const _firstName = _email.split('@')[0].split('.')[0];
     let samQuery = window._db.from("sam_gov_bids").select("*").order("posted_date", { ascending: false }).limit(2000);
-    if (_orgId) samQuery = samQuery.or(`org_id.eq.${_orgId},org_id.is.null`);
-    else samQuery = samQuery.is("org_id", null);
+    if (_role !== 'admin' && _firstName) samQuery = samQuery.or(`assignee.ilike.%${_firstName}%,assignee.ilike.%${_email}%`);
     const { data, error } = await samQuery;
     if (error) { console.error("SAM.gov load error:", error); return; }
     if (!data || !data.length) return;
@@ -3529,6 +3532,19 @@ function App() {
   const [userRole, setUserRole] = useState('user');
   const [authLoading, setAuthLoading] = useState(true);
 
+  function _applyLeadsRoleFilter(enriched) {
+    if (!enriched || enriched.role === 'admin') return; // admin sees all
+    const firstName = (enriched.email || '').split('@')[0].split('.')[0].toLowerCase();
+    const email = (enriched.email || '').toLowerCase();
+    const match = arr => (arr || []).filter(l => {
+      const a = (l.assignee || '').toLowerCase();
+      return a.includes(firstName) || a.includes(email);
+    });
+    window._LIVE_LEADS = match(window._LIVE_LEADS);
+    window._LIVE_HOT   = match(window._LIVE_HOT);
+    window._ALL_LEADS  = match(window._ALL_LEADS);
+  }
+
   async function resolveProfile(session) {
     if (!session || !session.user) {
       window._currentUser = null;
@@ -3545,24 +3561,29 @@ function App() {
         .select('role, org_id')
         .eq('id', user.id)
         .single();
+      const isAdminEmail = user.email === 'itadbidbot@gmail.com';
       let role = 'user';
       let org_id = emailDomain;
       if (!profile) {
-        await window._db.from('profiles').insert({ id: user.id, email: user.email, role: 'user', org_id: emailDomain });
+        role = isAdminEmail ? 'admin' : 'user';
+        await window._db.from('profiles').insert({ id: user.id, email: user.email, role, org_id: emailDomain });
       } else {
-        role = profile.role || 'user';
+        role = isAdminEmail ? 'admin' : (profile.role || 'user');
         org_id = profile.org_id || emailDomain;
       }
       const enriched = { ...user, role, org_id };
       window._currentUser = enriched;
       setCurrentUser(enriched);
       setUserRole(role);
+      _applyLeadsRoleFilter(enriched);
     } catch(e) {
       // Fallback: still let user in with basic info
-      const enriched = { ...user, role: 'user', org_id: emailDomain };
+      const fallbackRole = user.email === 'itadbidbot@gmail.com' ? 'admin' : 'user';
+      const enriched = { ...user, role: fallbackRole, org_id: emailDomain };
       window._currentUser = enriched;
       setCurrentUser(enriched);
-      setUserRole('user');
+      setUserRole(fallbackRole);
+      _applyLeadsRoleFilter(enriched);
     }
     setAuthLoading(false);
   }
@@ -3720,6 +3741,7 @@ function App() {
           window._LATEST_SCAN_DATE = latestDate;
           window._LIVE_LEADS = leadsRes.data;
           window._ALL_LEADS = leadsRes.data;
+          _applyLeadsRoleFilter(window._currentUser);
         }
         if (scansRes.data) window._LIVE_SCANS = scansRes.data;
         // Force re-render
