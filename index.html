@@ -2622,14 +2622,13 @@ function BidPrimeView() {
       const key = (r.title||"").toLowerCase() + "||" + (r.agency||"").toLowerCase();
       if (existingKeys.has(key)) { dbDups++; continue; }
       toInsert.push({
-        title:        (r.title||"").slice(0, 500),
-        state:        (r.state||"").slice(0, 10),
-        agency:       (r.agency||"").slice(0, 300),
-        state_agency: (r.state_agency||"").slice(0, 300),
-        due_date:     (r.due_date||""),
-        view_link:    (r.view_link||"").slice(0, 2000),
-        doc_link:     (r.doc_link||"").slice(0, 2000),
-        alert_date:   r.alert_date || null,
+        title:      (r.title||"").slice(0, 500),
+        state:      (r.state||"").slice(0, 10),
+        agency:     (r.agency||"").slice(0, 300),
+        due_date:   (r.due_date||""),
+        view_link:  (r.view_link||"").slice(0, 2000),
+        doc_link:   (r.doc_link||"").slice(0, 2000),
+        alert_date: r.alert_date || null,
       });
     }
 
