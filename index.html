@@ -2479,82 +2479,107 @@ function BidPrimeView() {
     return m ? m[1].trim() : "";
   }
 
-  // ── Extract HTML body from EML (base64 decoded) ────────────────────────────
+  // ── Extract HTML body from EML ─────────────────────────────────────────────
   function emlToHtml(emlText) {
-    // Split into MIME parts and find text/html with base64 encoding
+    console.log("[BidPrime] EML length:", emlText.length, "| first 300:", emlText.slice(0, 300));
+    const encMatches = [...emlText.matchAll(/Content-Transfer-Encoding:\s*(\S+)/gi)];
+    console.log("[BidPrime] Encodings in EML:", encMatches.map(m => m[1]));
+
+    // Split on blank lines to walk MIME parts
     const sections = emlText.split(/\r?\n\r?\n/);
     for (let i = 0; i < sections.length - 1; i++) {
-      const header = sections[i];
-      if (/Content-Type:\s*text\/html/i.test(header) && /Content-Transfer-Encoding:\s*base64/i.test(header)) {
-        const b64 = sections[i + 1].replace(/\r?\n/g, "");
-        try { return atob(b64); } catch(e) { console.error("atob error:", e); }
+      const hdr = sections[i];
+      if (!/Content-Type:\s*text\/html/i.test(hdr)) continue;
+      const enc = ((hdr.match(/Content-Transfer-Encoding:\s*(\S+)/i) || [])[1] || "7bit").toLowerCase();
+      console.log("[BidPrime] Found text/html part at section", i, "encoding:", enc);
+      const body = sections[i + 1];
+      console.log("[BidPrime] Body section start (200):", body.slice(0, 200));
+
+      if (enc === "base64") {
+        const b64 = body.replace(/\r?\n/g, "");
+        try {
+          const decoded = atob(b64);
+          console.log("[BidPrime] Base64 decoded length:", decoded.length, "| starts:", decoded.slice(0, 100));
+          return decoded;
+        } catch(e) { console.error("[BidPrime] atob error:", e); }
+      } else if (enc === "quoted-printable") {
+        const decoded = body
+          .replace(/=\r?\n/g, "")
+          .replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+        console.log("[BidPrime] QP decoded length:", decoded.length, "| starts:", decoded.slice(0, 100));
+        return decoded;
+      } else {
+        if (body.includes('<')) { console.log("[BidPrime] Returning plain HTML body"); return body; }
       }
     }
-    // Fallback: find any base64-encoded block after text/html marker
-    const m = emlText.match(/Content-Type:\s*text\/html[\s\S]*?Content-Transfer-Encoding:\s*base64\r?\n\r?\n([\s\S]+?)(?:\r?\n--)/i);
-    if (m) {
-      const b64 = m[1].replace(/\r?\n/g, "");
-      try { return atob(b64); } catch(e) { console.error("atob fallback error:", e); }
-    }
+    console.warn("[BidPrime] Could not find text/html MIME part");
     return "";
   }
 
   // ── Extract bids from HTML ─────────────────────────────────────────────────
   function extractBids(html, aDate) {
+    console.log("[BidPrime] extractBids: html length:", html.length, "| first 400:", html.slice(0, 400));
+
+    // Find UUID comment positions in the raw HTML string — DOMParser may strip comments
+    const commentRe = /<!--\s*([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\s*-->/gi;
+    const positions = [];
+    let cm;
+    while ((cm = commentRe.exec(html)) !== null) {
+      positions.push({ uuid: cm[1], index: cm.index });
+    }
+    console.log("[BidPrime] UUID comments found in raw HTML:", positions.length,
+      positions.slice(0, 3).map(p => p.uuid));
+
+    if (!positions.length) {
+      // Log a broader sample so we can see what's actually in the HTML
+      console.warn("[BidPrime] No UUID comments found. HTML sample (0-1000):", html.slice(0, 1000));
+      return [];
+    }
+
     const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
     const bids = [];
 
-    // Walk all comment nodes — each bid block starts with <!-- uuid -->
-    const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
-    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    let commentNode;
-    while ((commentNode = walker.nextNode())) {
-      const uuid = commentNode.nodeValue.trim();
-      if (!uuidRe.test(uuid)) continue;
+    for (let i = 0; i < positions.length; i++) {
+      const { uuid, index } = positions[i];
+      const nextIndex = i < positions.length - 1 ? positions[i + 1].index : html.length;
+      const blockHtml = html.slice(index, nextIndex);
 
-      // Find the containing bid block — walk up until we have ≥2 links
-      let container = commentNode.parentElement;
-      for (let i = 0; i < 6; i++) {
-        if (!container || container.tagName === 'BODY') break;
-        if (container.querySelectorAll('a[href]').length >= 2) break;
-        container = container.parentElement;
-      }
+      // Wrap in a table cell so the block parses with its intended structure
+      const blockDoc = parser.parseFromString(
+        `<table><tbody><tr><td>${blockHtml}</td></tr></tbody></table>`, "text/html"
+      );
+      const container = blockDoc.body.querySelector('td');
       if (!container) continue;
 
-      // Title: bold green anchor to /api/v1/member/link
-      const titleEl = container.querySelector('a[href*="/api/v1/member/link"]');
-      const title = titleEl ? titleEl.textContent.trim() : "";
-      if (!title) continue;
-
-      const isFirst = bids.length === 0;
+      const isFirst = i === 0;
       if (isFirst) {
-        console.log("[BidPrime] First bid container innerHTML:", container.innerHTML);
-        console.log("[BidPrime] uuid:", uuid);
-        console.log("[BidPrime] title:", title);
-        console.log("[BidPrime] All links in container:", Array.from(container.querySelectorAll('a[href]')).map(a => ({ text: a.textContent.trim(), href: a.getAttribute('href') })));
-        console.log("[BidPrime] All bold/strong in container:", Array.from(container.querySelectorAll('b, strong')).map(b => b.textContent.trim()));
-        console.log("[BidPrime] All styled divs in container:", Array.from(container.querySelectorAll('div[style]')).map(d => ({ style: d.getAttribute('style'), text: d.textContent.trim() })));
+        console.log("[BidPrime] First block raw HTML (600):", blockHtml.slice(0, 600));
+        console.log("[BidPrime] All links:", Array.from(container.querySelectorAll('a[href]')).map(a => ({
+          text: a.textContent.trim().slice(0, 60), href: (a.getAttribute('href') || "").slice(0, 100)
+        })));
+        console.log("[BidPrime] Bold/strong:", Array.from(container.querySelectorAll('b,strong')).map(b => b.textContent.trim()));
+        console.log("[BidPrime] Styled divs:", Array.from(container.querySelectorAll('div[style]')).slice(0, 10).map(d => ({
+          style: d.getAttribute('style'), text: d.textContent.trim().slice(0, 60)
+        })));
+        console.log("[BidPrime] Full text:", container.textContent.trim().slice(0, 400));
       }
 
-      // View link: anchor to /member/inbox/?bid=uuid
-      const viewEl = container.querySelector(`a[href*="member/inbox"][href*="${uuid}"]`) ||
-                     container.querySelector('a[href*="member/inbox"]');
+      // Title: anchor to /api/v1/member/link
+      const titleEl = container.querySelector('a[href*="/api/v1/member/link"]');
+      const title = titleEl ? titleEl.textContent.trim() : "";
+      if (!title) { if (isFirst) console.log("[BidPrime] No title found for first block"); continue; }
+
+      // View link: anchor containing member/inbox
+      const viewEl = container.querySelector('a[href*="member/inbox"]');
       const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
 
-      // Doc link: /api/v2/document/download or /member/request-documents, with fallbacks
+      // Doc link: try specific patterns first, then broader fallbacks
       const docEl = container.querySelector('a[href*="/api/v2/document/download"]') ||
-                    container.querySelector('a[href*="/member/request-documents"]') ||
                     container.querySelector('a[href*="request-documents"]') ||
                     container.querySelector('a[href*="document"]');
       const doc_link = docEl ? (docEl.getAttribute('href') || "") : "";
 
-      if (isFirst) {
-        console.log("[BidPrime] view_link:", view_link);
-        console.log("[BidPrime] doc_link:", doc_link, "| docEl href:", docEl ? docEl.getAttribute('href') : null);
-      }
-
-      // State/agency: bold element matching "XX - AGENCY NAME"
+      // State/agency: bold/strong element matching "XX - ..."
       let state = "", agency = "";
       for (const b of container.querySelectorAll('b, strong')) {
         const m = b.textContent.trim().match(/^([A-Z]{2})\s*-\s*(.+)$/);
@@ -2562,27 +2587,24 @@ function BidPrimeView() {
       }
       // Fallback: regex on full text content
       if (!state) {
-        const fullText = container.textContent || "";
-        const m = fullText.match(/\b([A-Z]{2})\s+-\s+([A-Z][A-Z\s,./]+)/);
+        const m = (container.textContent || "").match(/\b([A-Z]{2})\s+-\s+([A-Z][A-Z\s,./]+)/);
         if (m) { state = m[1]; agency = m[2].trim(); }
       }
 
-      if (isFirst) console.log("[BidPrime] state:", state, "| agency:", agency);
-
-      // Due date: div with width:90px containing a date
+      // Due date: div with width:90px
       let due_date = "";
       for (const d of container.querySelectorAll('div[style]')) {
         if (!(d.getAttribute('style') || "").includes('90px')) continue;
         const m = d.textContent.trim().match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
         if (m) { due_date = m[1]; break; }
       }
-      // Fallback: any date in container text
+      // Fallback: any date in container
       if (!due_date) {
         const m = (container.textContent || "").match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
         if (m) due_date = m[1];
       }
 
-      if (isFirst) console.log("[BidPrime] due_date:", due_date);
+      if (isFirst) console.log("[BidPrime] Extracted first bid:", { uuid, title, state, agency, due_date, view_link, doc_link });
 
       bids.push({ id: uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
     }
