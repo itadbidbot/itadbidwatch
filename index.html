@@ -120,6 +120,7 @@ const TrendingUp = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline poin
 const Upload = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0018 9h-1.26A8 8 0 103 16.3"/></svg>;
 const X = ({size=16,...p}) => <svg {...svgProps(size,p)}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
 const Zap = ({size=16,...p}) => <svg {...svgProps(size,p)}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+const Mail = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>;
 
 
 
@@ -266,8 +267,9 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose }) {
     { key:"sources", label:"Bid Scan Sources", icon:Globe },
     { key:"keywords", label:"Keywords & Scoring", icon:Key },
     { key:"history", label:"Scan History", icon:Clock },
-    { key:"rfp_bids", label:"RFP School Watch", icon:FileText },
-    { key:"samgov",   label:"SAM.gov",          icon:Search },
+    { key:"rfp_bids",  label:"RFP School Watch", icon:FileText },
+    { key:"bidprime",  label:"BidPrime",         icon:Mail },
+    { key:"samgov",    label:"SAM.gov",          icon:Search },
     { key:"settings", label:"Settings", icon:Settings },
   ];
 
@@ -2451,6 +2453,496 @@ function RFPBidsView() {
   );
 }
 
+// ─── BIDPRIME VIEW ────────────────────────────────────────────────────────────
+function BidPrimeView() {
+  const [rows, setRows] = useState([]);
+  const [alertDate, setAlertDate] = useState(null);
+  const [filter, setFilter] = useState("");
+  const [stateFilter, setStateFilter] = useState("");
+  const [alertDateFilter, setAlertDateFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [sourceStatus, setSourceStatus] = useState({});
+  const [toast, setToast] = useState(null);
+  const toastTimer = React.useRef(null);
+  const [sortCol, setSortCol] = useState("Alert Date");
+  const [sortDir, setSortDir] = useState("desc");
+  const fileInputRef = useRef(null);
+  const [colWidths, setColWidths] = useState({
+    Title: 200, State: 60, Agency: 160, "Due Date": 100,
+    "View Link": 70, "Doc Link": 80, Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
+  });
+
+  // ── Parse EML subject ──────────────────────────────────────────────────────
+  function parseEmlSubject(emlText) {
+    const m = emlText.match(/^Subject:\s*(.+?)(?:\r?\n(?!\s))/m);
+    return m ? m[1].trim() : "";
+  }
+
+  // ── Extract HTML body from EML (base64 decoded) ────────────────────────────
+  function emlToHtml(emlText) {
+    // Split into MIME parts and find text/html with base64 encoding
+    const sections = emlText.split(/\r?\n\r?\n/);
+    for (let i = 0; i < sections.length - 1; i++) {
+      const header = sections[i];
+      if (/Content-Type:\s*text\/html/i.test(header) && /Content-Transfer-Encoding:\s*base64/i.test(header)) {
+        const b64 = sections[i + 1].replace(/\r?\n/g, "");
+        try { return atob(b64); } catch(e) { console.error("atob error:", e); }
+      }
+    }
+    // Fallback: find any base64-encoded block after text/html marker
+    const m = emlText.match(/Content-Type:\s*text\/html[\s\S]*?Content-Transfer-Encoding:\s*base64\r?\n\r?\n([\s\S]+?)(?:\r?\n--)/i);
+    if (m) {
+      const b64 = m[1].replace(/\r?\n/g, "");
+      try { return atob(b64); } catch(e) { console.error("atob fallback error:", e); }
+    }
+    return "";
+  }
+
+  // ── Extract bids from HTML ─────────────────────────────────────────────────
+  function extractBids(html, aDate) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, "text/html");
+    const bids = [];
+
+    // Title links: anchors pointing to bidprime.com/.../member/link
+    const titleAnchors = Array.from(doc.querySelectorAll('a[href]')).filter(a => {
+      const href = a.getAttribute('href') || "";
+      return href.includes('bidprime.com') && href.includes('/member/link');
+    });
+
+    for (const titleEl of titleAnchors) {
+      const title = titleEl.textContent.trim();
+      if (!title) continue;
+
+      // Walk up until container has ≥2 links and state/date patterns
+      let container = titleEl;
+      for (let i = 0; i < 10; i++) {
+        const p = container.parentElement;
+        if (!p || p.tagName === 'BODY') break;
+        container = p;
+        const txt = container.textContent || "";
+        if (container.querySelectorAll('a[href]').length >= 2 &&
+            (txt.match(/[A-Z]{2}\s*[-–]/) || txt.match(/\d{1,2}\/\d{1,2}\/\d{4}/))) break;
+      }
+
+      const containerLinks = Array.from(container.querySelectorAll('a[href]'));
+
+      // View link: "View in BidPrime"
+      const viewEl = containerLinks.find(a => /view\s+in\s+bidprime/i.test(a.textContent.trim()));
+      const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
+
+      // Doc link: "Request documents" / download / file extension
+      const docEl = containerLinks.find(a => {
+        const t = a.textContent.trim().toLowerCase();
+        const h = (a.getAttribute('href') || "").toLowerCase();
+        return /request\s+doc/i.test(t) || /download/i.test(t) ||
+               h.includes('.pdf') || h.includes('.docx') || h.includes('download') || h.includes('document');
+      });
+      const doc_link = docEl ? (docEl.getAttribute('href') || "") : "";
+
+      // State/agency: "XX - Agency Name"
+      const txt = container.textContent || "";
+      const saMatch = txt.match(/([A-Z]{2})\s*[-–]\s*([^\n\r\t<|]{3,80})/);
+      const state_agency = saMatch ? `${saMatch[1]} - ${saMatch[2].trim()}` : "";
+      const state = saMatch ? saMatch[1] : "";
+      const agency = saMatch ? saMatch[2].trim() : "";
+
+      // Due date
+      const dueDateMatch = txt.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+      const due_date = dueDateMatch ? dueDateMatch[1] : "";
+
+      bids.push({ title, view_link, doc_link, state_agency, state, agency, due_date, alert_date: aDate });
+    }
+
+    return bids;
+  }
+
+  // ── Handle .eml file upload ────────────────────────────────────────────────
+  function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const emlText = ev.target.result;
+      const subject = parseEmlSubject(emlText);
+
+      let aDate = null;
+      const dateMatch = subject.match(/\((\d{1,2})\/(\d{1,2})\/(\d{4})\)/);
+      if (dateMatch) {
+        aDate = `${dateMatch[3]}-${String(dateMatch[1]).padStart(2,'0')}-${String(dateMatch[2]).padStart(2,'0')}`;
+      }
+      setAlertDate(aDate);
+
+      const html = emlToHtml(emlText);
+      if (!html) { showToast("Could not parse HTML from .eml file", "#C60C30"); return; }
+
+      const parsed = extractBids(html, aDate);
+      console.log("BidPrime parsed bids:", parsed.length, parsed[0]);
+
+      const { saved, duplicates } = await upsertBids(parsed);
+      await loadAllRows();
+      showToast(`Loaded ${saved} bids, ${duplicates} duplicate${duplicates !== 1 ? "s" : ""} skipped`);
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  // ── Upsert to bidprime_bids ────────────────────────────────────────────────
+  async function upsertBids(parsed) {
+    if (!parsed.length) return { saved: 0, duplicates: 0 };
+
+    let csvDups = 0;
+    const seen = new Set();
+    const records = [];
+    for (const r of parsed) {
+      const key = (r.title||"").toLowerCase() + "||" + (r.agency||"").toLowerCase();
+      if (seen.has(key)) { csvDups++; continue; }
+      seen.add(key);
+      records.push(r);
+    }
+
+    const titles = [...new Set(records.map(r => r.title).filter(Boolean))];
+    let existingKeys = new Set();
+    if (titles.length) {
+      const { data: existing } = await window._db
+        .from("bidprime_bids")
+        .select("title, agency")
+        .in("title", titles);
+      if (existing) {
+        for (const row of existing) {
+          existingKeys.add((row.title||"").toLowerCase() + "||" + (row.agency||"").toLowerCase());
+        }
+      }
+    }
+
+    let dbDups = 0;
+    const toInsert = [];
+    for (const r of records) {
+      const key = (r.title||"").toLowerCase() + "||" + (r.agency||"").toLowerCase();
+      if (existingKeys.has(key)) { dbDups++; continue; }
+      toInsert.push({
+        title:        (r.title||"").slice(0, 500),
+        state:        (r.state||"").slice(0, 10),
+        agency:       (r.agency||"").slice(0, 300),
+        state_agency: (r.state_agency||"").slice(0, 300),
+        due_date:     (r.due_date||""),
+        view_link:    (r.view_link||"").slice(0, 2000),
+        doc_link:     (r.doc_link||"").slice(0, 2000),
+        alert_date:   r.alert_date || null,
+      });
+    }
+
+    const totalDups = csvDups + dbDups;
+    if (!toInsert.length) return { saved: 0, duplicates: totalDups };
+
+    const { error } = await window._db.from("bidprime_bids").insert(toInsert);
+    if (error) console.error("upsertBids error:", error);
+    return { saved: toInsert.length, duplicates: totalDups };
+  }
+
+  // ── Load from Supabase ──────────────────────────────────────────────────────
+  const loadAllRows = React.useCallback(async function(attempt=0) {
+    if (!window._db) {
+      if (attempt < 5) setTimeout(() => loadAllRows(attempt + 1), 1000);
+      return;
+    }
+    const { data, error } = await window._db
+      .from("bidprime_bids")
+      .select("*")
+      .order("alert_date", { ascending: false })
+      .limit(2000);
+    if (error) { console.error("BidPrime load error:", error); return; }
+    if (!data || !data.length) return;
+    setRows(data.map((r, i) => ({
+      _id: i,
+      _dbid: r.id,
+      _assignee: r.assignee || "",
+      _status: r.status || "pending",
+      _hubspot: !!(r.hubspot_added),
+      _added_to_sources: !!(r.added_to_sources),
+      _removed: !!(r.removed),
+      Title: r.title || "",
+      State: r.state || "",
+      Agency: r.agency || "",
+      "State/Agency": r.state_agency || "",
+      "Due Date": r.due_date || "",
+      "View Link": r.view_link || "",
+      "Doc Link": r.doc_link || "",
+      "Alert Date": r.alert_date || "",
+    })));
+    const latest = data.find(r => r.alert_date);
+    if (latest) setAlertDate(latest.alert_date);
+  }, []);
+
+  useEffect(() => { loadAllRows(); }, [loadAllRows]);
+
+  // ── Save meta ──────────────────────────────────────────────────────────────
+  async function saveMeta(dbid, field, value) {
+    if (!dbid) return;
+    const update = {};
+    if (field === "assignee")         update.assignee         = value;
+    if (field === "status")           update.status           = value;
+    if (field === "hubspot")          update.hubspot_added    = value;
+    if (field === "added_to_sources") update.added_to_sources = value;
+    if (field === "removed")          update.removed          = value;
+    if (!Object.keys(update).length) return;
+    await window._db.from("bidprime_bids").update(update).eq("id", dbid);
+  }
+
+  function updateRow(id, field, value) {
+    setRows(prev => prev.map(r => r._id === id ? { ...r, [field]: value } : r));
+    const row = rows.find(r => r._id === id);
+    if (row) saveMeta(row._dbid, field.replace(/^_/, ""), value);
+  }
+
+  function removeRow(id) {
+    setRows(prev => prev.map(r => r._id === id ? { ...r, _removed: true } : r));
+    const row = rows.find(r => r._id === id);
+    if (row) saveMeta(row._dbid, "removed", true);
+  }
+
+  // ── Toast ──────────────────────────────────────────────────────────────────
+  function showToast(msg, color="#10b981") {
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    setToast({ msg, color });
+    toastTimer.current = setTimeout(() => setToast(null), color === "#C60C30" ? 4000 : 3000);
+  }
+
+  // ── Add to Sources ─────────────────────────────────────────────────────────
+  async function addToSources(row) {
+    const id = row._id;
+    const link = (row["View Link"] || "").slice(0, 1000);
+    if (!link) return;
+    setSourceStatus(s => ({ ...s, [id]: "adding" }));
+    const { data: existing } = await window._db.from("sources").select("id").eq("url", link).limit(1);
+    if (existing && existing.length > 0) {
+      setSourceStatus(s => ({ ...s, [id]: "idle" }));
+      showToast("Already a source", "#C60C30");
+      return;
+    }
+    const record = {
+      friendly_name: (row.Agency || row["State/Agency"] || "BidPrime Opportunity").slice(0, 300),
+      url: link,
+      state: (row.State || "").slice(0, 10) || null,
+      site_type: "links_page",
+      captcha_protected: false,
+      status: "active",
+      date_added: new Date().toISOString().slice(0, 10),
+    };
+    const { error } = await window._db.from("sources").insert(record);
+    if (error) {
+      setSourceStatus(s => ({ ...s, [id]: "idle" }));
+      showToast("Error adding source: " + (error.message || "unknown"), "#C60C30");
+    } else {
+      setSourceStatus(s => ({ ...s, [id]: "added" }));
+      setRows(prev => prev.map(r => r._id === id ? { ...r, _added_to_sources: true } : r));
+      saveMeta(row._dbid, "added_to_sources", true);
+      showToast("Added to scanner: " + (row.Agency || ""));
+    }
+  }
+
+  // ── Column resize ──────────────────────────────────────────────────────────
+  function makeResizer(col) {
+    return function(e) {
+      e.preventDefault();
+      const startX = e.clientX;
+      const startW = colWidths[col];
+      function onMove(ev) { setColWidths(w => ({ ...w, [col]: Math.max(50, startW + ev.clientX - startX) })); }
+      function onUp() { window.removeEventListener("mousemove", onMove); window.removeEventListener("mouseup", onUp); }
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    };
+  }
+
+  // ── Derived data ───────────────────────────────────────────────────────────
+  const stateOptions = [...new Set(rows.map(r => r.State || "").filter(Boolean))].sort();
+  const alertDateOptions = [...new Set(rows.map(r => r["Alert Date"] || "").filter(Boolean))].sort().reverse();
+
+  const COL_KEY = {
+    "Title": "Title", "State": "State", "Agency": "Agency",
+    "Due Date": "Due Date", "Alert Date": "Alert Date",
+    "Assignee": "_assignee", "Status": "_status",
+  };
+
+  const cols = ["Title", "State", "Agency", "Due Date", "View Link", "Doc Link", "Assignee", "Status", "Hubspot", "Add to Sources"];
+
+  const displayed = rows
+    .filter(r => {
+      if (r._removed && !showRemoved) return false;
+      const q = filter.toLowerCase();
+      const matchText = !q || (
+        (r.Title || "").toLowerCase().includes(q) ||
+        (r.Agency || "").toLowerCase().includes(q) ||
+        (r.State || "").toLowerCase().includes(q)
+      );
+      const matchState = !stateFilter || (r.State || "") === stateFilter;
+      const matchDate = !alertDateFilter || (r["Alert Date"] || "") === alertDateFilter;
+      const matchStatus = !statusFilter || (r._status || "pending").toLowerCase() === statusFilter.toLowerCase();
+      return matchText && matchState && matchDate && matchStatus;
+    })
+    .slice()
+    .sort((a, b) => {
+      const key = COL_KEY[sortCol] || sortCol;
+      const va = (a[key] || "").toString().toLowerCase();
+      const vb = (b[key] || "").toString().toLowerCase();
+      return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
+    });
+
+  const colStyle = { padding:"8px 10px", borderBottom:"1px solid #003366", color:"#B0B7BC", fontSize:"12px", verticalAlign:"middle", overflow:"visible", whiteSpace:"normal", wordBreak:"break-word" };
+  const thBase = { padding:"8px 10px", borderBottom:"1px solid #003366", background:"#002244", color:"#B0B7BC", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
+
+  const resizeHandle = (col) => (
+    <span onMouseDown={e => { e.stopPropagation(); makeResizer(col)(e); }} style={{ cursor:"col-resize", marginLeft:"4px", color:"#003875", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
+  );
+
+  return (
+    <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", padding:"24px" }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", flexShrink:0 }}>
+        <div>
+          <h2 style={{ color:"#ffffff", fontSize:"20px", fontWeight:700, margin:0 }}>BidPrime</h2>
+          {alertDate && <div style={{ color:"#C60C30", fontSize:"13px", marginTop:"4px" }}>Alert date: {alertDate}</div>}
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+          <input ref={fileInputRef} type="file" accept=".eml" onChange={handleFile} style={{ display:"none" }} />
+          <button onClick={() => fileInputRef.current && fileInputRef.current.click()}
+            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            <Upload size={13} /> Upload .eml
+          </button>
+        </div>
+      </div>
+
+      {/* Filter bar */}
+      <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"12px", flexShrink:0, flexWrap:"wrap" }}>
+        <div style={{ position:"relative" }}>
+          <Search size={13} color="#B0B7BC" style={{ position:"absolute", left:"10px", top:"50%", transform:"translateY(-50%)" }} />
+          <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Search title, agency…"
+            style={{ background:"#003366", border:"1px solid #003875", color:"#ffffff", padding:"6px 12px 6px 30px", borderRadius:"8px", fontSize:"12px", outline:"none", width:"200px" }} />
+        </div>
+        <select value={stateFilter} onChange={e => setStateFilter(e.target.value)}
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          <option value="">All States</option>
+          {stateOptions.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select value={alertDateFilter} onChange={e => setAlertDateFilter(e.target.value)}
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          <option value="">All Alert Dates</option>
+          {alertDateOptions.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          <option value="">All Status</option>
+          <option value="pending">Pending</option>
+          <option value="working">Working</option>
+          <option value="completed">Completed</option>
+          <option value="dead">Dead</option>
+        </select>
+        <button onClick={() => setShowRemoved(v => !v)}
+          style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#003875" : "#003366", border:"1px solid #003875", color: showRemoved ? "#ffffff" : "#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
+          {showRemoved ? "Hide removed" : "Show removed"}
+        </button>
+        {rows.length > 0 && <span style={{ color:"#B0B7BC", fontSize:"12px", marginLeft:"auto" }}>{displayed.length} of {rows.length} rows</span>}
+      </div>
+
+      {rows.length === 0 && (
+        <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#4a6080", fontSize:"14px" }}>
+          Loading… or upload a BidPrime .eml file to get started.
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div style={{ flex:1, overflow:"auto", borderRadius:"10px", border:"1px solid #003366" }}>
+          <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
+            <colgroup>
+              {cols.map(c => <col key={c} style={{ width: colWidths[c] + "px" }} />)}
+            </colgroup>
+            <thead>
+              <tr>
+                {cols.map(col => (
+                  <th key={col} style={{ ...thBase, cursor: COL_KEY[col] ? "pointer" : "default" }}
+                    onClick={() => { if (!COL_KEY[col]) return; if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc"); else { setSortCol(col); setSortDir("asc"); } }}>
+                    <div style={{ display:"flex", alignItems:"center" }}>
+                      <span style={{ overflow:"hidden", textOverflow:"ellipsis", flex:1 }}>{col}{sortCol === col ? (sortDir === "asc" ? " ▲" : " ▼") : ""}</span>
+                      {resizeHandle(col)}
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {displayed.map((row, idx) => {
+                const srcSt = sourceStatus[row._id];
+                const isRemoved = row._removed;
+                return (
+                  <tr key={row._id} style={{ background:"#001a33", opacity: isRemoved ? 0.45 : 1 }}>
+                    <td style={colStyle} title={row.Title}>{row.Title}</td>
+                    <td style={colStyle}>{row.State}</td>
+                    <td style={colStyle} title={row.Agency}>{row.Agency}</td>
+                    <td style={colStyle}>{row["Due Date"]}</td>
+                    <td style={colStyle}>{row["View Link"] ? <a href={row["View Link"]} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>View</a> : "—"}</td>
+                    <td style={colStyle}>{row["Doc Link"] ? <a href={row["Doc Link"]} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px" }}>Doc</a> : "—"}</td>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
+                      <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
+                        style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
+                        <option value="">—</option>
+                        <option value="Bruce">Bruce</option>
+                        <option value="Mike">Mike</option>
+                      </select>
+                    </td>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
+                      <select value={row._status} onChange={e => updateRow(row._id, "_status", e.target.value)}
+                        style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
+                        <option value="pending">Pending</option>
+                        <option value="working">Working</option>
+                        <option value="completed">Completed</option>
+                        <option value="dead">Dead</option>
+                      </select>
+                    </td>
+                    <td style={{ ...colStyle, textAlign:"center" }}>
+                      <input type="checkbox" checked={row._hubspot} onChange={e => updateRow(row._id, "_hubspot", e.target.checked)}
+                        style={{ cursor:"pointer", accentColor:"#C60C30" }} />
+                    </td>
+                    <td style={{ ...colStyle, whiteSpace:"normal" }}>
+                      <div style={{ display:"flex", flexDirection:"column", gap:"4px" }}>
+                        {(row._added_to_sources || srcSt === "added") ? (
+                          <span style={{ color:"#10b981", fontSize:"11px" }}>✓ Source</span>
+                        ) : (
+                          <button onClick={() => addToSources(row)} disabled={srcSt === "adding" || !row["View Link"]}
+                            style={{ padding:"3px 10px", borderRadius:"5px", background: (!row["View Link"] || srcSt==="adding") ? "#003366" : "#C60C30", border:"none", color: (!row["View Link"] || srcSt==="adding") ? "#4a6080" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!row["View Link"] || srcSt==="adding") ? "not-allowed" : "pointer" }}>
+                            {srcSt === "adding" ? "…" : "Add to Sources"}
+                          </button>
+                        )}
+                        {!isRemoved ? (
+                          <button onClick={() => removeRow(row._id)}
+                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>
+                            Remove
+                          </button>
+                        ) : (
+                          <button onClick={() => { setRows(prev => prev.map(r => r._id === row._id ? { ...r, _removed: false } : r)); saveMeta(row._dbid, "removed", false); }}
+                            style={{ padding:"3px 10px", borderRadius:"5px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>
+                            Restore
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {toast && (
+        <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: toast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${toast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"340px" }}>
+          {toast.msg}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── SAM.GOV VIEW ─────────────────────────────────────────────────────────────
 function SamGovView() {
   const [rows, setRows] = useState([]);
@@ -2860,7 +3352,7 @@ function SamGovView() {
 function App() {
   const [page, setPage] = useState(() => {
     const hash = window.location.hash.replace("#", "");
-    const valid = ["dashboard","hot_leads","all_bids","sources","keywords","history","rfp_bids","samgov","settings"];
+    const valid = ["dashboard","hot_leads","all_bids","sources","keywords","history","rfp_bids","bidprime","samgov","settings"];
     return valid.includes(hash) ? hash : "dashboard";
   });
   const [stateFilter, setStateFilter] = useState("all");
@@ -3040,6 +3532,7 @@ function App() {
           {page==="keywords"   && <KeywordsView />}
           {page==="history"    && <ScanHistoryView />}
           {page==="rfp_bids"   && <RFPBidsView />}
+          {page==="bidprime"   && <BidPrimeView />}
           {page==="samgov"     && <SamGovView />}
           {page==="settings"   && <SettingsView />}
         </main>
