@@ -3560,7 +3560,12 @@ function LoginScreen() {
 
 // ─── APP ROOT ──────────────────────────────────────────────────────────────────
 function App() {
-  const [page, setPage] = useState("dashboard");
+  const [page, setPage] = useState(() => {
+    const h = window.location.hash.replace("#", "");
+    if (!h || h === "dashboard" || h.includes("access_token")) return "dashboard";
+    const valid = ["hot_leads","all_bids","sources","keywords","history","rfp_bids","bidprime","samgov","settings"];
+    return valid.includes(h) ? h : "dashboard";
+  });
   const [stateFilter, setStateFilter] = useState("all");
   const [entityFilter, setEntityFilter] = useState("all");
   const [scanning, setScanning] = useState(false);
@@ -3691,6 +3696,15 @@ function App() {
 
   React.useEffect(() => { window._bidbotSetPage = setPage; }, []);
   React.useEffect(() => { window._bidbotRefresh = () => setDataVersion(v => v + 1); }, []);
+  // Sync hash for non-dashboard pages so refresh restores position; dashboard keeps clean URL
+  React.useEffect(() => {
+    if (window.location.hash.includes("access_token")) return;
+    if (page === "dashboard") {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    } else {
+      window.location.hash = page;
+    }
+  }, [page]);
 
 
   const [scanProgress, setScanProgress] = React.useState(0);
