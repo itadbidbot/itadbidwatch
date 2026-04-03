@@ -1984,6 +1984,23 @@ function RFPBidsView() {
     return results;
   }
 
+  // ── Box doc availability check (mirrors scanner.py logic via Jina Reader) ────
+  async function checkBoxAvailability(url) {
+    const jinaUrl = "https://r.jina.ai/" + url;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const resp = await fetch(jinaUrl, { signal: AbortSignal.timeout(15000) });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const text = await resp.text();
+        if (text.includes("Currently Unavailable") || text.includes("Bid Document Currently Unavailable")) return false;
+        return true;
+      } catch (e) {
+        console.warn(`[box-check] attempt ${attempt + 1} error for ${url}:`, e);
+      }
+    }
+    return null;
+  }
+
   // ── Upsert CSV rows to rfp_bids ─────────────────────────────────────────────
   async function upsertRfpRows(parsed, fDate) {
     if (!parsed.length) return { saved: 0, duplicates: 0 };
@@ -2048,6 +2065,21 @@ function RFPBidsView() {
     const { data: upsertData, error: upsertErr } = await window._db.from("rfp_bids").upsert(toInsert, { onConflict: "doc_id" });
     if (upsertErr) console.error("upsertRfpRows error:", JSON.stringify(upsertErr), upsertErr);
     else console.log("upsertRfpRows: saved", toInsert.length, "rows, skipped", totalDuplicates, "duplicates");
+
+    // ── Box availability check for newly imported rows ────────────────────────
+    const boxRows = toInsert.filter(r => r.doc_id && r.bid_documents && r.bid_documents.toLowerCase().includes("box.com"));
+    if (boxRows.length) {
+      console.log(`[box-check] checking ${boxRows.length} newly imported box.com rows`);
+      for (const row of boxRows) {
+        const available = await checkBoxAvailability(row.bid_documents);
+        console.log(`[box-check] ${row.bid_documents.slice(0, 80)} -> ${available}`);
+        if (available !== null) {
+          const { error: updateErr } = await window._db.from("rfp_bids").update({ doc_available: available }).eq("doc_id", row.doc_id);
+          if (updateErr) console.warn("[box-check] update failed:", updateErr);
+        }
+      }
+    }
+
     return { saved: toInsert.length, duplicates: totalDuplicates };
   }
 
