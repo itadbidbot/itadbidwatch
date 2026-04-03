@@ -3150,6 +3150,8 @@ function SamGovView() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("sam_gov_api_key") || "");
   const [showKeyPrompt, setShowKeyPrompt] = useState(false);
   const [keyInput, setKeyInput] = useState("");
+  const [itadResults, setItadResults] = useState([]);
+  const [itadFetching, setItadFetching] = useState(false);
   const [sortCol, setSortCol] = useState("Posted Date");
   const [sortDir, setSortDir] = useState("desc");
   const [colWidths, setColWidths] = useState({
@@ -3291,6 +3293,43 @@ function SamGovView() {
     fetchSamGov(k);
   }
 
+  // ── ITAD Search ──────────────────────────────────────────────────────────────
+  async function fetchItadSearch(key) {
+    setItadFetching(true);
+    setItadResults([]);
+    try {
+      const today = new Date();
+      const from  = new Date(today); from.setDate(from.getDate() - 90);
+      const pad = n => String(n).padStart(2, "0");
+      const fmt = d => `${pad(d.getMonth()+1)}/${pad(d.getDate())}/${d.getFullYear()}`;
+      const url = `https://api.sam.gov/opportunities/v2/search?api_key=${encodeURIComponent(key)}&keywords=apple+OR+chromebook+OR+electronics+OR+network&postedFrom=${fmt(from)}&postedTo=${fmt(today)}&limit=100&active=true`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(`SAM.gov API error ${res.status}: ${txt.slice(0, 200)}`);
+      }
+      const json = await res.json();
+      const opps = json.opportunitiesData || [];
+      if (!opps.length) { showToast("No ITAD results found", "#C60C30"); setItadFetching(false); return; }
+      setItadResults(opps.map(o => ({
+        title:      o.title || "",
+        postedDate: (o.postedDate || "").slice(0, 10),
+        dueDate:    (o.responseDeadLine || o.archiveDate || "").slice(0, 10),
+        link:       o.uiLink || "",
+      })));
+      showToast(`ITAD Search: ${opps.length} result${opps.length !== 1 ? "s" : ""}`);
+    } catch(err) {
+      console.error("ITAD search error:", err);
+      showToast("Error: " + err.message, "#C60C30");
+    }
+    setItadFetching(false);
+  }
+
+  function handleItadSearch() {
+    if (!apiKey) { setShowKeyPrompt(true); setKeyInput(""); return; }
+    fetchItadSearch(apiKey);
+  }
+
   // ── Add to Sources ───────────────────────────────────────────────────────────
   async function addToSources(row) {
     const id = row._id;
@@ -3376,9 +3415,10 @@ function SamGovView() {
           <div style={{ color:"#B0B7BC", fontSize:"13px", marginTop:"4px" }}>Federal contract opportunities • last 30 days</div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
-          <button onClick={() => window.open("https://sam.gov/search/?keywords=apple+OR+chromebook+OR+electronics+OR+network+equipment&index=opp&is_active=true", "_blank")}
-            style={{ padding:"8px 16px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>
-            ITAD Search
+          <button onClick={handleItadSearch} disabled={itadFetching}
+            style={{ padding:"8px 16px", borderRadius:"8px", background: itadFetching ? "#003875" : "#003366", border:"1px solid #003875", color: itadFetching ? "#B0B7BC" : "#ffffff", fontSize:"12px", fontWeight:700, cursor: itadFetching ? "not-allowed" : "pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            <Search size={13} style={{ animation: itadFetching ? "spin 1s linear infinite" : "none" }} />
+            {itadFetching ? "Searching…" : "ITAD Search"}
           </button>
           {apiKey && (
             <button onClick={() => { setKeyInput(apiKey); setShowKeyPrompt(true); }}
@@ -3412,6 +3452,45 @@ function SamGovView() {
         </button>
         {rows.length > 0 && <span style={{ color:"#B0B7BC", fontSize:"12px", marginLeft:"auto" }}>{displayed.length} of {rows.length} rows</span>}
       </div>
+
+      {/* ITAD Search Results */}
+      {itadResults.length > 0 && (
+        <div style={{ marginBottom:"16px", borderRadius:"10px", border:"1px solid #003875", overflow:"hidden", flexShrink:0 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 14px", background:"#002244", borderBottom:"1px solid #003875" }}>
+            <span style={{ color:"#ffffff", fontSize:"13px", fontWeight:700 }}>ITAD Search Results <span style={{ color:"#B0B7BC", fontWeight:400 }}>({itadResults.length})</span></span>
+            <button onClick={() => setItadResults([])} style={{ background:"none", border:"none", color:"#B0B7BC", fontSize:"16px", cursor:"pointer", lineHeight:1 }}>✕</button>
+          </div>
+          <div style={{ maxHeight:"280px", overflowY:"auto" }}>
+            <table style={{ borderCollapse:"collapse", width:"100%", tableLayout:"fixed" }}>
+              <colgroup>
+                <col style={{ width:"40%" }} />
+                <col style={{ width:"110px" }} />
+                <col style={{ width:"110px" }} />
+                <col style={{ width:"60px" }} />
+              </colgroup>
+              <thead>
+                <tr>
+                  {["Title","Posted","Due Date","Link"].map(h => (
+                    <th key={h} style={{ padding:"7px 10px", background:"#002244", color:"#B0B7BC", fontSize:"11px", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em", borderBottom:"1px solid #003366", textAlign:"left" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {itadResults.map((r, i) => (
+                  <tr key={i} style={{ background: i % 2 === 0 ? "#001a33" : "#00122b" }}>
+                    <td style={{ padding:"7px 10px", color:"#ffffff", fontSize:"12px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={r.title}>{r.title}</td>
+                    <td style={{ padding:"7px 10px", color:"#B0B7BC", fontSize:"12px" }}>{r.postedDate}</td>
+                    <td style={{ padding:"7px 10px", color:"#B0B7BC", fontSize:"12px" }}>{r.dueDate}</td>
+                    <td style={{ padding:"7px 10px" }}>
+                      {r.link ? <a href={r.link} target="_blank" rel="noopener noreferrer" style={{ color:"#C60C30", fontSize:"12px", fontWeight:700, textDecoration:"none" }}>View</a> : <span style={{ color:"#4a6080", fontSize:"12px" }}>—</span>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {rows.length === 0 && !fetching && (
         <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#4a6080", fontSize:"14px" }}>
