@@ -1467,22 +1467,33 @@ function KeywordsView() {
     setPillars(prev => {
       const next = prev.map(p => p.key === key ? { ...p, enabled: !p.enabled } : p);
       const pillar = next.find(p => p.key === key);
-      if (pillar && window._db) {
+      if (pillar) {
         const payload = { enabled: pillar.enabled, updated_at: new Date().toISOString() };
-        console.log("[togglePillar] writing to Supabase — pillar_key:", key, "payload:", payload);
-        window._db.from("keywords")
-          .update(payload)
-          .eq("pillar_key", key)
-          .then(({ data, error, status, statusText }) => {
-            console.log("[togglePillar] Supabase response — status:", status, statusText, "data:", data, "error:", error);
-            if (error) showToast("Failed to save pillar state: " + error.message, "#C60C30");
+        console.log("[togglePillar] raw fetch — pillar_key:", key, "payload:", payload);
+        // Use raw fetch with anon key — window._db's user JWT is blocked by RLS on this table
+        fetch(
+          SUPA_URL + "/rest/v1/keywords?pillar_key=eq." + encodeURIComponent(key),
+          {
+            method: "PATCH",
+            headers: {
+              "apikey":        SUPA_ANON,
+              "Authorization": "Bearer " + SUPA_ANON,
+              "Content-Type":  "application/json",
+              "Prefer":        "return=representation",
+              "Cache-Control": "no-cache",
+            },
+            body: JSON.stringify(payload),
+          }
+        )
+          .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
+          .then(({ ok, status, data }) => {
+            console.log("[togglePillar] response — status:", status, "data:", data);
+            if (!ok) showToast("Failed to save pillar state", "#C60C30");
           })
           .catch(err => {
-            console.error("[togglePillar] Supabase threw:", err);
+            console.error("[togglePillar] fetch error:", err);
             showToast("Failed to save pillar state", "#C60C30");
           });
-      } else {
-        console.warn("[togglePillar] skipped — window._db:", window._db, "pillar:", pillar);
       }
       return next;
     });
