@@ -1448,8 +1448,18 @@ function KeywordsView() {
   }, []);
 
   const togglePillar = (key) => {
-    setPillars(prev => prev.map(p => p.key === key ? { ...p, enabled: !p.enabled } : p));
-    // Note: user still needs to Save after toggling to persist
+    setPillars(prev => {
+      const next = prev.map(p => p.key === key ? { ...p, enabled: !p.enabled } : p);
+      const pillar = next.find(p => p.key === key);
+      if (pillar && window._db) {
+        window._db.from("keywords")
+          .update({ enabled: pillar.enabled, updated_at: new Date().toISOString() })
+          .eq("pillar_key", key)
+          .then(() => {})
+          .catch(() => showToast("Failed to save pillar state", "#C60C30"));
+      }
+      return next;
+    });
   };
 
   const addTerm = (pillarKey, term, onConfirmed=null) => {
