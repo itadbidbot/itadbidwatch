@@ -3376,6 +3376,10 @@ function SamGovView() {
           <div style={{ color:"#B0B7BC", fontSize:"13px", marginTop:"4px" }}>Federal contract opportunities • last 30 days</div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+          <button onClick={() => window.open("https://sam.gov/search/?keywords=apple+OR+chromebook+OR+electronics+OR+network+equipment&index=opp&is_active=true", "_blank")}
+            style={{ padding:"8px 16px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>
+            ITAD Search
+          </button>
           {apiKey && (
             <button onClick={() => { setKeyInput(apiKey); setShowKeyPrompt(true); }}
               style={{ padding:"6px 12px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
