@@ -1433,7 +1433,7 @@ function KeywordsView() {
     attempt = attempt || 0;
     console.log("[loadPillars] attempt", attempt);
     fetch(
-      SUPA_URL + "/rest/v1/keywords?select=*&order=updated_at.desc&_t=" + Date.now(),
+      SUPA_URL + "/rest/v1/keywords?select=*&order=updated_at.desc",
       {
         headers: {
           "apikey":          SUPA_ANON,
