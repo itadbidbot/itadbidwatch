@@ -1434,9 +1434,9 @@ function KeywordsView() {
       if (attempt < 5) { setTimeout(() => loadPillars(attempt + 1), 1000); return; }
       setLoading(false); return;
     }
-    window._db.from("keywords").select("*").order("weight", { ascending: false })
+    window._db.from("keywords").select("*").order("updated_at", { ascending: false }).gt("weight", -9999)
       .then(({ data, error }) => {
-        console.log("[loadPillars] result — rows:", (data||[]).length, "error:", error || null);
+        console.log("[loadPillars] result — rows:", (data||[]).length, "error:", error || null, "first updated_at:", (data&&data[0]) ? data[0].updated_at : "n/a");
         if (error || !data) { setLoading(false); return; }
         const neg = data.find(r => r.pillar_key === "negative_terms");
         const pos = data.filter(r => r.pillar_key !== "negative_terms" && r.weight >= 0);
