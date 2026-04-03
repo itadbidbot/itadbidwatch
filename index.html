@@ -1426,18 +1426,26 @@ function KeywordsView() {
     }
   };
 
-  // Load from Supabase
+  // Load from Supabase — raw fetch to bypass JS client cache
+  const SUPA_URL  = "https://powcnxmsrxixufcqbxbw.supabase.co";
+  const SUPA_ANON = "sb_publishable_P_iPFer-s3i8zV8106O_zQ_McYNHXeJ";
   const loadPillars = React.useCallback(function(attempt) {
     attempt = attempt || 0;
-    console.log("[loadPillars] attempt", attempt, "window._db:", !!window._db);
-    if (!window._db) {
-      if (attempt < 5) { setTimeout(() => loadPillars(attempt + 1), 1000); return; }
-      setLoading(false); return;
-    }
-    window._db.from("keywords").select("*").order("updated_at", { ascending: false }).gt("weight", -9999)
-      .then(({ data, error }) => {
-        console.log("[loadPillars] result — rows:", (data||[]).length, "error:", error || null, "first updated_at:", (data&&data[0]) ? data[0].updated_at : "n/a");
-        if (error || !data) { setLoading(false); return; }
+    console.log("[loadPillars] attempt", attempt);
+    fetch(
+      SUPA_URL + "/rest/v1/keywords?select=*&order=updated_at.desc&_t=" + Date.now(),
+      {
+        headers: {
+          "apikey":          SUPA_ANON,
+          "Authorization":   "Bearer " + SUPA_ANON,
+          "Cache-Control":   "no-cache",
+          "Pragma":          "no-cache",
+        },
+      }
+    )
+      .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(r.status + ": " + t.slice(0,200)); }))
+      .then(data => {
+        console.log("[loadPillars] rows:", data.length, "first updated_at:", data[0] ? data[0].updated_at : "n/a");
         const neg = data.find(r => r.pillar_key === "negative_terms");
         const pos = data.filter(r => r.pillar_key !== "negative_terms" && r.weight >= 0);
         setNegativeTerms(neg ? (Array.isArray(neg.terms) ? neg.terms : JSON.parse(neg.terms || "[]")) : []);
