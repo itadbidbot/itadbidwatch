@@ -1452,11 +1452,21 @@ function KeywordsView() {
       const next = prev.map(p => p.key === key ? { ...p, enabled: !p.enabled } : p);
       const pillar = next.find(p => p.key === key);
       if (pillar && window._db) {
+        const payload = { enabled: pillar.enabled, updated_at: new Date().toISOString() };
+        console.log("[togglePillar] writing to Supabase — pillar_key:", key, "payload:", payload);
         window._db.from("keywords")
-          .update({ enabled: pillar.enabled, updated_at: new Date().toISOString() })
+          .update(payload)
           .eq("pillar_key", key)
-          .then(() => {})
-          .catch(() => showToast("Failed to save pillar state", "#C60C30"));
+          .then(({ data, error, status, statusText }) => {
+            console.log("[togglePillar] Supabase response — status:", status, statusText, "data:", data, "error:", error);
+            if (error) showToast("Failed to save pillar state: " + error.message, "#C60C30");
+          })
+          .catch(err => {
+            console.error("[togglePillar] Supabase threw:", err);
+            showToast("Failed to save pillar state", "#C60C30");
+          });
+      } else {
+        console.warn("[togglePillar] skipped — window._db:", window._db, "pillar:", pillar);
       }
       return next;
     });
