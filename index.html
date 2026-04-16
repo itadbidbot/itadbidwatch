@@ -1375,6 +1375,19 @@ https://vendornet.wi.gov/Bids.aspx,Wisconsin VendorNet,WI,search_page,Search for
   );
 }
 
+function UploadSuccessModal({ rows, onOk }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.65)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:10000 }}>
+      <div style={{ background:"#003366", border:"1px solid #10b981", borderRadius:"14px", padding:"32px 36px", minWidth:"300px", maxWidth:"90vw", boxShadow:"0 24px 60px rgba(0,0,0,0.5)", textAlign:"center" }}>
+        <div style={{ fontSize:"28px", marginBottom:"12px" }}>✓</div>
+        <div style={{ fontSize:"17px", fontWeight:700, color:"#ffffff", marginBottom:"6px" }}>Upload Successful</div>
+        <div style={{ fontSize:"14px", color:"#10b981", marginBottom:"24px" }}>{rows} row{rows !== 1 ? "s" : ""} added</div>
+        <button onClick={onOk} style={{ padding:"9px 32px", background:"#10b981", border:"none", borderRadius:"8px", color:"#002244", fontSize:"14px", fontWeight:700, cursor:"pointer" }}>OK</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── PRICING PLANS ────────────────────────────────────────────────────────────
 const PLANS = [
   { key:"starter", label:"Starter", price:"$9.99", period:"/mo", maxCustom:3,  color:"#B0B7BC", desc:"Up to 3 custom pillars" },
@@ -1994,6 +2007,7 @@ function RFPBidsView() {
   const [sourceStatus, setSourceStatus] = useState({});
   const [rfpToast, setRfpToast] = useState(null);
   const rfpToastTimer = React.useRef(null);
+  const [uploadSuccess, setUploadSuccess] = useState(null);
   const ANTHROPIC_KEY = ["sk-ant-","api03-4Hf-a69pSKHEb","BAboHpW0UXU7v-J4hPWw","6LuwAXIHe0XfHI6rG53n","RvFAIM5_n4aPNAvRjzCbw","OgIsxqWLffqg-1O9RFQAA"].join("");
   const [colWidths, setColWidths] = useState({
     Title: 180, "Scan Date": 100, "Bid Type": 110, "Due Date": 100,
@@ -2147,8 +2161,8 @@ function RFPBidsView() {
       const parsed = parseCSV(ev.target.result);
       console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
       const { saved, duplicates } = await upsertRfpRows(parsed, fDate);
-      loadAllRows();
-      showRfpToast(`Loaded ${saved} bids, ${duplicates} duplicate${duplicates !== 1 ? "s" : ""} skipped`);
+      await loadAllRows();
+      setUploadSuccess({ rows: saved });
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -2564,6 +2578,9 @@ function RFPBidsView() {
         </div>
       )}
 
+      {/* ── Upload Success Modal ─────────────────────────────────────────── */}
+      {uploadSuccess && <UploadSuccessModal rows={uploadSuccess.rows} onOk={() => setUploadSuccess(null)} />}
+
       {/* ── Toast ────────────────────────────────────────────────────────── */}
       {rfpToast && (
         <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: rfpToast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : rfpToast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${rfpToast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"340px" }}>
@@ -2647,6 +2664,7 @@ function BidPrimeView() {
   const [sourceStatus, setSourceStatus] = useState({});
   const [toast, setToast] = useState(null);
   const toastTimer = React.useRef(null);
+  const [uploadSuccess, setUploadSuccess] = useState(null);
   const [sortCol, setSortCol] = useState("Alert Date");
   const [sortDir, setSortDir] = useState("desc");
   const fileInputRef = useRef(null);
@@ -2678,9 +2696,10 @@ function BidPrimeView() {
       console.log("[BidPrime] Body section start (200):", body.slice(0, 200));
 
       if (enc === "base64") {
-        const b64 = body.replace(/\r?\n/g, "");
+        const b64 = body.replace(/\s/g, "");
         try {
-          const decoded = atob(b64);
+          const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+          const decoded = new TextDecoder("utf-8").decode(bytes);
           console.log("[BidPrime] Base64 decoded length:", decoded.length, "| starts:", decoded.slice(0, 100));
           return decoded;
         } catch(e) { console.error("[BidPrime] atob error:", e); }
@@ -2700,6 +2719,8 @@ function BidPrimeView() {
 
   // ── Extract bids from HTML ─────────────────────────────────────────────────
   function extractBids(html, aDate) {
+    html = html.replace(/\r\n|\r|\n/g, ' ');
+    console.log("[BidPrime] extractBids: html after newline cleanup (first 500):", html.slice(0, 500));
     console.log("[BidPrime] extractBids: html length:", html.length);
 
     // Find UUID comment positions in the raw HTML string (DOMParser strips comments)
@@ -2741,7 +2762,7 @@ function BidPrimeView() {
       const div0 = divs[0];
       if (!div0) continue;
       const titleEl = div0.querySelector('a[href*="/api/v1/member/link"]');
-      const title = titleEl ? titleEl.textContent.trim() : "";
+      const title = titleEl ? titleEl.textContent.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim() : "";
       if (!title) { if (isFirst) console.log("[BidPrime] No title in div0"); continue; }
       const viewEl = div0.querySelector('a[href*="member/inbox"]');
       const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
@@ -2789,31 +2810,70 @@ function BidPrimeView() {
     return bids;
   }
 
+  // ── Subject dedup helpers ──────────────────────────────────────────────────
+  const BP_SEEN_KEY = "bidprime_uploaded_subjects";
+  function getUploadedSubjects() {
+    try { return new Set(JSON.parse(localStorage.getItem(BP_SEEN_KEY) || "[]")); }
+    catch { return new Set(); }
+  }
+  function recordUploadedSubject(subject) {
+    const seen = getUploadedSubjects();
+    seen.add(subject);
+    localStorage.setItem(BP_SEEN_KEY, JSON.stringify([...seen]));
+  }
+
   // ── Handle .eml file upload ────────────────────────────────────────────────
   function handleFile(e) {
+    console.log("[BidPrime:handleFile] triggered, files:", e.target.files.length);
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file) { console.log("[BidPrime:handleFile] no file selected"); return; }
+    console.log("[BidPrime:handleFile] file name:", file.name, "size:", file.size, "type:", file.type);
     const reader = new FileReader();
+    reader.onerror = err => console.error("[BidPrime:handleFile] FileReader error:", err);
     reader.onload = async ev => {
+      console.log("[BidPrime:handleFile] FileReader onload fired, result length:", ev.target.result ? ev.target.result.length : 0);
       const emlText = ev.target.result;
       const subject = parseEmlSubject(emlText);
+      console.log("[BidPrime:handleFile] parsed subject:", JSON.stringify(subject));
+
+      if (!subject) { showToast("Could not read email subject line", "#C60C30"); e.target.value = ""; return; }
+
+      const alreadySeen = getUploadedSubjects().has(subject);
+      console.log("[BidPrime:handleFile] duplicate check — already uploaded:", alreadySeen);
+      if (alreadySeen) {
+        showToast(`Already uploaded: "${subject}"`, "#C60C30");
+        e.target.value = "";
+        return;
+      }
 
       let aDate = null;
       const dateMatch = subject.match(/\((\d{1,2})\/(\d{1,2})\/(\d{4})\)/);
       if (dateMatch) {
         aDate = `${dateMatch[3]}-${String(dateMatch[1]).padStart(2,'0')}-${String(dateMatch[2]).padStart(2,'0')}`;
       }
+      console.log("[BidPrime:handleFile] alert date:", aDate);
       setAlertDate(aDate);
 
+      console.log("[BidPrime:handleFile] calling emlToHtml...");
       const html = emlToHtml(emlText);
+      console.log("[BidPrime:handleFile] emlToHtml returned length:", html ? html.length : 0, "| starts:", html ? html.slice(0, 80) : "(empty)");
       if (!html) { showToast("Could not parse HTML from .eml file", "#C60C30"); return; }
 
+      console.log("[BidPrime:handleFile] calling extractBids...");
       const parsed = extractBids(html, aDate);
-      console.log("BidPrime parsed bids:", parsed.length, parsed[0]);
+      console.log("[BidPrime:handleFile] extractBids returned:", parsed.length, "bids | first:", parsed[0]);
 
+      if (!parsed.length) { showToast("No bids found in this email", "#C60C30"); return; }
+
+      console.log("[BidPrime:handleFile] calling upsertBids...");
       const { saved, duplicates } = await upsertBids(parsed);
+      console.log("[BidPrime:handleFile] upsertBids done — saved:", saved, "duplicates:", duplicates);
+
+      recordUploadedSubject(subject);
+      console.log("[BidPrime:handleFile] subject recorded, calling loadAllRows...");
       await loadAllRows();
-      showToast(`Loaded ${saved} bids, ${duplicates} duplicate${duplicates !== 1 ? "s" : ""} skipped`);
+      console.log("[BidPrime:handleFile] loadAllRows done, showing success modal");
+      setUploadSuccess({ rows: saved });
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -3163,6 +3223,8 @@ function BidPrimeView() {
           </table>
         </div>
       )}
+
+      {uploadSuccess && <UploadSuccessModal rows={uploadSuccess.rows} onOk={() => setUploadSuccess(null)} />}
 
       {toast && (
         <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: toast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${toast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"340px" }}>
