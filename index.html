@@ -2761,8 +2761,8 @@ function BidPrimeView() {
       // div0: title + view link
       const div0 = divs[0];
       if (!div0) continue;
-      const titleEl = div0.querySelector('a');
-      const title = titleEl ? titleEl.textContent.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim() : "";
+      const titleEl = div0.querySelector('a[href*="bid/link"]') || div0.querySelector('a');
+      const title = titleEl?.textContent?.replace(/\s+/g, ' ').trim() || "";
       if (isFirst) console.log("[BidPrime] extracted title:", JSON.stringify(title));
       if (!title) { if (isFirst) console.log("[BidPrime] No title in div0"); continue; }
       const viewEl = div0.querySelector('a[href*="member/inbox"]');
