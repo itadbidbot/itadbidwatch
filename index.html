@@ -3463,6 +3463,14 @@ function BidPrimeView() {
   );
 }
 
+// ─── SAM.GOV SAMPLE ROWS (in-memory only, never written to Supabase) ─────────
+const SAM_SAMPLE_ROWS = [
+  { _id:"sam_s0", _sample:true, _dbid:null, _notice_id:"", _assignee:"", _status:"pending", _hubspot:false, _added_to_sources:false, _removed:false, "Title":"Surplus Laptop & Chromebook Disposition – ITAD Services", "Notice Type":"Combined Synopsis/Solicitation", "Posted Date":"2026-04-15", "Due Date":"2026-05-09", "Institution":"Dept. of Education – Office of IT", "State":"Federal", "Link":"" },
+  { _id:"sam_s1", _sample:true, _dbid:null, _notice_id:"", _assignee:"", _status:"pending", _hubspot:false, _added_to_sources:false, _removed:false, "Title":"iPad Fleet Refresh – 2,400 Units for Agency Personnel", "Notice Type":"Solicitation", "Posted Date":"2026-04-14", "Due Date":"2026-05-02", "Institution":"Dept. of Veterans Affairs", "State":"Federal", "Link":"" },
+  { _id:"sam_s2", _sample:true, _dbid:null, _notice_id:"", _assignee:"", _status:"pending", _hubspot:false, _added_to_sources:false, _removed:false, "Title":"MacBook Pro Workstation Replacement – Fiscal Year Hardware Refresh", "Notice Type":"Presolicitation", "Posted Date":"2026-04-13", "Due Date":"2026-05-20", "Institution":"National Science Foundation", "State":"Federal", "Link":"" },
+  { _id:"sam_s3", _sample:true, _dbid:null, _notice_id:"", _assignee:"", _status:"pending", _hubspot:false, _added_to_sources:false, _removed:false, "Title":"Secure Data Destruction & Electronics Recycling – Annual BPA", "Notice Type":"Combined Synopsis/Solicitation", "Posted Date":"2026-04-11", "Due Date":"2026-05-16", "Institution":"General Services Administration", "State":"Federal", "Link":"" },
+];
+
 // ─── SAM.GOV VIEW ─────────────────────────────────────────────────────────────
 function SamGovView() {
   const [rows, setRows] = useState([]);
@@ -3482,6 +3490,7 @@ function SamGovView() {
   const [itadFetching, setItadFetching] = useState(false);
   const [sortCol, setSortCol] = useState("Posted Date");
   const [sortDir, setSortDir] = useState("desc");
+  const [dbLoaded, setDbLoaded] = useState(false);
   const [colWidths, setColWidths] = useState({
     Title: 220, "Notice Type": 120, "Posted Date": 100, "Due Date": 110,
     Institution: 200, State: 70, Link: 60, Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
@@ -3514,6 +3523,7 @@ function SamGovView() {
     if (_role !== 'admin' && _firstName) samQuery = samQuery.or(`assignee.ilike.%${_firstName}%,assignee.ilike.%${_email}%`);
     const { data, error } = await samQuery;
     if (error) { console.error("SAM.gov load error:", error); return; }
+    setDbLoaded(true);
     if (!data || !data.length) return;
     setRows(data.map((r, i) => ({
       _id: i,
@@ -3737,6 +3747,9 @@ function SamGovView() {
       return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
     });
 
+  const _samUserRole = (window._currentUser && window._currentUser.role) || 'user';
+  const isSample = rows.length === 0 && dbLoaded && !fetching && _samUserRole === 'user';
+
   const colStyle = { padding:"8px 10px", borderBottom:"1px solid #003366", color:"#B0B7BC", fontSize:"12px", verticalAlign:"middle", overflow:"visible", whiteSpace:"normal", wordBreak:"break-word" };
   const thBase = { padding:"8px 10px", borderBottom:"1px solid #003366", background:"#002244", color:"#B0B7BC", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
 
@@ -3831,13 +3844,20 @@ function SamGovView() {
         </div>
       )}
 
-      {rows.length === 0 && !fetching && (
+      {rows.length === 0 && !fetching && !isSample && (
         <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", color:"#4a6080", fontSize:"14px" }}>
           Click "Fetch Latest" to pull SAM.gov opportunities.
         </div>
       )}
 
-      {rows.length > 0 && (
+      {isSample && (
+        <div style={{ marginBottom:"12px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px", fontWeight:500, display:"flex", alignItems:"center", gap:"8px", flexShrink:0 }}>
+          <span style={{ fontSize:"15px", lineHeight:1 }}>&#9432;</span>
+          This is sample data. Enter your SAM.gov API key and click Fetch Latest to see real opportunities.
+        </div>
+      )}
+
+      {(rows.length > 0 || isSample) && (
         <div style={{ flex:1, overflow:"auto", borderRadius:"10px", border:"1px solid #003366" }}>
           <table style={{ borderCollapse:"collapse", tableLayout:"fixed" }}>
             <colgroup>
@@ -3857,13 +3877,13 @@ function SamGovView() {
               </tr>
             </thead>
             <tbody>
-              {displayed.map((row, idx) => {
+              {(isSample ? SAM_SAMPLE_ROWS : displayed).map((row, idx) => {
                 const link = row["Link"] || "";
                 const srcSt = sourceStatus[row._id];
                 const isRemoved = row._removed;
                 return (
-                  <tr key={row._id} style={{ background: isRemoved ? "#001a33" : idx % 2 === 0 ? "#001a33" : "#001a33", opacity: isRemoved ? 0.45 : 1 }}>
-                    <td style={colStyle} title={row["Title"]}>{row["Title"]}</td>
+                  <tr key={row._id} style={{ background:"#001a33", opacity: isRemoved ? 0.45 : row._sample ? 0.55 : 1 }}>
+                    <td style={colStyle} title={row["Title"]}>{row._sample ? <><span style={{ display:"inline-block", fontSize:"9px", fontWeight:700, color:"#C60C30", border:"1px solid rgba(198,12,48,0.35)", borderRadius:"3px", padding:"1px 5px", marginRight:"6px", verticalAlign:"middle", background:"rgba(198,12,48,0.08)", letterSpacing:"0.05em" }}>SAMPLE</span>{row["Title"] || ""}</> : (row["Title"] || "")}</td>
                     <td style={colStyle} title={row["Notice Type"]}>{row["Notice Type"]}</td>
                     <td style={colStyle} title={row["Posted Date"]}>{(row["Posted Date"] || "").slice(0,10)}</td>
                     <td style={colStyle} title={row["Due Date"]}>{(row["Due Date"] || "").slice(0,10)}</td>
