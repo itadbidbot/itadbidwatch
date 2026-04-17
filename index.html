@@ -2682,7 +2682,7 @@ function BidPrimeView() {
   const [sortDir, setSortDir] = useState("desc");
   const fileInputRef = useRef(null);
   const [colWidths, setColWidths] = useState({
-    Title: 200, State: 60, Agency: 160, "Due Date": 100,
+    Title: 200, "Alert Date": 100, State: 60, Agency: 160, "Due Date": 100,
     "View Link": 70, "Doc Link": 80, Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
   });
 
@@ -2826,6 +2826,7 @@ function BidPrimeView() {
       bids.push({ id: uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
     }
 
+    console.log("[BidPrime] First 3 parsed bids:", JSON.stringify(bids.slice(0, 3), null, 2));
     return bids;
   }
 
@@ -3074,7 +3075,7 @@ function BidPrimeView() {
     "Assignee": "_assignee", "Status": "_status",
   };
 
-  const cols = ["Title", "State", "Agency", "Due Date", "View Link", "Doc Link", "Assignee", "Status", "Hubspot", "Add to Sources"];
+  const cols = ["Title", "Alert Date", "State", "Agency", "Due Date", "View Link", "Doc Link", "Assignee", "Status", "Hubspot", "Add to Sources"];
 
   const displayed = rows
     .filter(r => {
@@ -3186,6 +3187,7 @@ function BidPrimeView() {
                 return (
                   <tr key={row._id} style={{ background:"#001a33", opacity: isRemoved ? 0.45 : 1 }}>
                     <td style={colStyle} title={row.Title}>{row.Title}</td>
+                    <td style={colStyle}>{row["Alert Date"]}</td>
                     <td style={colStyle}>{row.State}</td>
                     <td style={colStyle} title={row.Agency}>{row.Agency}</td>
                     <td style={colStyle}>{row["Due Date"]}</td>
