@@ -154,6 +154,13 @@ const BIDS_SAMPLE_ROWS = [
   { id:"bids_s3", _sample:true, title:"MacBook Pro Refresh – Staff Devices, 85 Units", institution:"Denver Public Schools", state:"CO", due_date:"2026-05-20", score:60, tier:"WARM", source_url:"", pdf_url:"", direct_link:"", matched_positive:"macbook, refresh, apple", memo:"", source_name:"Sample", keywords:"macbook, refresh, apple" },
 ];
 
+// ─── HOT LEADS SAMPLE ROWS (in-memory only, never written to Supabase) ────────
+const HOT_LEADS_SAMPLE_ROWS = [
+  { id:"hot_s0", _sample:true, title:"iPad 10th Gen Bulk Purchase – K-12 Fleet Refresh", institution:"Fulton County Schools", state:"GA", due_date:"2026-05-02", score:88, tier:"HOT", source_url:"", pdf_url:"", direct_link:"", matched_positive:"apple, ipad, fleet", memo:"", source_name:"Sample", keywords:"apple, ipad, fleet" },
+  { id:"hot_s1", _sample:true, title:"Chromebook Replacement Program – 1,200 Units", institution:"Austin ISD", state:"TX", due_date:"2026-04-28", score:76, tier:"HOT", source_url:"", pdf_url:"", direct_link:"", matched_positive:"chromebook, student device, 1:1", memo:"", source_name:"Sample", keywords:"chromebook, student device, 1:1" },
+  { id:"hot_s2", _sample:true, title:"MacBook Pro Refresh – Staff Devices, 85 Units", institution:"Denver Public Schools", state:"CO", due_date:"2026-05-08", score:71, tier:"HOT", source_url:"", pdf_url:"", direct_link:"", matched_positive:"macbook, refresh, apple", memo:"", source_name:"Sample", keywords:"macbook, refresh, apple" },
+];
+
 const MOCK_SCAN_HISTORY = [
   { id:1, date:"2026-03-12", time:"06:40 AM", status:"success", duration:"8m 14s", hot_leads:12, sources:10, errors:1 },
   { id:2, date:"2026-03-11", time:"06:40 AM", status:"success", duration:"7m 52s", hot_leads:8, sources:10, errors:0 },
@@ -631,16 +638,27 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
     const diff = (now - d) / (1000*60*60*24);
     return diff <= 7 && l.tier === "HOT";
   }).length : 42;
+  const _dashUserRole = (window._currentUser && window._currentUser.role) || 'user';
+  const _dashLoaded = window._bidbotData && window._bidbotData.ready;
+  const isSample = !scanning && _dashLoaded && (window._ALL_LEADS||[]).length === 0 && totalSources === 0 && _dashUserRole === 'user';
+
   const stats = [
-    { label:"HOT Leads Today", value:today.length, icon:Flame, color:"#C60C30", sub:"New this scan", page:"hot_leads" },
-    { label:"Total Sources", value:totalSources, icon:Globe, color:"#B0B7BC", sub:`${activeSources} active · ${captchaSources} CAPTCHA`, page:"sources" },
-    { label:"Hot Leads This Week", value:weekLeads, icon:TrendingUp, color:"#10b981", sub:"Last 7 days", page:"hot_leads" },
-    { label:"Sources Added / Month", value:activeSources, icon:Plus, color:"#B0B7BC", sub:"Active sources", page:"sources" },
+    { label:"HOT Leads Today", value:today.length, sampleValue:3, icon:Flame, color:"#C60C30", sub:"New this scan", page:"hot_leads" },
+    { label:"Total Sources", value:totalSources, sampleValue:12, icon:Globe, color:"#B0B7BC", sub:`${activeSources} active · ${captchaSources} CAPTCHA`, page:"sources" },
+    { label:"Hot Leads This Week", value:weekLeads, sampleValue:7, icon:TrendingUp, color:"#10b981", sub:"Last 7 days", page:"hot_leads" },
+    { label:"Sources Added / Month", value:activeSources, sampleValue:12, icon:Plus, color:"#B0B7BC", sub:"Active sources", page:"sources" },
   ];
 
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <WelcomeBanner pageKey="dashboard" title="Welcome to ITAD Bid Watch! 🎯" description="This is your command center. Track hot leads, monitor scan activity, and stay ahead of school district hardware refresh bids — all in one place." />
+      {isSample && (
+        <div style={{ marginBottom:"20px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px", fontWeight:500, display:"flex", alignItems:"center", gap:"8px" }}>
+          <span style={{ fontSize:"15px", lineHeight:1 }}>&#9432;</span>
+          This is sample data. Add sources and run your first scan to see real numbers here.
+        </div>
+      )}
+
       {/* Hero */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" }}>
         <div>
@@ -666,7 +684,7 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
 
       {/* Stat cards */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"12px", marginBottom:"24px" }}>
-        {stats.map(({ label, value, icon:Icon, color, sub, page }) => (
+        {stats.map(({ label, value, sampleValue, icon:Icon, color, sub, page }) => (
           <div key={label} onClick={()=>page && onNavigate(page)}
           onTouchEnd={(e)=>{e.preventDefault(); page && onNavigate(page);}}
           style={{
@@ -675,6 +693,7 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
             cursor: page ? "pointer" : "default",
             transition:"border-color 0.2s, transform 0.1s",
             WebkitTapHighlightColor:"transparent",
+            opacity: isSample ? 0.75 : 1,
           }}
           onMouseEnter={e=>{if(page){e.currentTarget.style.borderColor=color;e.currentTarget.style.transform="translateY(-2px)";}}}
           onMouseLeave={e=>{e.currentTarget.style.borderColor="#003875";e.currentTarget.style.transform="translateY(0)";}}>
@@ -684,7 +703,10 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
                 <Icon size={14} color={color} />
               </div>
             </div>
-            <div style={{ fontSize:"32px", fontWeight:800, color:"#ffffff", lineHeight:1, fontFamily:"'Courier New',monospace" }}>{value}</div>
+            <div style={{ display:"flex", alignItems:"baseline", gap:"8px" }}>
+              <div style={{ fontSize:"32px", fontWeight:800, color:"#ffffff", lineHeight:1, fontFamily:"'Courier New',monospace" }}>{isSample ? sampleValue : value}</div>
+              {isSample && <span style={{ fontSize:"10px", fontWeight:700, color:"rgba(198,12,48,0.7)", letterSpacing:"0.06em" }}>SAMPLE</span>}
+            </div>
             <div style={{ fontSize:"11px", color:"#B0B7BC" }}>{sub}</div>
           </div>
         ))}
@@ -696,7 +718,7 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
           <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
             <Flame size={15} color="#C60C30" />
             <span style={{ fontWeight:700, color:"#ffffff", fontSize:"14px" }}>Today's Hot Leads</span>
-            <span style={{ background:"#C60C30", color:"#fff", fontSize:"10px", fontWeight:700, padding:"1px 7px", borderRadius:"99px" }}>{today.length}</span>
+            <span style={{ background:"#C60C30", color:"#fff", fontSize:"10px", fontWeight:700, padding:"1px 7px", borderRadius:"99px" }}>{isSample ? HOT_LEADS_SAMPLE_ROWS.length : today.length}</span>
           </div>
           <button onClick={()=>onNavigate("hot_leads")} style={{
             background:"transparent", border:"1px solid #003875", color:"#B0B7BC",
@@ -712,10 +734,10 @@ function DashboardView({ onNavigate, onRunScan, scanning }) {
             </tr>
           </thead>
           <tbody>
-            {today.slice(0,7).map((lead,i)=>(
-              <tr key={lead.id} style={{ borderTop:"1px solid #003366", background: i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+            {(isSample ? HOT_LEADS_SAMPLE_ROWS : today.slice(0,7)).map((lead,i)=>(
+              <tr key={lead.id} style={{ borderTop:"1px solid #003366", background: i%2===0?"transparent":"rgba(255,255,255,0.01)", opacity: lead._sample ? 0.55 : 1 }}>
                 <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC", maxWidth:"280px" }}>
-                  <div style={{ fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
+                  <div style={{ fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead._sample ? <><span style={{ display:"inline-block", fontSize:"9px", fontWeight:700, color:"#C60C30", border:"1px solid rgba(198,12,48,0.35)", borderRadius:"3px", padding:"1px 5px", marginRight:"6px", verticalAlign:"middle", background:"rgba(198,12,48,0.08)", letterSpacing:"0.05em" }}>SAMPLE</span>{lead.title}</> : lead.title}</div>
                   <div style={{ fontSize:"11px", color:"#94a3b8", marginTop:"2px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.matched_positive || lead.keywords || ""}</div>
                 </td>
                 <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC", whiteSpace:"nowrap" }}>{lead.institution}</td>
@@ -810,9 +832,11 @@ function HotLeadsView({ stateFilter, allBids=false }) {
   }).sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
 
   const _allBidsUserRole = (window._currentUser && window._currentUser.role) || 'user';
-  const isSample = allBids && _loaded && (window._ALL_LEADS || []).length === 0 && _allBidsUserRole === 'user';
+  const isSampleAllBids  = allBids  && _loaded && (window._ALL_LEADS  || []).length === 0 && _allBidsUserRole === 'user';
+  const isSampleHotLeads = !allBids && _loaded && (window._LIVE_HOT   || []).length === 0 && _allBidsUserRole === 'user';
+  const isSample = isSampleAllBids || isSampleHotLeads;
   const showSampleRows = isSample && !search && category === "all";
-  const displayRows = showSampleRows ? BIDS_SAMPLE_ROWS : filtered;
+  const displayRows = showSampleRows ? (allBids ? BIDS_SAMPLE_ROWS : HOT_LEADS_SAMPLE_ROWS) : filtered;
 
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
@@ -855,7 +879,9 @@ function HotLeadsView({ stateFilter, allBids=false }) {
       {isSample && (
         <div style={{ marginBottom:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px", fontWeight:500, display:"flex", alignItems:"center", gap:"8px" }}>
           <span style={{ fontSize:"15px", lineHeight:1 }}>&#9432;</span>
-          This is sample data. Your scanned bids will appear here once your sources are set up and the scanner runs.
+          {allBids
+            ? "This is sample data. Your scanned bids will appear here once your sources are set up and the scanner runs."
+            : "These are sample hot leads. Once your sources are set up and the scanner runs, your highest-scoring bids will appear here daily."}
         </div>
       )}
 
