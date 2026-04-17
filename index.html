@@ -136,17 +136,22 @@ const STATES_LIST = ["AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID"
 
 const MOCK_HOT_LEADS = []; // Replaced by Supabase data
 
-const MOCK_SOURCES = [
-  { id:1, friendly_name:"Goochland County Public Schools", url:"https://goochlandschools.org/page/bids-and-proposals", state:"VA", site_type:"links_page", date_added:"2026-01-15", last_scanned:"2026-03-12 06:42 AM", status:"active" },
-  { id:2, friendly_name:"Niagara County – BidNet Direct", url:"https://bidnetdirect.com/niagara-county", state:"NY", site_type:"links_page", date_added:"2026-01-15", last_scanned:"2026-03-12 06:44 AM", status:"active" },
-  { id:3, friendly_name:"Mansfield CT – Bids", url:"https://mansfieldct.gov/bids", state:"CT", site_type:"links_page", date_added:"2026-01-20", last_scanned:"2026-03-12 06:47 AM", status:"active" },
-  { id:4, friendly_name:"Wisconsin VendorNet", url:"https://vendornet.wi.gov/Bids.aspx", state:"WI", site_type:"search_page", date_added:"2026-01-20", last_scanned:"2026-03-12 06:50 AM", status:"active" },
-  { id:5, friendly_name:"Texas SmartBuy", url:"https://www.txsmartbuy.com/sp", state:"TX", site_type:"generic_table", date_added:"2026-02-01", last_scanned:"2026-03-12 06:53 AM", status:"active" },
-  { id:6, friendly_name:"California DGS eProcure", url:"https://caleprocure.ca.gov/pages/PublicBrowser/public-browser.aspx", state:"CA", site_type:"search_page", date_added:"2026-02-05", last_scanned:"2026-03-12 06:55 AM", status:"error" },
-  { id:7, friendly_name:"Virginia eVA Procurement Portal", url:"https://eva.virginia.gov/pages/eva-vendor-resources.htm", state:"VA", site_type:"links_page", date_added:"2026-02-10", last_scanned:"2026-03-11 06:42 AM", status:"active" },
-  { id:8, friendly_name:"New York State Contract Reporter", url:"https://www.nyscr.ny.gov/", state:"NY", site_type:"generic_table", date_added:"2026-02-15", last_scanned:"2026-03-12 07:01 AM", status:"active" },
-  { id:9, friendly_name:"Michigan SIGMA Procurement", url:"https://sigma.michigan.gov/", state:"MI", site_type:"search_page", date_added:"2026-02-20", last_scanned:"never", status:"skipped" },
-  { id:10, friendly_name:"Florida MyFloridaMarketPlace", url:"https://vendor.myfloridamarketplace.com/", state:"FL", site_type:"links_page", date_added:"2026-03-01", last_scanned:"2026-03-12 07:04 AM", status:"active" },
+const MOCK_SOURCES = []; // Replaced by Supabase data
+
+// ─── SOURCES SAMPLE ROWS (in-memory only, never written to Supabase) ─────────
+const SOURCES_SAMPLE_ROWS = [
+  { id:"src_s0", _sample:true, friendly_name:"Fulton County Schools – Bids & Proposals", url:"https://fultonschools.org/bids", state:"GA", site_type:"links_page", date_added:"—", last_scanned:"never", status:"active", captcha_protected:false },
+  { id:"src_s1", _sample:true, friendly_name:"Austin ISD – Purchasing & Contracts", url:"https://www.austinisd.org/purchasing", state:"TX", site_type:"links_page", date_added:"—", last_scanned:"never", status:"active", captcha_protected:false },
+  { id:"src_s2", _sample:true, friendly_name:"Jefferson County Public Schools – Solicitations", url:"https://www.jeffcopublicschools.org/bids", state:"CO", site_type:"links_page", date_added:"—", last_scanned:"never", status:"active", captcha_protected:false },
+  { id:"src_s3", _sample:true, friendly_name:"Wisconsin VendorNet – IT Bids", url:"https://vendornet.wi.gov/Bids.aspx", state:"WI", site_type:"search_page", date_added:"—", last_scanned:"never", status:"active", captcha_protected:false },
+];
+
+// ─── BIDS SAMPLE ROWS (in-memory only, never written to Supabase) ─────────────
+const BIDS_SAMPLE_ROWS = [
+  { id:"bids_s0", _sample:true, title:"iPad 10th Gen Bulk Purchase – K-12 Fleet Refresh", institution:"Fulton County Schools", state:"GA", due_date:"2026-05-02", score:88, tier:"HOT", source_url:"", pdf_url:"", direct_link:"", matched_positive:"apple, ipad, fleet", memo:"", source_name:"Sample", keywords:"apple, ipad, fleet" },
+  { id:"bids_s1", _sample:true, title:"Chromebook Replacement Program – 1,200 Units", institution:"Austin ISD", state:"TX", due_date:"2026-04-28", score:72, tier:"HOT", source_url:"", pdf_url:"", direct_link:"", matched_positive:"chromebook, student device", memo:"", source_name:"Sample", keywords:"chromebook, student device" },
+  { id:"bids_s2", _sample:true, title:"ITAD Services & Secure Data Destruction – Surplus Fleet", institution:"Jefferson County Schools", state:"CO", due_date:"2026-05-10", score:65, tier:"WARM", source_url:"", pdf_url:"", direct_link:"", matched_positive:"itad, surplus, disposal", memo:"", source_name:"Sample", keywords:"itad, surplus, disposal" },
+  { id:"bids_s3", _sample:true, title:"MacBook Pro Refresh – Staff Devices, 85 Units", institution:"Denver Public Schools", state:"CO", due_date:"2026-05-20", score:60, tier:"WARM", source_url:"", pdf_url:"", direct_link:"", matched_positive:"macbook, refresh, apple", memo:"", source_name:"Sample", keywords:"macbook, refresh, apple" },
 ];
 
 const MOCK_SCAN_HISTORY = [
@@ -804,6 +809,11 @@ function HotLeadsView({ stateFilter, allBids=false }) {
     return true;
   }).sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
 
+  const _allBidsUserRole = (window._currentUser && window._currentUser.role) || 'user';
+  const isSample = allBids && _loaded && (window._ALL_LEADS || []).length === 0 && _allBidsUserRole === 'user';
+  const showSampleRows = isSample && !search && category === "all";
+  const displayRows = showSampleRows ? BIDS_SAMPLE_ROWS : filtered;
+
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       {allBids
@@ -842,6 +852,13 @@ function HotLeadsView({ stateFilter, allBids=false }) {
         </select>
       </div>
 
+      {isSample && (
+        <div style={{ marginBottom:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px", fontWeight:500, display:"flex", alignItems:"center", gap:"8px" }}>
+          <span style={{ fontSize:"15px", lineHeight:1 }}>&#9432;</span>
+          This is sample data. Your scanned bids will appear here once your sources are set up and the scanner runs.
+        </div>
+      )}
+
       {/* Table */}
       <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
@@ -853,7 +870,7 @@ function HotLeadsView({ stateFilter, allBids=false }) {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+            {displayRows.length === 0 ? (
               <tr><td colSpan={8} style={{ padding:"48px 20px", textAlign:"center" }}>
                   <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"10px" }}>
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#4a6080" strokeWidth="1.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -861,10 +878,10 @@ function HotLeadsView({ stateFilter, allBids=false }) {
                     <div style={{ fontSize:"13px", color:"#B0B7BC" }}>Try adjusting your state filter or search term</div>
                   </div>
                 </td></tr>
-            ) : filtered.map((lead,i)=>(
-              <tr key={lead.id} style={{ borderTop:"1px solid #003366", background:i%2===0?"transparent":"rgba(255,255,255,0.01)" }}>
+            ) : displayRows.map((lead,i)=>(
+              <tr key={lead.id} style={{ borderTop:"1px solid #003366", background:i%2===0?"transparent":"rgba(255,255,255,0.01)", opacity: lead._sample ? 0.55 : 1 }}>
                 <td style={{ padding:"12px 16px", maxWidth:"300px" }}>
-                  <div style={{ fontSize:"13px", color:"#ffffff", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.title}</div>
+                  <div style={{ fontSize:"13px", color:"#ffffff", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead._sample ? <><span style={{ display:"inline-block", fontSize:"9px", fontWeight:700, color:"#C60C30", border:"1px solid rgba(198,12,48,0.35)", borderRadius:"3px", padding:"1px 5px", marginRight:"6px", verticalAlign:"middle", background:"rgba(198,12,48,0.08)", letterSpacing:"0.05em" }}>SAMPLE</span>{lead.title}</> : lead.title}</div>
                   <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"3px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{lead.memo || lead.source_name || ""}</div>
                   <div style={{ fontSize:"10px", color:"#94a3b8", marginTop:"2px", fontFamily:"monospace" }}>Keywords: {lead.matched_positive || lead.keywords || ""}</div>
                 </td>
@@ -952,6 +969,10 @@ function SourcesView() {
     if (window._db) window._db.from("sources").update({friendly_name: editVal}).eq("id", id);
   };
 
+  const _sourcesUserRole = (window._currentUser && window._currentUser.role) || 'user';
+  const _sourcesLoaded = window._bidbotData && window._bidbotData.ready;
+  const isSample = sources.length === 0 && _sourcesLoaded && _sourcesUserRole === 'user';
+
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <WelcomeBanner pageKey="sources" title="Bid Scan Sources" description="Add the school district websites you want to monitor. Upload a CSV of URLs or add them one by one. The scanner checks these daily for new bid opportunities." />
@@ -986,6 +1007,13 @@ function SourcesView() {
           style={{ width:"100%", padding:"8px 12px 8px 32px", background:"#003366", border:"1px solid #003875", borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", outline:"none", boxSizing:"border-box" }} />
       </div>
 
+      {isSample && (
+        <div style={{ marginBottom:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px", fontWeight:500, display:"flex", alignItems:"center", gap:"8px" }}>
+          <span style={{ fontSize:"15px", lineHeight:1 }}>&#9432;</span>
+          These are sample sources. Add your own school district URLs one by one or upload a CSV to get started.
+        </div>
+      )}
+
       {/* Bulk action bar */}
       {selected.size > 0 && (
         <div style={{ padding:"10px 16px", background:"#003366", border:"1px solid #C60C30", borderRadius:"8px", marginBottom:"12px", display:"flex", alignItems:"center", gap:"12px" }}>
@@ -1015,15 +1043,15 @@ function SourcesView() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((s,i)=>(
-              <tr key={s.id} style={{ borderTop:"1px solid #002244", background: selected.has(s.id) ? "rgba(198,12,48,0.08)" : i%2===0?"transparent":"rgba(255,255,255,0.01)", opacity: s.status==="inactive" ? 0.4 : 1 }}>
+            {(isSample ? SOURCES_SAMPLE_ROWS : filtered).map((s,i)=>(
+              <tr key={s.id} style={{ borderTop:"1px solid #002244", background: selected.has(s.id) ? "rgba(198,12,48,0.08)" : i%2===0?"transparent":"rgba(255,255,255,0.01)", opacity: s._sample ? 0.55 : s.status==="inactive" ? 0.4 : 1 }}>
                 <td style={{ padding:"10px 12px" }}>
-                  <div onClick={()=>toggleRow(s.id)} style={{ cursor:"pointer", color:"#4a6080" }}>
+                  <div onClick={()=>{ if(!s._sample) toggleRow(s.id); }} style={{ cursor: s._sample ? "default" : "pointer", color:"#4a6080" }}>
                     {selected.has(s.id) ? <CheckSquare size={14} color="#C60C30" /> : <Square size={14} />}
                   </div>
                 </td>
                 <td style={{ padding:"10px 12px", maxWidth:"200px" }}>
-                  {editingId===s.id ? (
+                  {!s._sample && editingId===s.id ? (
                     <div style={{ display:"flex", gap:"6px", alignItems:"center" }}>
                       <input value={editVal} onChange={e=>setEditVal(e.target.value)}
                         onKeyDown={e=>{if(e.key==="Enter")saveEdit(s.id);if(e.key==="Escape")setEditingId(null);}}
@@ -1035,10 +1063,11 @@ function SourcesView() {
                     </div>
                   ) : (
                     <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+                      {s._sample && <span style={{ display:"inline-block", fontSize:"9px", fontWeight:700, color:"#C60C30", border:"1px solid rgba(198,12,48,0.35)", borderRadius:"3px", padding:"1px 5px", flexShrink:0, background:"rgba(198,12,48,0.08)", letterSpacing:"0.05em" }}>SAMPLE</span>}
                       <span style={{ fontSize:"13px", color:"#ffffff", fontWeight:500, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{s.friendly_name}</span>
-                      <button onClick={()=>startEdit(s)} style={{ background:"transparent", border:"none", cursor:"pointer", color:"#003875", padding:"2px", flexShrink:0 }}>
+                      {!s._sample && <button onClick={()=>startEdit(s)} style={{ background:"transparent", border:"none", cursor:"pointer", color:"#003875", padding:"2px", flexShrink:0 }}>
                         <Edit2 size={11} />
-                      </button>
+                      </button>}
                     </div>
                   )}
                 </td>
@@ -1061,7 +1090,7 @@ function SourcesView() {
                 </td>
                 <td style={{ padding:"10px 12px", whiteSpace:"nowrap" }}>
                   <div style={{ display:"flex", gap:"6px", alignItems:"center", flexWrap:"wrap" }}>
-                    {s.status === "inactive" ? (
+                    {s._sample ? <span style={{ color:"#4a6080", fontSize:"11px" }}>—</span> : s.status === "inactive" ? (
                       <button onClick={()=>restoreSource(s.id)} style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 8px", borderRadius:"4px", cursor:"pointer" }}>
                         Restore
                       </button>
