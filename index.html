@@ -2287,6 +2287,7 @@ function RFPBidsView() {
   const [sortCol, setSortCol] = useState("Scan Date");
   const [sortDir, setSortDir] = useState("desc");
   const [dbLoaded, setDbLoaded] = useState(false);
+  const [dupModal, setDupModal] = useState({ open: false, filename: "", fileObj: null });
   const fileInputRef = useRef(null);
 
   // ── CSV parser ──────────────────────────────────────────────────────────────
@@ -2413,9 +2414,33 @@ function RFPBidsView() {
     return { saved: toInsert.length, duplicates: totalDuplicates };
   }
 
-  function handleFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
+  // ── Upload-history helpers ──────────────────────────────────────────────────
+  async function checkUploadHistory(filename) {
+    if (!window._db) return false;
+    const uid = (window._currentUser && window._currentUser.id) || null;
+    if (!uid) return false;
+    const { data } = await window._db
+      .from("upload_history")
+      .select("id")
+      .eq("user_id", uid)
+      .eq("filename", filename)
+      .limit(1);
+    return !!(data && data.length);
+  }
+
+  async function recordUploadHistory(filename) {
+    if (!window._db) return;
+    const uid = (window._currentUser && window._currentUser.id) || null;
+    if (!uid) return;
+    await window._db.from("upload_history").insert({
+      user_id: uid,
+      filename,
+      uploaded_at: new Date().toISOString(),
+    });
+  }
+
+  // ── Core upload logic (shared by direct path and "Upload Anyway") ───────────
+  async function doUpload(file) {
     let fDate = null;
     const match = file.name.match(/(\d{8})/);
     if (match) {
@@ -2425,21 +2450,40 @@ function RFPBidsView() {
     } else {
       setFileDate(null);
     }
-    const reader = new FileReader();
-    reader.onload = async ev => {
-      try {
-        const parsed = parseCSV(ev.target.result);
-        console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
-        const { saved, duplicates } = await upsertRfpRows(parsed, fDate);
-        await loadAllRows();
-        setUploadSuccess({ rows: saved, duplicates });
-      } catch (err) {
-        console.error("RFP CSV upload error:", err);
-        showRfpToast("Upload failed: " + (err.message || "unknown error"), "#C60C30");
-      }
-    };
-    reader.readAsText(file);
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = async ev => {
+        try {
+          const parsed = parseCSV(ev.target.result);
+          console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
+          const { saved, duplicates } = await upsertRfpRows(parsed, fDate);
+          await loadAllRows();
+          await recordUploadHistory(file.name);
+          setUploadSuccess({ rows: saved, duplicates });
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.readAsText(file);
+    });
+  }
+
+  async function handleFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
     e.target.value = "";
+    try {
+      const alreadyUploaded = await checkUploadHistory(file.name);
+      if (alreadyUploaded) {
+        setDupModal({ open: true, filename: file.name, fileObj: file });
+        return;
+      }
+      await doUpload(file);
+    } catch (err) {
+      console.error("RFP CSV upload error:", err);
+      showRfpToast("Upload failed: " + (err.message || "unknown error"), "#C60C30");
+    }
   }
 
   // ── Load all rows from rfp_bids ─────────────────────────────────────────────
@@ -2867,6 +2911,39 @@ function RFPBidsView() {
 
       {/* ── Upload Success Modal ─────────────────────────────────────────── */}
       {uploadSuccess && <UploadSuccessModal rows={uploadSuccess.rows} duplicates={uploadSuccess.duplicates} onOk={() => setUploadSuccess(null)} />}
+
+      {/* ── Duplicate-filename warning modal ─────────────────────────────── */}
+      {dupModal.open && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9100, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e => { if (e.target === e.currentTarget) setDupModal({ open:false, filename:"", fileObj:null }); }}>
+          <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"14px", padding:"28px", width:"440px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"12px" }}>
+              <AlertTriangle size={18} color="#C60C30" />
+              <span style={{ fontWeight:700, fontSize:"15px", color:"#ffffff" }}>Duplicate File Detected</span>
+            </div>
+            <p style={{ fontSize:"13px", color:"#B0B7BC", lineHeight:1.6, marginBottom:"20px" }}>
+              This file appears to have already been uploaded:<br />
+              <span style={{ color:"#ffffff", fontWeight:600, fontFamily:"monospace", wordBreak:"break-all" }}>{dupModal.filename}</span><br /><br />
+              Do you want to upload it anyway?
+            </p>
+            <div style={{ display:"flex", gap:"10px", justifyContent:"flex-end" }}>
+              <button onClick={() => setDupModal({ open:false, filename:"", fileObj:null })}
+                style={{ padding:"8px 20px", borderRadius:"8px", background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"13px", cursor:"pointer", fontWeight:600 }}>
+                Cancel
+              </button>
+              <button onClick={async () => {
+                const file = dupModal.fileObj;
+                setDupModal({ open:false, filename:"", fileObj:null });
+                try { await doUpload(file); }
+                catch (err) { console.error("RFP CSV upload error:", err); showRfpToast("Upload failed: " + (err.message || "unknown error"), "#C60C30"); }
+              }}
+                style={{ padding:"8px 20px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
+                Upload Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Toast ────────────────────────────────────────────────────────── */}
       {rfpToast && (
