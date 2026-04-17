@@ -2776,48 +2776,17 @@ function BidPrimeView() {
       const viewMatch = blockHtml.match(/href="([^"]*member\/inbox[^"]*)"/i);
       const view_link = viewMatch ? viewMatch[1] : "";
 
-      const docMatch = blockHtml.match(/href="([^"]*request-documents[^"]*)"/i);
+      // All remaining fields via regex — DOM parsing strips anchors and mangles inline-styled spans
+      const stateMatch = blockHtml.match(/<span[^>]*font-weight\s*:\s*bold[^>]*>([A-Z]{2})<\/span>/i);
+      const state = stateMatch ? stateMatch[1] : "";
+      const agencyMatch = stateMatch
+        ? blockHtml.slice(stateMatch.index + stateMatch[0].length).match(/^([^<]*(?:<(?!\/div>)[^<]*)*?)(?=<div[^>]*float|<\/div>)/i)
+        : null;
+      const agency = agencyMatch ? agencyMatch[1].replace(/^[\s\-–]+/, '').replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim() : "";
+      const dueDateMatch = blockHtml.match(/float\s*:\s*right[^>]*>[\s\S]*?(\d{1,2}\/\d{1,2}\/\d{4})/i);
+      const due_date = dueDateMatch ? dueDateMatch[1] : (blockHtml.match(/(\d{1,2}\/\d{1,2}\/\d{4})/) || [])[1] || "";
+      const docMatch = blockHtml.match(/href="([^"]*(?:request-documents|document\/download\/zip)[^"]*)"/i);
       const doc_link = docMatch ? docMatch[1] : "";
-
-      // div1: state (<span style="font-weight:bold">), agency (text after), due_date (float:right div)
-      const div0 = divs[0];
-      const div1 = div0 ? div0.nextElementSibling : null;
-      let state = "", agency = "", due_date = "";
-      if (div1) {
-        // Match <b>, <strong>, or <span style="font-weight:bold...">
-        const boldEl = div1.querySelector('b, strong, span[style*="font-weight:bold"], span[style*="font-weight: bold"]');
-        if (boldEl) {
-          const boldText = boldEl.textContent.trim();
-          // Handle "TX - Agency Name" packed in one bold element
-          const packed = boldText.match(/^([A-Z]{2})\s*[-–]\s*(.+)$/);
-          if (packed) {
-            state = packed[1];
-            agency = packed[2].trim();
-          } else {
-            state = boldText;
-            // Agency is in text nodes immediately after the bold element
-            let agencyParts = [];
-            let node = boldEl.nextSibling;
-            while (node) {
-              if (node.nodeType === 3) agencyParts.push(node.textContent);
-              else if (node.nodeType === 1 && !(node.getAttribute('style') || '').includes('float')) agencyParts.push(node.textContent);
-              node = node.nextSibling;
-            }
-            agency = agencyParts.join('').replace(/^\s*[-–]\s*/, '').replace(/\s*\d{1,2}\/\d{1,2}\/\d{4}.*$/, '').replace(/\s+/g, ' ').trim();
-          }
-        }
-        // due_date from float:right div
-        for (const d of div1.querySelectorAll('div[style]')) {
-          if (!(d.getAttribute('style') || '').replace(/\s/g, '').includes('float:right')) continue;
-          const m = d.textContent.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-          if (m) { due_date = m[1]; break; }
-        }
-        if (!due_date) {
-          const m = div1.textContent.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
-          if (m) due_date = m[1];
-        }
-        if (isFirst) console.log("[BidPrime] div1 outerHTML:", div1.outerHTML);
-      }
 
       if (isFirst) console.log("[BidPrime] Extracted:", { uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
 
