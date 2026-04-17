@@ -1041,6 +1041,7 @@ function AddSourceModal({ onClose, onAdd }) {
       site_type: stype,
       scan_instructions: instructions,
       captcha_protected: false,
+      user_id: (window._currentUser && window._currentUser.id) || null,
     };
     try {
       if (!window._db) throw new Error("Database connection not ready. Please refresh and try again.");
@@ -2095,6 +2096,7 @@ function RFPBidsView() {
       file_date:      fDate || null,
       doc_id:         (r["Doc ID"]         || r["doc_id"]         || "").slice(0, 200),
       org_id:         _orgId,
+      user_id:        (window._currentUser && window._currentUser.id) || null,
     })).filter(r => r.bid_url);
     if (!allRecords.length) return { saved: 0, duplicates: 0 };
 
@@ -2303,6 +2305,7 @@ function RFPBidsView() {
       captcha_protected: false,
       status:            "active",
       date_added:        new Date().toISOString().slice(0, 10),
+      user_id:           (window._currentUser && window._currentUser.id) || null,
     };
     const { error } = await window._db.from("sources").insert(record);
     if (error) {
@@ -2909,6 +2912,7 @@ function BidPrimeView() {
         doc_link:   (r.doc_link||"").slice(0, 2000),
         alert_date: r.alert_date || null,
         org_id:     _orgId,
+        user_id:    (window._currentUser && window._currentUser.id) || null,
       });
     }
 
@@ -3009,6 +3013,7 @@ function BidPrimeView() {
       captcha_protected: false,
       status: "active",
       date_added: new Date().toISOString().slice(0, 10),
+      user_id:    (window._currentUser && window._currentUser.id) || null,
     };
     const { error } = await window._db.from("sources").insert(record);
     if (error) {
@@ -3450,6 +3455,7 @@ function SamGovView() {
       captcha_protected: false,
       status: "active",
       date_added: new Date().toISOString().slice(0, 10),
+      user_id:    (window._currentUser && window._currentUser.id) || null,
     };
     const { error } = await window._db.from("sources").insert(record);
     if (error) {
