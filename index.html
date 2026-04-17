@@ -2171,11 +2171,16 @@ function RFPBidsView() {
     }
     const reader = new FileReader();
     reader.onload = async ev => {
-      const parsed = parseCSV(ev.target.result);
-      console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
-      const { saved, duplicates } = await upsertRfpRows(parsed, fDate);
-      await loadAllRows();
-      setUploadSuccess({ rows: saved, duplicates });
+      try {
+        const parsed = parseCSV(ev.target.result);
+        console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
+        const { saved, duplicates } = await upsertRfpRows(parsed, fDate);
+        await loadAllRows();
+        setUploadSuccess({ rows: saved, duplicates });
+      } catch (err) {
+        console.error("RFP CSV upload error:", err);
+        showRfpToast("Upload failed: " + (err.message || "unknown error"), "#C60C30");
+      }
     };
     reader.readAsText(file);
     e.target.value = "";
