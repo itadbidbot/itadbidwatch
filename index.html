@@ -1,4 +1,4 @@
-<!-- v20260417-3 -->
+<!-- v20260417-4 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -442,8 +442,8 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose, user
     { key:"dashboard", label:"Dashboard",         icon:Home,  adminOnly:false },
     { key:"hot_leads", label:"Daily Hot Leads",   icon:Flame, adminOnly:false },
     { key:"all_bids",  label:"All Bids",          icon:List,  adminOnly:false },
-    { key:"sources",   label:"Bid Scan Sources",  icon:Globe, adminOnly:true  },
-    { key:"keywords",  label:"Keywords & Scoring",icon:Key,   adminOnly:true  },
+    { key:"sources",   label:"Bid Scan Sources",  icon:Globe, adminOnly:false },
+    { key:"keywords",  label:"Keywords & Scoring",icon:Key,   adminOnly:false },
   ].filter(n => isAdmin || !n.adminOnly);
 
   const integrations = [
@@ -914,6 +914,7 @@ function SourcesView() {
   const saveEdit = (id) => {
     setSources(prev=>prev.map(s=>s.id===id?{...s,friendly_name:editVal}:s));
     setEditingId(null);
+    if (window._db) window._db.from("sources").update({friendly_name: editVal}).eq("id", id);
   };
 
   return (
@@ -1534,6 +1535,8 @@ function Toggle({ enabled, onChange }) {
 function KeywordsView() {
   const [pillars, setPillars] = useState([]);
   const [negativeTerms, setNegativeTerms] = useState([]);
+  const [negRowId, setNegRowId] = useState(null);
+  const [negIsDefault, setNegIsDefault] = useState(true);
   const [loading, setLoading] = useState(true);
   const [newTermInputs, setNewTermInputs] = useState({});
   const [newNegTerm, setNewNegTerm] = useState("");
@@ -1545,104 +1548,123 @@ function KeywordsView() {
   const toastTimer = React.useRef(null);
 
   const COLORS = ["#C60C30","#B0B7BC","#10b981","#B0B7BC","#C60C30","#B0B7BC","#C60C30","#84cc16"];
+  const SUPA_URL  = "https://powcnxmsrxixufcqbxbw.supabase.co";
+  const SUPA_ANON = "sb_publishable_P_iPFer-s3i8zV8106O_zQ_McYNHXeJ";
 
   const showToast = (msg, color="#10b981", opts={}) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast({ msg, color, ...opts });
     if (!opts.persist) {
-      const delay = color === "#C60C30" ? 5000 : 3000;
-      toastTimer.current = setTimeout(() => setToast(null), delay);
+      toastTimer.current = setTimeout(() => setToast(null), color === "#C60C30" ? 5000 : 3000);
     }
   };
 
-  // Load from Supabase — raw fetch to bypass JS client cache
-  const SUPA_URL  = "https://powcnxmsrxixufcqbxbw.supabase.co";
-  const SUPA_ANON = "sb_publishable_P_iPFer-s3i8zV8106O_zQ_McYNHXeJ";
-  const loadPillars = React.useCallback(function(attempt) {
-    attempt = attempt || 0;
-    console.log("[loadPillars] attempt", attempt);
-    fetch(
-      SUPA_URL + "/rest/v1/keywords?select=*&order=updated_at.desc",
-      {
+  const loadPillars = React.useCallback(async function() {
+    setLoading(true);
+    const uid = window._currentUser?.id;
+    const isAdmin = window._currentUser?.role === 'admin';
+    try {
+      const { data: { session } } = await window._db.auth.getSession();
+      const jwt = session?.access_token || SUPA_ANON;
+
+      // Fetch defaults (user_id IS NULL) + user's own rows; RLS also enforces this server-side
+      let qs = "select=*&order=updated_at.desc";
+      if (!isAdmin && uid) qs += "&or=(user_id.is.null,user_id.eq." + uid + ")";
+
+      const r = await fetch(SUPA_URL + "/rest/v1/keywords?" + qs, {
         headers: {
-          "apikey":          SUPA_ANON,
-          "Authorization":   "Bearer " + SUPA_ANON,
-          "Cache-Control":   "no-cache",
-          "Pragma":          "no-cache",
+          "apikey": SUPA_ANON, "Authorization": "Bearer " + jwt,
+          "Cache-Control": "no-cache", "Pragma": "no-cache",
         },
-      }
-    )
-      .then(r => r.ok ? r.json() : r.text().then(t => { throw new Error(r.status + ": " + t.slice(0,200)); }))
-      .then(data => {
-        console.log("[loadPillars] rows:", data.length, "first updated_at:", data[0] ? data[0].updated_at : "n/a");
-        const neg = data.find(r => r.pillar_key === "negative_terms");
-        const pos = data.filter(r => r.pillar_key !== "negative_terms" && r.weight >= 0);
-        setNegativeTerms(neg ? (Array.isArray(neg.terms) ? neg.terms : JSON.parse(neg.terms || "[]")) : []);
-        setPillars(pos.map((r, i) => ({
-          key: r.pillar_key,
-          name: r.pillar_name,
-          terms: Array.isArray(r.terms) ? r.terms : JSON.parse(r.terms || "[]"),
-          enabled: r.enabled !== false,
-          color: r.color || COLORS[i % COLORS.length],
-        })));
-        setLoading(false);
-      })
-      .catch(err => { console.error("[loadPillars] error:", err); setLoading(false); });
+      });
+      if (!r.ok) throw new Error(r.status + ": " + (await r.text()).slice(0, 200));
+      const data = await r.json();
+
+      // Merge: defaults first, then user overrides win for matching pillar_key
+      const byKey = {};
+      data.filter(row => !row.user_id).forEach(row => { byKey[row.pillar_key] = { ...row, _isDefault: true }; });
+      data.filter(row => row.user_id).forEach(row => { byKey[row.pillar_key] = { ...row, _isDefault: false }; });
+
+      const rows = Object.values(byKey);
+      const negRow = rows.find(r => r.pillar_key === "negative_terms");
+      const pos = rows.filter(r => r.pillar_key !== "negative_terms" && r.weight >= 0);
+
+      setNegativeTerms(negRow ? (Array.isArray(negRow.terms) ? negRow.terms : JSON.parse(negRow.terms || "[]")) : []);
+      setNegRowId(negRow?.id || null);
+      setNegIsDefault(!negRow?.user_id);
+
+      setPillars(pos.map((row, i) => ({
+        key:       row.pillar_key,
+        dbId:      row.id,
+        name:      row.pillar_name,
+        terms:     Array.isArray(row.terms) ? row.terms : JSON.parse(row.terms || "[]"),
+        enabled:   row.enabled !== false,
+        color:     row.color || COLORS[i % COLORS.length],
+        isDefault: row._isDefault,
+      })));
+    } catch(err) {
+      console.error("[loadPillars] error:", err);
+    }
+    setLoading(false);
   }, []);
 
-  React.useEffect(() => { loadPillars(0); }, [loadPillars]);
+  React.useEffect(() => { loadPillars(); }, [loadPillars]);
 
-  const togglePillar = (key) => {
-    setPillars(prev => {
-      const next = prev.map(p => p.key === key ? { ...p, enabled: !p.enabled } : p);
-      const pillar = next.find(p => p.key === key);
-      if (pillar) {
-        const payload = { enabled: pillar.enabled, updated_at: new Date().toISOString() };
-        console.log("[togglePillar] raw fetch — pillar_key:", key, "payload:", payload);
-        // Use raw fetch with anon key — window._db's user JWT is blocked by RLS on this table
-        fetch(
-          SUPA_URL + "/rest/v1/keywords?pillar_key=eq." + encodeURIComponent(key),
-          {
-            method: "PATCH",
-            headers: {
-              "apikey":        SUPA_ANON,
-              "Authorization": "Bearer " + SUPA_ANON,
-              "Content-Type":  "application/json",
-              "Prefer":        "return=representation",
-              "Cache-Control": "no-cache",
-            },
-            body: JSON.stringify(payload),
-          }
-        )
-          .then(r => r.json().then(d => ({ ok: r.ok, status: r.status, data: d })))
-          .then(({ ok, status, data }) => {
-            console.log("[togglePillar] response — status:", status, "data:", data);
-            if (!ok) showToast("Failed to save pillar state", "#C60C30");
-          })
-          .catch(err => {
-            console.error("[togglePillar] fetch error:", err);
-            showToast("Failed to save pillar state", "#C60C30");
-          });
+  const togglePillar = async (pillarKey) => {
+    const uid = window._currentUser?.id;
+    const isAdmin = window._currentUser?.role === 'admin';
+    const current = pillars.find(p => p.key === pillarKey);
+    if (!current || !window._db) return;
+    const newEnabled = !current.enabled;
+
+    // Optimistic update
+    setPillars(prev => prev.map(p => p.key === pillarKey ? { ...p, enabled: newEnabled } : p));
+
+    try {
+      const { data: { session } } = await window._db.auth.getSession();
+      const jwt = session?.access_token || SUPA_ANON;
+
+      if (!current.isDefault || isAdmin) {
+        // Patch the row the user/admin already owns
+        const resp = await fetch(SUPA_URL + "/rest/v1/keywords?id=eq." + current.dbId, {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPA_ANON, "Authorization": "Bearer " + jwt,
+            "Content-Type": "application/json", "Prefer": "return=minimal",
+          },
+          body: JSON.stringify({ enabled: newEnabled, updated_at: new Date().toISOString() }),
+        });
+        if (!resp.ok) throw new Error("PATCH failed " + resp.status);
+      } else {
+        // Non-admin toggling a shared default — create a user-owned copy
+        const { data, error } = await window._db.from("keywords").insert({
+          pillar_key: current.key, pillar_name: current.name,
+          weight: 1, terms: current.terms,
+          enabled: newEnabled, color: current.color, user_id: uid,
+        }).select().single();
+        if (error) throw error;
+        setPillars(prev => prev.map(p => p.key === pillarKey
+          ? { ...p, enabled: newEnabled, dbId: data.id, isDefault: false } : p));
       }
-      return next;
-    });
+    } catch(err) {
+      console.error("[togglePillar] error:", err);
+      showToast("Failed to save pillar state", "#C60C30");
+      setPillars(prev => prev.map(p => p.key === pillarKey ? { ...p, enabled: !newEnabled } : p));
+    }
   };
 
   const addTerm = (pillarKey, term, onConfirmed=null) => {
     const t = term.trim().toLowerCase();
     if (!t) return true;
-    // Exact match in negative terms — hard block
     if (negativeTerms.some(x => x.toLowerCase() === t)) {
       showToast(`"${t}" is in the Negative Terms list — remove it there first`, "#C60C30");
       return false;
     }
-    // Exact match in other pillars — hard block
     const conflict = pillars.find(p => p.key !== pillarKey && p.terms.some(x => x.toLowerCase() === t));
     if (conflict) {
       showToast(`"${t}" already exists in "${conflict.name}" — remove it there first`, "#C60C30");
       return false;
     }
-    // Partial match check
     let partialMsg = null;
     const negPartial = negativeTerms.find(x => { const xl = x.toLowerCase(); return xl !== t && (xl.includes(t) || t.includes(xl)); });
     if (negPartial) {
@@ -1655,25 +1677,15 @@ function KeywordsView() {
       }
     }
     const doAdd = () => {
-      setPillars(prev => prev.map(p =>
-        p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x => x !== t), t] } : p
-      ));
+      setPillars(prev => prev.map(p => p.key === pillarKey ? { ...p, terms: [...p.terms.filter(x => x !== t), t] } : p));
       setNewTermInputs(prev => ({ ...prev, [pillarKey]: "" }));
     };
     if (partialMsg) {
       if (onConfirmed) {
-        // Save context: block save, ask for confirmation
-        showToast(partialMsg, "#C60C30", {
-          persist: true,
-          confirmLabel: "Save Anyway",
-          onConfirm: () => { doAdd(); setToast(null); onConfirmed(); },
-        });
+        showToast(partialMsg, "#C60C30", { persist:true, confirmLabel:"Save Anyway", onConfirm:() => { doAdd(); setToast(null); onConfirmed(); } });
         return "warn";
       } else {
-        // Standalone add: add immediately, show dismissable warning
-        doAdd();
-        showToast(partialMsg, "#C60C30", { persist: true });
-        return true;
+        doAdd(); showToast(partialMsg, "#C60C30", { persist:true }); return true;
       }
     }
     doAdd();
@@ -1681,28 +1693,43 @@ function KeywordsView() {
   };
 
   const removeTerm = (pillarKey, term) => {
-    setPillars(prev => prev.map(p =>
-      p.key === pillarKey ? { ...p, terms: p.terms.filter(t => t !== term) } : p
-    ));
+    setPillars(prev => prev.map(p => p.key === pillarKey ? { ...p, terms: p.terms.filter(t => t !== term) } : p));
   };
 
   const doSave = (pillarKey) => {
+    const uid = window._currentUser?.id;
+    const isAdmin = window._currentUser?.role === 'admin';
+    if (!window._db) return;
     setSavingPillar(pillarKey);
-    // Use functional update to get current state at save time
     setPillars(current => {
       const pillar = current.find(p => p.key === pillarKey);
-      if (!pillar) return current;
-      window._db.from("keywords").upsert({
-        pillar_key: pillar.key,
-        pillar_name: pillar.name,
-        weight: 1,
-        terms: pillar.terms,
-        enabled: pillar.enabled,
-        color: pillar.color,
+      if (!pillar) { setSavingPillar(null); return current; }
+      const payload = {
+        pillar_key: pillar.key, pillar_name: pillar.name, weight: 1,
+        terms: pillar.terms, enabled: pillar.enabled, color: pillar.color,
         updated_at: new Date().toISOString(),
-      }, { onConflict: "pillar_key" })
-      .then(() => { showToast(`"${pillar.name}" saved!`); setSavingPillar(null); })
-      .catch(() => { showToast("Save failed", "#C60C30"); setSavingPillar(null); });
+      };
+      (async () => {
+        try {
+          if (isAdmin || !pillar.isDefault) {
+            // Admin updating default, or user updating their own row
+            const { error } = await window._db.from("keywords").update(payload).eq("id", pillar.dbId);
+            if (error) throw error;
+          } else {
+            // Non-admin saving a default for the first time — create user-owned copy
+            const { data, error } = await window._db.from("keywords")
+              .insert({ ...payload, user_id: uid }).select().single();
+            if (error) throw error;
+            setPillars(prev => prev.map(p => p.key === pillarKey
+              ? { ...p, dbId: data.id, isDefault: false } : p));
+          }
+          showToast(`"${pillar.name}" saved!`);
+        } catch(err) {
+          console.error("[doSave] error:", err);
+          showToast("Save failed", "#C60C30");
+        }
+        setSavingPillar(null);
+      })();
       return current;
     });
   };
@@ -1719,53 +1746,67 @@ function KeywordsView() {
 
   const deletePillar = async (key) => {
     if (!window._db) return;
+    const pillar = pillars.find(p => p.key === key);
+    if (!pillar) return;
+    if (pillar.isDefault) {
+      showToast("Shared pillars can't be removed — toggle off to hide from scans", "#C60C30");
+      return;
+    }
     try {
-      await window._db.from("keywords").delete().eq("pillar_key", key);
+      await window._db.from("keywords").delete().eq("id", pillar.dbId);
       setPillars(prev => prev.filter(p => p.key !== key));
       showToast("Pillar removed", "#C60C30");
-    } catch(e) {
-      showToast("Delete failed", "#C60C30");
-    }
+    } catch(e) { showToast("Delete failed", "#C60C30"); }
   };
 
   const saveNegatives = async () => {
     if (!window._db) return;
+    const uid = window._currentUser?.id;
+    const isAdmin = window._currentUser?.role === 'admin';
     setSavingNeg(true);
+    const payload = {
+      pillar_key: "negative_terms", pillar_name: "Negative Terms",
+      weight: -999, terms: negativeTerms, enabled: true, color: "#C60C30",
+      updated_at: new Date().toISOString(),
+    };
     try {
-      await window._db.from("keywords").upsert({
-        pillar_key: "negative_terms",
-        pillar_name: "Negative Terms",
-        weight: -999,
-        terms: negativeTerms,
-        enabled: true,
-        color: "#C60C30",
-        updated_at: new Date().toISOString(),
-      }, { onConflict: "pillar_key" });
+      if (isAdmin || (!negIsDefault && negRowId)) {
+        const { error } = await window._db.from("keywords").update(payload).eq("id", negRowId);
+        if (error) throw error;
+      } else if (!negIsDefault) {
+        // No row yet for user
+        const { data, error } = await window._db.from("keywords")
+          .insert({ ...payload, user_id: uid }).select().single();
+        if (error) throw error;
+        setNegRowId(data.id); setNegIsDefault(false);
+      } else {
+        // Inheriting default — create user-specific copy
+        const { data, error } = await window._db.from("keywords")
+          .insert({ ...payload, user_id: uid }).select().single();
+        if (error) throw error;
+        setNegRowId(data.id); setNegIsDefault(false);
+      }
       showToast("Negative terms saved!");
-    } catch(e) {
-      showToast("Save failed", "#C60C30");
-    }
+    } catch(e) { console.error("[saveNegatives]", e); showToast("Save failed", "#C60C30"); }
     setSavingNeg(false);
   };
 
   const addPillar = async () => {
     const name = newPillarName.trim();
     if (!name || !window._db) return;
+    const uid = window._currentUser?.id;
+    const isAdmin = window._currentUser?.role === 'admin';
     const key = "custom_" + name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
     const color = COLORS[pillars.length % COLORS.length];
-    const newP = { key, name, terms: [], enabled: true, color };
     try {
-      await window._db.from("keywords").insert({
-        pillar_key: key, pillar_name: name, weight: 1,
-        terms: [], enabled: true, color,
-      });
-      setPillars(prev => [...prev, newP]);
-      setNewPillarName("");
-      setShowAddPillar(false);
+      const row = { pillar_key: key, pillar_name: name, weight: 1, terms: [], enabled: true, color };
+      if (!isAdmin) row.user_id = uid;
+      const { data, error } = await window._db.from("keywords").insert(row).select().single();
+      if (error) throw error;
+      setPillars(prev => [...prev, { key, dbId: data.id, name, terms: [], enabled: true, color, isDefault: false }]);
+      setNewPillarName(""); setShowAddPillar(false);
       showToast(`"${name}" pillar created!`);
-    } catch(e) {
-      showToast("Create failed", "#C60C30");
-    }
+    } catch(e) { console.error("[addPillar]", e); showToast("Create failed", "#C60C30"); }
   };
 
   if (loading) return (
@@ -1815,9 +1856,7 @@ function KeywordsView() {
           cursor:"pointer", display:"flex", alignItems:"center", gap:"7px",
           background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff",
           boxShadow:"0 3px 12px rgba(198,12,48,0.35)"
-        }}>
-          + Add Pillar
-        </button>
+        }}>+ Add Pillar</button>
       </div>
 
       {/* Add Pillar inline */}
@@ -1849,24 +1888,28 @@ function KeywordsView() {
             opacity: pillar.enabled ? 1 : 0.5, transition:"all 0.2s"
           }}>
             {/* Pillar header */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px" }}>
-              <div style={{ fontWeight:700, color: pillar.enabled?"#ffffff":"#4a6080", fontSize:"14px" }}>
-                {pillar.name}
-              </div>
-              <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-                {/* Toggle */}
-                <div onClick={() => togglePillar(pillar.key)} style={{
-                  width:"36px", height:"20px", borderRadius:"99px", cursor:"pointer",
-                  background: pillar.enabled ? pillar.color : "#003875",
-                  position:"relative", transition:"background 0.2s", flexShrink:0
-                }}>
-                  <div style={{
-                    position:"absolute", top:"2px",
-                    left: pillar.enabled ? "18px" : "2px",
-                    width:"16px", height:"16px", borderRadius:"50%",
-                    background:"#fff", transition:"left 0.2s"
-                  }}/>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"10px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"8px", minWidth:0 }}>
+                <div style={{ fontWeight:700, color: pillar.enabled?"#ffffff":"#4a6080", fontSize:"14px",
+                  whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                  {pillar.name}
                 </div>
+                {pillar.isDefault && (
+                  <span style={{ fontSize:"9px", fontWeight:700, letterSpacing:"0.08em",
+                    background:"#003875", color:"#4a6080", padding:"2px 5px",
+                    borderRadius:"4px", flexShrink:0 }}>SHARED</span>
+                )}
+              </div>
+              <div onClick={() => togglePillar(pillar.key)} style={{
+                width:"36px", height:"20px", borderRadius:"99px", cursor:"pointer", flexShrink:0,
+                background: pillar.enabled ? pillar.color : "#003875",
+                position:"relative", transition:"background 0.2s", marginLeft:"8px"
+              }}>
+                <div style={{
+                  position:"absolute", top:"2px", left: pillar.enabled ? "18px" : "2px",
+                  width:"16px", height:"16px", borderRadius:"50%",
+                  background:"#fff", transition:"left 0.2s"
+                }}/>
               </div>
             </div>
 
@@ -1897,23 +1940,22 @@ function KeywordsView() {
                 onBlur={e => addTerm(pillar.key, e.target.value)}
                 placeholder="Add term..."
                 style={{ flex:1, background:"#002244", border:"1px solid #003366", color:"#B0B7BC",
-                  padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none",
-                  fontFamily:"monospace" }}
+                  padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none", fontFamily:"monospace" }}
               />
               <button onClick={() => addTerm(pillar.key, newTermInputs[pillar.key]||"")}
                 style={{ padding:"5px 10px", background:"#003366", border:"1px solid #003875",
                   borderRadius:"6px", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>+</button>
             </div>
             <div style={{ fontSize:"10px", color:"#4a6080", marginBottom:"8px", fontStyle:"italic" }}>
-              Press Enter to add keyword before saving
+              {pillar.isDefault ? "Saving will create your own copy of this shared pillar" : "Press Enter to add keyword before saving"}
             </div>
 
             {/* Save + Delete row */}
             <div style={{ display:"flex", justifyContent:"flex-end", gap:"6px" }}>
               <button onClick={() => deletePillar(pillar.key)} style={{
                 padding:"4px 8px", background:"transparent", border:"1px solid #003875",
-                borderRadius:"6px", color:"#C60C30", fontSize:"11px", cursor:"pointer"
-              }}>✕ Remove</button>
+                borderRadius:"6px", color: pillar.isDefault ? "#4a6080" : "#C60C30", fontSize:"11px", cursor:"pointer"
+              }}>{pillar.isDefault ? "— Shared" : "✕ Remove"}</button>
               <button onClick={() => savePillar(pillar.key)} disabled={savingPillar===pillar.key} style={{
                 padding:"4px 10px", background: savingPillar===pillar.key?"#003366":"#10b981",
                 border:"none", borderRadius:"6px", color:"#fff", fontSize:"11px",
@@ -1929,7 +1971,11 @@ function KeywordsView() {
         borderRadius:"12px", padding:"18px" }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px" }}>
           <div>
-            <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px" }}>🚫 Negative Terms</div>
+            <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", display:"flex", alignItems:"center", gap:"8px" }}>
+              🚫 Negative Terms
+              {negIsDefault && <span style={{ fontSize:"9px", fontWeight:700, letterSpacing:"0.08em",
+                background:"#003875", color:"#4a6080", padding:"2px 5px", borderRadius:"4px" }}>SHARED</span>}
+            </div>
             <div style={{ fontSize:"11px", color:"#B0B7BC", marginTop:"2px" }}>
               Bids matching any of these terms will be excluded from results
             </div>
@@ -1968,7 +2014,11 @@ function KeywordsView() {
             style={{ padding:"5px 10px", background:"#003366", border:"1px solid #003875",
               borderRadius:"6px", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>+</button>
         </div>
-
+        {negIsDefault && (
+          <div style={{ fontSize:"10px", color:"#4a6080", marginBottom:"8px", fontStyle:"italic" }}>
+            Saving will create your own copy of these shared negative terms
+          </div>
+        )}
         <div style={{ display:"flex", justifyContent:"flex-end" }}>
           <button onClick={saveNegatives} disabled={savingNeg} style={{
             padding:"4px 12px", background: savingNeg?"#003366":"#C60C30",
@@ -4079,10 +4129,13 @@ function App() {
     let leadsQ = window._db.from("leads").select("*").order("scan_date",{ascending:false}).limit(500);
     if (role !== 'admin' && firstName) leadsQ = leadsQ.or(`assignee.ilike.%${firstName}%,assignee.ilike.%${email}%`);
 
+    let sourcesQ = window._db.from("sources").select("*");
+    if (role !== 'admin') sourcesQ = sourcesQ.eq("user_id", enriched.id);
+
     const [dateRes, leadsRes, sourcesRes, scansRes] = await Promise.all([
       window._db.from("leads").select("scan_date").order("scan_date",{ascending:false}).limit(1),
       leadsQ,
-      window._db.from("sources").select("*"),
+      sourcesQ,
       window._db.from("scans").select("*").order("started_at",{ascending:false}).limit(30),
     ]);
 
