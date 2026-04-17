@@ -2764,10 +2764,7 @@ function BidPrimeView() {
       // The three sibling divs (comment is stripped by DOMParser, divs remain)
       const divs = Array.from(wrapper.children);
       const isFirst = i === 0;
-      if (isFirst) {
-        console.log("[BidPrime] Block child count:", divs.length);
-        divs.forEach((d, idx) => console.log(`[BidPrime] div[${idx}] HTML:`, d.outerHTML.slice(0, 300)));
-      }
+      if (isFirst) console.log("[BidPrime] RAW blockHtml[0]:", blockHtml);
 
       // DOMParser strips anchor tags — extract href/text from raw blockHtml via regex
       const firstAnchorMatch = blockHtml.match(/<a[^>]*>([\s\S]*?)<\/a>/i);
@@ -2782,12 +2779,13 @@ function BidPrimeView() {
       const docMatch = blockHtml.match(/href="([^"]*request-documents[^"]*)"/i);
       const doc_link = docMatch ? docMatch[1] : "";
 
-      // div1: state (bold span), agency (text after span), due_date (float:right div)
+      // div1: state (<span style="font-weight:bold">), agency (text after), due_date (float:right div)
       const div0 = divs[0];
       const div1 = div0 ? div0.nextElementSibling : null;
       let state = "", agency = "", due_date = "";
       if (div1) {
-        const boldEl = div1.querySelector('b, strong');
+        // Match <b>, <strong>, or <span style="font-weight:bold...">
+        const boldEl = div1.querySelector('b, strong, span[style*="font-weight:bold"], span[style*="font-weight: bold"]');
         if (boldEl) {
           const boldText = boldEl.textContent.trim();
           // Handle "TX - Agency Name" packed in one bold element
@@ -2818,7 +2816,7 @@ function BidPrimeView() {
           const m = div1.textContent.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
           if (m) due_date = m[1];
         }
-        if (isFirst) console.log("[BidPrime] div1 text:", div1.textContent.trim().slice(0, 200));
+        if (isFirst) console.log("[BidPrime] div1 outerHTML:", div1.outerHTML);
       }
 
       if (isFirst) console.log("[BidPrime] Extracted:", { uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
