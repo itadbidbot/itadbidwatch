@@ -2769,29 +2769,49 @@ function BidPrimeView() {
         divs.forEach((d, idx) => console.log(`[BidPrime] div[${idx}] HTML:`, d.outerHTML.slice(0, 300)));
       }
 
-      // div0: title + view link
-      const div0 = divs[0];
-      if (!div0) continue;
-      const title = div0.textContent.replace(/\s+/g, ' ').trim();
-      if (!title) { if (isFirst) console.log("[BidPrime] No title in div0"); continue; }
+      // DOMParser strips anchor tags — extract href/text from raw blockHtml via regex
+      const firstAnchorMatch = blockHtml.match(/<a[^>]*>([\s\S]*?)<\/a>/i);
+      const title = firstAnchorMatch
+        ? firstAnchorMatch[1].replace(/\s+/g, ' ').trim()
+        : divs[0] ? divs[0].textContent.replace(/\s+/g, ' ').trim() : "";
+      if (!title) { if (isFirst) console.log("[BidPrime] No title found"); continue; }
 
-      // div1: state/agency + due date
-      const div1 = div0.nextElementSibling;
-      const viewEl = div1 && div1.querySelector('a');
-      const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
+      const viewMatch = blockHtml.match(/href="([^"]*member\/inbox[^"]*)"/i);
+      const view_link = viewMatch ? viewMatch[1] : "";
+
+      const docMatch = blockHtml.match(/href="([^"]*request-documents[^"]*)"/i);
+      const doc_link = docMatch ? docMatch[1] : "";
+
+      // div1: state (bold span), agency (text after span), due_date (float:right div)
+      const div0 = divs[0];
+      const div1 = div0 ? div0.nextElementSibling : null;
       let state = "", agency = "", due_date = "";
       if (div1) {
-        for (const b of div1.querySelectorAll('b, strong')) {
-          const m = b.textContent.trim().match(/^([A-Z]{2})\s*-\s*(.+)$/);
-          if (m) { state = m[1]; agency = m[2].trim(); break; }
+        const boldEl = div1.querySelector('b, strong');
+        if (boldEl) {
+          const boldText = boldEl.textContent.trim();
+          // Handle "TX - Agency Name" packed in one bold element
+          const packed = boldText.match(/^([A-Z]{2})\s*[-–]\s*(.+)$/);
+          if (packed) {
+            state = packed[1];
+            agency = packed[2].trim();
+          } else {
+            state = boldText;
+            // Agency is in text nodes immediately after the bold element
+            let agencyParts = [];
+            let node = boldEl.nextSibling;
+            while (node) {
+              if (node.nodeType === 3) agencyParts.push(node.textContent);
+              else if (node.nodeType === 1 && !(node.getAttribute('style') || '').includes('float')) agencyParts.push(node.textContent);
+              node = node.nextSibling;
+            }
+            agency = agencyParts.join('').replace(/^\s*[-–]\s*/, '').replace(/\s*\d{1,2}\/\d{1,2}\/\d{4}.*$/, '').replace(/\s+/g, ' ').trim();
+          }
         }
-        if (!state) {
-          const m = div1.textContent.match(/\b([A-Z]{2})\s+-\s+([A-Z][A-Z\s,./]+)/);
-          if (m) { state = m[1]; agency = m[2].trim(); }
-        }
+        // due_date from float:right div
         for (const d of div1.querySelectorAll('div[style]')) {
-          if (!(d.getAttribute('style') || "").includes('90px')) continue;
-          const m = d.textContent.trim().match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
+          if (!(d.getAttribute('style') || '').replace(/\s/g, '').includes('float:right')) continue;
+          const m = d.textContent.match(/(\d{1,2}\/\d{1,2}\/\d{4})/);
           if (m) { due_date = m[1]; break; }
         }
         if (!due_date) {
@@ -2801,18 +2821,7 @@ function BidPrimeView() {
         if (isFirst) console.log("[BidPrime] div1 text:", div1.textContent.trim().slice(0, 200));
       }
 
-      // div2: doc link
-      const div2 = div1 ? div1.nextElementSibling : null;
-      let doc_link = "";
-      if (div2) {
-        const docEl = div2.querySelector('a[href*="/api/v2/document/download"]') ||
-                      div2.querySelector('a[href*="request-documents"]') ||
-                      div2.querySelector('a[href*="document"]');
-        doc_link = docEl ? (docEl.getAttribute('href') || "") : "";
-        if (isFirst) console.log("[BidPrime] div2 links:", Array.from(div2.querySelectorAll('a[href]')).map(a => a.getAttribute('href')));
-      }
-
-      if (isFirst) console.log("[BidPrime] Extracted:", { uuid, title, state, agency, due_date, view_link, doc_link });
+      if (isFirst) console.log("[BidPrime] Extracted:", { uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
 
       bids.push({ id: uuid, title, view_link, doc_link, state, agency, due_date, alert_date: aDate });
     }
@@ -2871,7 +2880,7 @@ function BidPrimeView() {
 
       console.log("[BidPrime:handleFile] calling extractBids...");
       const parsed = extractBids(html, aDate);
-      console.log("[BidPrime:handleFile] extractBids returned:", parsed.length, "bids | first:", parsed[0]);
+      console.log("[BidPrime:handleFile] extractBids returned:", parsed.length, "bids | first bid:", JSON.stringify(parsed[0], null, 2));
 
       if (!parsed.length) { showToast("No bids found in this email", "#C60C30"); return; }
 
