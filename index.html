@@ -2759,15 +2759,13 @@ function BidPrimeView() {
       // div0: title + view link
       const div0 = divs[0];
       if (!div0) continue;
-      if (isFirst) console.log("[BidPrime] div0 anchors:", div0.querySelectorAll('a').length, "| innerHTML[:300]:", div0.innerHTML.substring(0, 300));
-      const titleEl = div0.querySelector('a[href*="/api/v1/member/link"], a[href*="/api/v2/bid/link"]');
-      const title = titleEl ? titleEl.textContent.replace(/\s+/g, ' ').trim() : "";
+      const title = div0.textContent.replace(/\s+/g, ' ').trim();
       if (!title) { if (isFirst) console.log("[BidPrime] No title in div0"); continue; }
-      const viewEl = div0.querySelector('a[href*="member/inbox"]');
-      const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
 
       // div1: state/agency + due date
       const div1 = div0.nextElementSibling;
+      const viewEl = div1 && div1.querySelector('a');
+      const view_link = viewEl ? (viewEl.getAttribute('href') || "") : "";
       let state = "", agency = "", due_date = "";
       if (div1) {
         for (const b of div1.querySelectorAll('b, strong')) {
