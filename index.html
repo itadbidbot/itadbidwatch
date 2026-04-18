@@ -2471,7 +2471,7 @@ function RFPBidsView() {
               setBoxProgress({ total: boxRows.length, checked: i + 1, available: avail, unavailable: unavail, done: false });
             }
             setBoxProgress({ total: boxRows.length, checked: boxRows.length, available: avail, unavailable: unavail, done: true });
-            setTimeout(() => setBoxProgress(null), 5000);
+            // user dismisses via OK button
           }
           resolve();
         } catch (err) {
@@ -2765,26 +2765,37 @@ function RFPBidsView() {
 
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", padding:"24px" }}>
-      {/* ── Box-check progress banner ──────────────────────────────────────── */}
+      {/* ── Box-check progress modal ──────────────────────────────────────── */}
       {boxProgress && (
-        <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:9500, background: boxProgress.done ? "rgba(16,185,129,0.97)" : "#001a33", borderBottom:`2px solid ${boxProgress.done ? "#10b981" : "#C60C30"}`, padding:"10px 20px", display:"flex", alignItems:"center", gap:"12px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 2px 24px rgba(0,0,0,0.6)" }}>
-          {boxProgress.done
-            ? <CheckCircle size={16} color="#10b981" style={{ flexShrink:0 }} />
-            : <RefreshCw size={16} color="#C60C30" style={{ animation:"spin 1s linear infinite", flexShrink:0 }} />
-          }
-          <span style={{ flexShrink:0 }}>
-            {boxProgress.done
-              ? `Document check complete — ${boxProgress.available} available, ${boxProgress.unavailable} unavailable`
-              : boxProgress.checked === 0
-                ? `Checking document availability for ${boxProgress.total} link${boxProgress.total !== 1 ? "s" : ""}… please don't navigate away.`
-                : `Checked ${boxProgress.checked} of ${boxProgress.total} links…`
-            }
-          </span>
-          {!boxProgress.done && (
-            <div style={{ flex:1, height:"5px", background:"rgba(255,255,255,0.12)", borderRadius:"3px", overflow:"hidden" }}>
-              <div style={{ height:"100%", background:"#C60C30", borderRadius:"3px", transition:"width 0.35s ease", width:`${Math.round(boxProgress.checked / boxProgress.total * 100)}%` }} />
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9500, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background: boxProgress.done ? "#003d2b" : "#003366", border:`1px solid ${boxProgress.done ? "#10b981" : "#003875"}`, borderRadius:"14px", padding:"28px", width:"440px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)", display:"flex", flexDirection:"column", gap:"16px" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
+              {boxProgress.done
+                ? <CheckCircle size={20} color="#10b981" style={{ flexShrink:0 }} />
+                : <RefreshCw size={20} color="#C60C30" style={{ animation:"spin 1s linear infinite", flexShrink:0 }} />
+              }
+              <span style={{ color:"#ffffff", fontSize:"15px", fontWeight:700 }}>
+                {boxProgress.done ? "Document Check Complete" : "Checking Document Availability"}
+              </span>
             </div>
-          )}
+            <div style={{ color:"rgba(255,255,255,0.85)", fontSize:"13px" }}>
+              {boxProgress.done
+                ? `${boxProgress.available} available, ${boxProgress.unavailable} unavailable out of ${boxProgress.total} links checked.`
+                : `Checking document availability — ${boxProgress.checked} of ${boxProgress.total} links checked`
+              }
+            </div>
+            {!boxProgress.done && (
+              <>
+                <div style={{ height:"6px", background:"rgba(255,255,255,0.12)", borderRadius:"3px", overflow:"hidden" }}>
+                  <div style={{ height:"100%", background:"#C60C30", borderRadius:"3px", transition:"width 0.35s ease", width:`${Math.round(boxProgress.checked / boxProgress.total * 100)}%` }} />
+                </div>
+                <div style={{ color:"rgba(255,165,0,0.85)", fontSize:"12px", fontWeight:600 }}>Please don't navigate away while checking is in progress.</div>
+              </>
+            )}
+            {boxProgress.done && (
+              <button onClick={() => setBoxProgress(null)} style={{ alignSelf:"flex-end", background:"#10b981", border:"none", borderRadius:"8px", color:"#ffffff", cursor:"pointer", fontSize:"13px", fontWeight:700, padding:"8px 24px" }}>OK</button>
+            )}
+          </div>
         </div>
       )}
 
