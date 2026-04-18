@@ -2288,6 +2288,7 @@ function RFPBidsView() {
   const [sortDir, setSortDir] = useState("desc");
   const [dbLoaded, setDbLoaded] = useState(false);
   const [dupModal, setDupModal] = useState({ open: false, filename: "", fileObj: null });
+  const [boxProgress, setBoxProgress] = useState(null); // null=hidden | { total, checked, available, unavailable, done }
   const fileInputRef = useRef(null);
 
   // ── CSV parser ──────────────────────────────────────────────────────────────
@@ -2397,21 +2398,9 @@ function RFPBidsView() {
     if (upsertErr) console.error("upsertRfpRows error:", JSON.stringify(upsertErr), upsertErr);
     else console.log("upsertRfpRows: saved", toInsert.length, "rows, skipped", totalDuplicates, "duplicates");
 
-    // ── Box availability check for newly imported rows ────────────────────────
+    // Return box.com rows to caller so doUpload can run them with progress tracking
     const boxRows = toInsert.filter(r => r.doc_id && r.bid_documents && r.bid_documents.toLowerCase().includes("box.com"));
-    if (boxRows.length) {
-      console.log(`[box-check] checking ${boxRows.length} newly imported box.com rows`);
-      for (const row of boxRows) {
-        const available = await checkBoxAvailability(row.bid_documents);
-        console.log(`[box-check] ${row.bid_documents.slice(0, 80)} -> ${available}`);
-        if (available !== null) {
-          const { error: updateErr } = await window._db.from("rfp_bids").update({ doc_available: available }).eq("doc_id", row.doc_id);
-          if (updateErr) console.warn("[box-check] update failed:", updateErr);
-        }
-      }
-    }
-
-    return { saved: toInsert.length, duplicates: totalDuplicates };
+    return { saved: toInsert.length, duplicates: totalDuplicates, boxRows };
   }
 
   // ── Upload-history helpers ──────────────────────────────────────────────────
@@ -2456,10 +2445,30 @@ function RFPBidsView() {
         try {
           const parsed = parseCSV(ev.target.result);
           console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
-          const { saved, duplicates } = await upsertRfpRows(parsed, fDate);
+          const { saved, duplicates, boxRows } = await upsertRfpRows(parsed, fDate);
           await loadAllRows();
           await recordUploadHistory(file.name);
           setUploadSuccess({ rows: saved, duplicates });
+          // ── Box availability checks with live progress banner ─────────────
+          if (boxRows && boxRows.length) {
+            console.log(`[box-check] checking ${boxRows.length} box.com rows`);
+            setBoxProgress({ total: boxRows.length, checked: 0, available: 0, unavailable: 0, done: false });
+            let avail = 0, unavail = 0;
+            for (let i = 0; i < boxRows.length; i++) {
+              const row = boxRows[i];
+              const result = await checkBoxAvailability(row.bid_documents);
+              console.log(`[box-check] ${row.bid_documents.slice(0, 80)} -> ${result}`);
+              if (result === true)  avail++;
+              if (result === false) unavail++;
+              if (result !== null) {
+                const { error: updateErr } = await window._db.from("rfp_bids").update({ doc_available: result }).eq("doc_id", row.doc_id);
+                if (updateErr) console.warn("[box-check] update failed:", updateErr);
+              }
+              setBoxProgress({ total: boxRows.length, checked: i + 1, available: avail, unavailable: unavail, done: false });
+            }
+            setBoxProgress({ total: boxRows.length, checked: boxRows.length, available: avail, unavailable: unavail, done: true });
+            setTimeout(() => setBoxProgress(null), 5000);
+          }
           resolve();
         } catch (err) {
           reject(err);
@@ -2752,6 +2761,29 @@ function RFPBidsView() {
 
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", padding:"24px" }}>
+      {/* ── Box-check progress banner ──────────────────────────────────────── */}
+      {boxProgress && (
+        <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:9500, background: boxProgress.done ? "rgba(16,185,129,0.97)" : "#001a33", borderBottom:`2px solid ${boxProgress.done ? "#10b981" : "#C60C30"}`, padding:"10px 20px", display:"flex", alignItems:"center", gap:"12px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 2px 24px rgba(0,0,0,0.6)" }}>
+          {boxProgress.done
+            ? <CheckCircle size={16} color="#10b981" style={{ flexShrink:0 }} />
+            : <RefreshCw size={16} color="#C60C30" style={{ animation:"spin 1s linear infinite", flexShrink:0 }} />
+          }
+          <span style={{ flexShrink:0 }}>
+            {boxProgress.done
+              ? `Document check complete — ${boxProgress.available} available, ${boxProgress.unavailable} unavailable`
+              : boxProgress.checked === 0
+                ? `Checking document availability for ${boxProgress.total} link${boxProgress.total !== 1 ? "s" : ""}… please don't navigate away.`
+                : `Checked ${boxProgress.checked} of ${boxProgress.total} links…`
+            }
+          </span>
+          {!boxProgress.done && (
+            <div style={{ flex:1, height:"5px", background:"rgba(255,255,255,0.12)", borderRadius:"3px", overflow:"hidden" }}>
+              <div style={{ height:"100%", background:"#C60C30", borderRadius:"3px", transition:"width 0.35s ease", width:`${Math.round(boxProgress.checked / boxProgress.total * 100)}%` }} />
+            </div>
+          )}
+        </div>
+      )}
+
       <WelcomeBanner pageKey="rfp_bids" title="RFP School Watch" description="Upload your RFP School Watch CSV exports here. New bids are automatically checked for document availability and added to your pipeline." />
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", flexShrink:0 }}>
