@@ -2392,14 +2392,17 @@ function RFPBidsView() {
     }
 
     const totalDuplicates = csvDuplicates + dbDuplicates;
-    if (!toInsert.length) return { saved: 0, duplicates: totalDuplicates };
+    if (!toInsert.length) return { saved: 0, duplicates: totalDuplicates, boxRows: [] };
 
     const { data: upsertData, error: upsertErr } = await window._db.from("rfp_bids").upsert(toInsert, { onConflict: "doc_id" });
     if (upsertErr) console.error("upsertRfpRows error:", JSON.stringify(upsertErr), upsertErr);
     else console.log("upsertRfpRows: saved", toInsert.length, "rows, skipped", totalDuplicates, "duplicates");
 
-    // Return box.com rows to caller so doUpload can run them with progress tracking
-    const boxRows = toInsert.filter(r => r.doc_id && r.bid_documents && r.bid_documents.toLowerCase().includes("box.com"));
+    // Return box.com rows to caller so doUpload can run them with progress tracking.
+    // Filter requires bid_documents (the box.com URL) but NOT doc_id so rows without
+    // a doc_id still get their availability checked.
+    const boxRows = toInsert.filter(r => r.bid_documents && r.bid_documents.toLowerCase().includes("box.com"));
+    console.log("[box-check] upsertRfpRows returning boxRows:", boxRows.length, "of", toInsert.length, "inserted rows");
     return { saved: toInsert.length, duplicates: totalDuplicates, boxRows };
   }
 
@@ -2446,12 +2449,13 @@ function RFPBidsView() {
           const parsed = parseCSV(ev.target.result);
           console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
           const { saved, duplicates, boxRows } = await upsertRfpRows(parsed, fDate);
+          console.log("[doUpload] upsertRfpRows result — saved:", saved, "| duplicates:", duplicates, "| boxRows:", boxRows ? boxRows.length : "undefined");
           await loadAllRows();
           await recordUploadHistory(file.name);
           setUploadSuccess({ rows: saved, duplicates });
           // ── Box availability checks with live progress banner ─────────────
           if (boxRows && boxRows.length) {
-            console.log(`[box-check] checking ${boxRows.length} box.com rows`);
+            console.log(`[box-check] starting loop for ${boxRows.length} box.com rows`);
             setBoxProgress({ total: boxRows.length, checked: 0, available: 0, unavailable: 0, done: false });
             let avail = 0, unavail = 0;
             for (let i = 0; i < boxRows.length; i++) {
