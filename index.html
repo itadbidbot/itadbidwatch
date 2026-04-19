@@ -1,4 +1,4 @@
-<!-- v20260417-5 -->
+<!-- v20260418-1 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -968,6 +968,18 @@ function SourcesView() {
     if (window._db) await window._db.from("sources").update({ status: "active" }).eq("id", id);
   }
 
+  async function deactivateAll() {
+    const ids = sources.map(s => s.id);
+    setSources(prev => prev.map(s => ({ ...s, status: "inactive" })));
+    if (window._db && ids.length > 0) await window._db.from("sources").update({ status: "inactive" }).in("id", ids);
+  }
+
+  async function activateAll() {
+    const ids = sources.map(s => s.id);
+    setSources(prev => prev.map(s => ({ ...s, status: "active" })));
+    if (window._db && ids.length > 0) await window._db.from("sources").update({ status: "active" }).in("id", ids);
+  }
+
   const sourceStates = ["all", ...Array.from(new Set(sources.map(s=>s.state).filter(Boolean))).sort()];
   const filtered = sources.filter(s => {
     if (s.status === "inactive" && !showInactive) return false;
@@ -1012,6 +1024,14 @@ function SourcesView() {
             padding:"8px 16px", borderRadius:"8px", background: showInactive ? "#003875" : "transparent",
             border:"1px solid #003875", color: showInactive ? "#ffffff" : "#B0B7BC", fontSize:"13px", cursor:"pointer"
           }}>{showInactive ? "Hide removed" : "Show removed"}</button>
+          <button onClick={deactivateAll} title="Set all sources to inactive" style={{
+            padding:"8px 16px", borderRadius:"8px", background:"transparent",
+            border:"1px solid #6b3a1e", color:"#d4874a", fontSize:"13px", cursor:"pointer"
+          }}>Deactivate All</button>
+          <button onClick={activateAll} title="Set all sources to active" style={{
+            padding:"8px 16px", borderRadius:"8px", background:"transparent",
+            border:"1px solid #1a5c35", color:"#4caf72", fontSize:"13px", cursor:"pointer"
+          }}>Activate All</button>
           <button onClick={()=>setShowCsvModal(true)} style={{
             padding:"8px 16px", borderRadius:"8px", background:"transparent",
             border:"1px solid #003875", color:"#B0B7BC", fontSize:"13px", cursor:"pointer",
@@ -1744,9 +1764,16 @@ function KeywordsView() {
     }
   };
 
+  const MAX_KEYWORDS = 20;
+
   const addTerm = (pillarKey, term, onConfirmed=null) => {
     const t = term.trim().toLowerCase();
     if (!t) return true;
+    const currentPillar = pillars.find(p => p.key === pillarKey);
+    if (currentPillar && currentPillar.terms.length >= MAX_KEYWORDS) {
+      showToast(`Each pillar is limited to ${MAX_KEYWORDS} keywords`, "#C60C30");
+      return false;
+    }
     if (negativeTerms.some(x => x.toLowerCase() === t)) {
       showToast(`"${t}" is in the Negative Terms list — remove it there first`, "#C60C30");
       return false;
@@ -1969,6 +1996,16 @@ function KeywordsView() {
         </div>
       )}
 
+      {/* Help banner */}
+      <div style={{ background:"#002244", border:"1px solid #003875", borderRadius:"10px",
+        padding:"12px 16px", marginBottom:"20px", fontSize:"12px", color:"#B0B7BC", lineHeight:"1.6" }}>
+        <strong style={{ color:"#ffffff" }}>How keyword matching works:</strong>{" "}
+        Keywords use broad substring matching — <code style={{ background:"#003366", padding:"1px 5px", borderRadius:"3px", fontFamily:"monospace" }}>chromebook</code> matches any title containing that word.
+        You do <strong>not</strong> need plural forms — <code style={{ background:"#003366", padding:"1px 5px", borderRadius:"3px", fontFamily:"monospace" }}>ipad</code> matches <em>ipads</em> automatically.
+        Be specific to avoid false positives — use <code style={{ background:"#003366", padding:"1px 5px", borderRadius:"3px", fontFamily:"monospace" }}>apple macbook</code> instead of just <code style={{ background:"#003366", padding:"1px 5px", borderRadius:"3px", fontFamily:"monospace" }}>apple</code>.
+        Each pillar is limited to <strong>20 keywords</strong>.
+      </div>
+
       {/* Pillars grid */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"16px", marginBottom:"24px" }}>
         {[...pillars].sort((a,b) => (b.enabled?1:0)-(a.enabled?1:0)).map(pillar => (
@@ -2006,6 +2043,13 @@ function KeywordsView() {
             </div>
 
             {/* Terms */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", marginBottom:"4px" }}>
+              <span style={{ fontSize:"10px", fontFamily:"monospace",
+                color: pillar.terms.length >= MAX_KEYWORDS ? "#C60C30" : "#4a6080",
+                fontWeight: pillar.terms.length >= MAX_KEYWORDS ? 700 : 400 }}>
+                {pillar.terms.length}/{MAX_KEYWORDS} keywords
+              </span>
+            </div>
             <div style={{ display:"flex", flexWrap:"wrap", gap:"5px", marginBottom:"12px", minHeight:"28px" }}>
               {pillar.terms.map(t => (
                 <span key={t} style={{
@@ -2027,16 +2071,20 @@ function KeywordsView() {
             <div style={{ display:"flex", gap:"6px", marginBottom:"10px" }}>
               <input
                 value={newTermInputs[pillar.key] || ""}
+                disabled={pillar.terms.length >= MAX_KEYWORDS}
                 onChange={e => setNewTermInputs(prev=>({...prev,[pillar.key]:e.target.value}))}
                 onKeyDown={e => e.key==="Enter" && addTerm(pillar.key, newTermInputs[pillar.key]||"")}
                 onBlur={e => addTerm(pillar.key, e.target.value)}
-                placeholder="Add term..."
+                placeholder={pillar.terms.length >= MAX_KEYWORDS ? "Limit reached (20 max)" : "Add term..."}
                 style={{ flex:1, background:"#002244", border:"1px solid #003366", color:"#B0B7BC",
-                  padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none", fontFamily:"monospace" }}
+                  padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none", fontFamily:"monospace",
+                  opacity: pillar.terms.length >= MAX_KEYWORDS ? 0.5 : 1 }}
               />
               <button onClick={() => addTerm(pillar.key, newTermInputs[pillar.key]||"")}
+                disabled={pillar.terms.length >= MAX_KEYWORDS}
                 style={{ padding:"5px 10px", background:"#003366", border:"1px solid #003875",
-                  borderRadius:"6px", color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>+</button>
+                  borderRadius:"6px", color:"#B0B7BC", fontSize:"11px", cursor:"pointer",
+                  opacity: pillar.terms.length >= MAX_KEYWORDS ? 0.4 : 1 }}>+</button>
             </div>
             <div style={{ fontSize:"10px", color:"#4a6080", marginBottom:"8px", fontStyle:"italic" }}>
               {pillar.isDefault ? "Saving will create your own copy of this shared pillar" : "Press Enter to add keyword before saving"}
