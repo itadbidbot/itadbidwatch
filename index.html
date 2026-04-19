@@ -1644,7 +1644,6 @@ function Toggle({ enabled, onChange }) {
 }
 
 function KeywordsView() {
-  console.log('KeywordsView rendering');
   const [pillars, setPillars] = useState([]);
   const [negativeTerms, setNegativeTerms] = useState([]);
   const [negRowId, setNegRowId] = useState(null);
@@ -1935,7 +1934,7 @@ function KeywordsView() {
     <div style={{ padding:"28px", color:"#B0B7BC", fontSize:"14px" }}>Loading keywords...</div>
   );
 
-  try { return (
+  return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1, position:"relative" }}>
       <WelcomeBanner pageKey="keywords" title="Keywords & Scoring" description="Customize what the scanner looks for. Toggle keyword pillars on or off, or build your own stack of terms specific to your ITAD business." />
 
@@ -2181,7 +2180,7 @@ function KeywordsView() {
       </div>
 
     </div>
-  ); } catch(renderErr) { console.error('[KeywordsView] render crash:', renderErr); return React.createElement('div', { style:{ padding:'28px', color:'#C60C30' } }, 'Keywords failed to render — see console for details'); }
+  );
 }
 
 function ScanHistoryView() {
