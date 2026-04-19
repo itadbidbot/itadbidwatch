@@ -2003,7 +2003,8 @@ function KeywordsView() {
         Keywords use broad substring matching — <code style={{ background:"#003366", padding:"1px 5px", borderRadius:"3px", fontFamily:"monospace" }}>chromebook</code> matches any title containing that word.
         You do <strong>not</strong> need plural forms — <code style={{ background:"#003366", padding:"1px 5px", borderRadius:"3px", fontFamily:"monospace" }}>ipad</code> matches <em>ipads</em> automatically.
         Be specific to avoid false positives — use <code style={{ background:"#003366", padding:"1px 5px", borderRadius:"3px", fontFamily:"monospace" }}>apple macbook</code> instead of just <code style={{ background:"#003366", padding:"1px 5px", borderRadius:"3px", fontFamily:"monospace" }}>apple</code>.
-        Each pillar is limited to <strong>20 keywords</strong>.
+        Each pillar is limited to <strong>20 keywords</strong>.{" "}
+        <strong style={{ color:"#ffffff" }}>Tip:</strong> You can paste multiple keywords at once separated by commas — they'll be added as individual terms.
       </div>
 
       {/* Pillars grid */}
@@ -2075,6 +2076,12 @@ function KeywordsView() {
                 onChange={e => setNewTermInputs(prev=>({...prev,[pillar.key]:e.target.value}))}
                 onKeyDown={e => e.key==="Enter" && addTerm(pillar.key, newTermInputs[pillar.key]||"")}
                 onBlur={e => addTerm(pillar.key, e.target.value)}
+                onPaste={e => {
+                  const text = e.clipboardData.getData("text");
+                  if (!text.includes(",")) return;
+                  e.preventDefault();
+                  text.split(",").forEach(part => addTerm(pillar.key, part));
+                }}
                 placeholder={pillar.terms.length >= MAX_KEYWORDS ? "Limit reached (20 max)" : "Add term..."}
                 style={{ flex:1, background:"#002244", border:"1px solid #003366", color:"#B0B7BC",
                   padding:"5px 8px", borderRadius:"6px", fontSize:"11px", outline:"none", fontFamily:"monospace",
