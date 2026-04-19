@@ -1644,6 +1644,7 @@ function Toggle({ enabled, onChange }) {
 }
 
 function KeywordsView() {
+  console.log('KeywordsView rendering');
   const [pillars, setPillars] = useState([]);
   const [negativeTerms, setNegativeTerms] = useState([]);
   const [negRowId, setNegRowId] = useState(null);
@@ -1700,7 +1701,10 @@ function KeywordsView() {
       const negRow = rows.find(r => r.pillar_key === "negative_terms");
       const pos = rows.filter(r => r.pillar_key !== "negative_terms" && r.weight >= 0);
 
-      setNegativeTerms(negRow ? (Array.isArray(negRow.terms) ? negRow.terms : JSON.parse(negRow.terms || "[]")) : []);
+      let parsedNegTerms = [];
+      try { parsedNegTerms = negRow ? (Array.isArray(negRow.terms) ? negRow.terms : (JSON.parse(negRow.terms || "[]") || [])) : []; }
+      catch(je) { console.error("[loadPillars] negRow JSON.parse error:", je, negRow?.terms); }
+      setNegativeTerms(parsedNegTerms);
       setNegRowId(negRow?.id || null);
       setNegIsDefault(!negRow?.user_id);
 
@@ -1708,7 +1712,7 @@ function KeywordsView() {
         key:       row.pillar_key,
         dbId:      row.id,
         name:      row.pillar_name,
-        terms:     Array.isArray(row.terms) ? row.terms : (JSON.parse(row.terms || "[]") || []),
+        terms:     (() => { try { return Array.isArray(row.terms) ? row.terms : (JSON.parse(row.terms || "[]") || []); } catch(je) { console.error("[loadPillars] row JSON.parse error:", je, row.pillar_key, row.terms); return []; } })(),
         enabled:   row.enabled !== false,
         color:     row.color || COLORS[i % COLORS.length],
         isDefault: row._isDefault,
@@ -1931,7 +1935,7 @@ function KeywordsView() {
     <div style={{ padding:"28px", color:"#B0B7BC", fontSize:"14px" }}>Loading keywords...</div>
   );
 
-  return (
+  try { return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1, position:"relative" }}>
       <WelcomeBanner pageKey="keywords" title="Keywords & Scoring" description="Customize what the scanner looks for. Toggle keyword pillars on or off, or build your own stack of terms specific to your ITAD business." />
 
@@ -2177,7 +2181,7 @@ function KeywordsView() {
       </div>
 
     </div>
-  );
+  ); } catch(renderErr) { console.error('[KeywordsView] render crash:', renderErr); return React.createElement('div', { style:{ padding:'28px', color:'#C60C30' } }, 'Keywords failed to render — see console for details'); }
 }
 
 function ScanHistoryView() {
