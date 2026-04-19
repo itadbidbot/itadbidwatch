@@ -1708,7 +1708,7 @@ function KeywordsView() {
         key:       row.pillar_key,
         dbId:      row.id,
         name:      row.pillar_name,
-        terms:     Array.isArray(row.terms) ? row.terms : JSON.parse(row.terms || "[]"),
+        terms:     Array.isArray(row.terms) ? row.terms : (JSON.parse(row.terms || "[]") || []),
         enabled:   row.enabled !== false,
         color:     row.color || COLORS[i % COLORS.length],
         isDefault: row._isDefault,
@@ -2077,8 +2077,9 @@ function KeywordsView() {
                 onKeyDown={e => e.key==="Enter" && addTerm(pillar.key, newTermInputs[pillar.key]||"")}
                 onBlur={e => addTerm(pillar.key, e.target.value)}
                 onPaste={e => {
+                  if (!e.clipboardData) return;
                   const text = e.clipboardData.getData("text");
-                  if (!text.includes(",")) return;
+                  if (!text || !text.includes(",")) return;
                   e.preventDefault();
                   text.split(",").forEach(part => addTerm(pillar.key, part));
                 }}
