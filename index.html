@@ -1817,42 +1817,54 @@ function KeywordsView() {
     setPillars(prev => prev.map(p => p.key === pillarKey ? { ...p, terms: p.terms.filter(t => t !== term) } : p));
   };
 
-  const doSave = (pillarKey) => {
+  const doSave = async (pillarKey) => {
     const uid = window._currentUser?.id;
     const isAdmin = window._currentUser?.role === 'admin';
-    if (!window._db) return;
+    // Capture current state synchronously before any await
+    const pillar = pillars.find(p => p.key === pillarKey);
+    if (!pillar) return;
+    const currentPillars = pillars;
     setSavingPillar(pillarKey);
-    setPillars(current => {
-      const pillar = current.find(p => p.key === pillarKey);
-      if (!pillar) { setSavingPillar(null); return current; }
-      const payload = {
-        pillar_key: pillar.key, pillar_name: pillar.name, weight: 1,
-        terms: pillar.terms, enabled: pillar.enabled, color: pillar.color,
-        updated_at: new Date().toISOString(),
-      };
-      (async () => {
-        try {
-          if (isAdmin || !pillar.isDefault) {
-            // Admin updating default, or user updating their own row
-            const { error } = await window._db.from("keywords").update(payload).eq("id", pillar.dbId);
-            if (error) throw error;
-          } else {
-            // Non-admin saving a default for the first time — create user-owned copy
-            const { data, error } = await window._db.from("keywords")
-              .insert({ ...payload, user_id: uid }).select().single();
-            if (error) throw error;
-            setPillars(prev => prev.map(p => p.key === pillarKey
-              ? { ...p, dbId: data.id, isDefault: false } : p));
-          }
-          showToast(`"${pillar.name}" saved!`);
-        } catch(err) {
-          console.error("[doSave] error:", err);
-          showToast("Save failed", "#C60C30");
-        }
-        setSavingPillar(null);
-      })();
-      return current;
-    });
+    const payload = {
+      pillar_key: pillar.key, pillar_name: pillar.name, weight: 1,
+      terms: pillar.terms, enabled: pillar.enabled, color: pillar.color,
+      updated_at: new Date().toISOString(),
+    };
+    try {
+      const { data: { session } } = await window._db.auth.getSession();
+      const jwt = session?.access_token || SUPA_ANON;
+      if (isAdmin || !pillar.isDefault) {
+        // Admin updating default, or user updating their own row
+        const resp = await fetch(SUPA_URL + "/rest/v1/keywords?id=eq." + pillar.dbId, {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPA_ANON, "Authorization": "Bearer " + jwt,
+            "Content-Type": "application/json", "Prefer": "return=minimal",
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error("PATCH failed " + resp.status);
+      } else {
+        // Non-admin saving a default for the first time — create user-owned copy
+        const resp = await fetch(SUPA_URL + "/rest/v1/keywords", {
+          method: "POST",
+          headers: {
+            "apikey": SUPA_ANON, "Authorization": "Bearer " + jwt,
+            "Content-Type": "application/json", "Prefer": "return=representation",
+          },
+          body: JSON.stringify({ ...payload, user_id: uid }),
+        });
+        if (!resp.ok) throw new Error("INSERT failed " + resp.status);
+        const [newRow] = await resp.json();
+        setPillars(currentPillars.map(p => p.key === pillarKey
+          ? { ...p, dbId: newRow.id, isDefault: false } : p));
+      }
+      showToast(`"${pillar.name}" saved!`);
+    } catch(err) {
+      console.error("[doSave] error:", err);
+      showToast("Save failed", "#C60C30");
+    }
+    setSavingPillar(null);
   };
 
   const savePillar = (pillarKey) => {
