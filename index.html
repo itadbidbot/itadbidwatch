@@ -1820,7 +1820,6 @@ function KeywordsView() {
   const doSave = async (pillarKey) => {
     const uid = window._currentUser?.id;
     const isAdmin = window._currentUser?.role === 'admin';
-    // Capture current state synchronously before any await
     const pillar = pillars.find(p => p.key === pillarKey);
     if (!pillar) return;
     const currentPillars = pillars;
@@ -1831,25 +1830,21 @@ function KeywordsView() {
       updated_at: new Date().toISOString(),
     };
     try {
-      const { data: { session } } = await window._db.auth.getSession();
-      const jwt = session?.access_token || SUPA_ANON;
       if (isAdmin || !pillar.isDefault) {
-        // Admin updating default, or user updating their own row
         const resp = await fetch(SUPA_URL + "/rest/v1/keywords?id=eq." + pillar.dbId, {
           method: "PATCH",
           headers: {
-            "apikey": SUPA_ANON, "Authorization": "Bearer " + jwt,
+            "apikey": SUPA_ANON, "Authorization": "Bearer " + SUPA_ANON,
             "Content-Type": "application/json", "Prefer": "return=minimal",
           },
           body: JSON.stringify(payload),
         });
         if (!resp.ok) throw new Error("PATCH failed " + resp.status);
       } else {
-        // Non-admin saving a default for the first time — create user-owned copy
         const resp = await fetch(SUPA_URL + "/rest/v1/keywords", {
           method: "POST",
           headers: {
-            "apikey": SUPA_ANON, "Authorization": "Bearer " + jwt,
+            "apikey": SUPA_ANON, "Authorization": "Bearer " + SUPA_ANON,
             "Content-Type": "application/json", "Prefer": "return=representation",
           },
           body: JSON.stringify({ ...payload, user_id: uid }),
@@ -1868,7 +1863,6 @@ function KeywordsView() {
   };
 
   const savePillar = (pillarKey) => {
-    if (!window._db) return;
     const pending = (newTermInputs[pillarKey] || "").trim();
     if (pending) {
       const result = addTerm(pillarKey, pending, () => doSave(pillarKey));
@@ -1878,7 +1872,6 @@ function KeywordsView() {
   };
 
   const deletePillar = async (key) => {
-    if (!window._db) return;
     const pillar = pillars.find(p => p.key === key);
     if (!pillar) return;
     if (pillar.isDefault) {
@@ -1886,14 +1879,17 @@ function KeywordsView() {
       return;
     }
     try {
-      await window._db.from("keywords").delete().eq("id", pillar.dbId);
+      const resp = await fetch(SUPA_URL + "/rest/v1/keywords?id=eq." + pillar.dbId, {
+        method: "DELETE",
+        headers: { "apikey": SUPA_ANON, "Authorization": "Bearer " + SUPA_ANON },
+      });
+      if (!resp.ok) throw new Error("DELETE failed " + resp.status);
       setPillars(prev => prev.filter(p => p.key !== key));
       showToast("Pillar removed", "#C60C30");
     } catch(e) { showToast("Delete failed", "#C60C30"); }
   };
 
   const saveNegatives = async () => {
-    if (!window._db) return;
     const uid = window._currentUser?.id;
     const isAdmin = window._currentUser?.role === 'admin';
     setSavingNeg(true);
@@ -1904,20 +1900,27 @@ function KeywordsView() {
     };
     try {
       if (isAdmin || (!negIsDefault && negRowId)) {
-        const { error } = await window._db.from("keywords").update(payload).eq("id", negRowId);
-        if (error) throw error;
-      } else if (!negIsDefault) {
-        // No row yet for user
-        const { data, error } = await window._db.from("keywords")
-          .insert({ ...payload, user_id: uid }).select().single();
-        if (error) throw error;
-        setNegRowId(data.id); setNegIsDefault(false);
+        const resp = await fetch(SUPA_URL + "/rest/v1/keywords?id=eq." + negRowId, {
+          method: "PATCH",
+          headers: {
+            "apikey": SUPA_ANON, "Authorization": "Bearer " + SUPA_ANON,
+            "Content-Type": "application/json", "Prefer": "return=minimal",
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!resp.ok) throw new Error("PATCH failed " + resp.status);
       } else {
-        // Inheriting default — create user-specific copy
-        const { data, error } = await window._db.from("keywords")
-          .insert({ ...payload, user_id: uid }).select().single();
-        if (error) throw error;
-        setNegRowId(data.id); setNegIsDefault(false);
+        const resp = await fetch(SUPA_URL + "/rest/v1/keywords", {
+          method: "POST",
+          headers: {
+            "apikey": SUPA_ANON, "Authorization": "Bearer " + SUPA_ANON,
+            "Content-Type": "application/json", "Prefer": "return=representation",
+          },
+          body: JSON.stringify({ ...payload, user_id: uid }),
+        });
+        if (!resp.ok) throw new Error("INSERT failed " + resp.status);
+        const [newRow] = await resp.json();
+        setNegRowId(newRow.id); setNegIsDefault(false);
       }
       showToast("Negative terms saved!");
     } catch(e) { console.error("[saveNegatives]", e); showToast("Save failed", "#C60C30"); }
@@ -1926,7 +1929,7 @@ function KeywordsView() {
 
   const addPillar = async () => {
     const name = newPillarName.trim();
-    if (!name || !window._db) return;
+    if (!name) return;
     const uid = window._currentUser?.id;
     const isAdmin = window._currentUser?.role === 'admin';
     const key = "custom_" + name.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now();
@@ -1934,8 +1937,16 @@ function KeywordsView() {
     try {
       const row = { pillar_key: key, pillar_name: name, weight: 1, terms: [], enabled: true, color };
       if (!isAdmin) row.user_id = uid;
-      const { data, error } = await window._db.from("keywords").insert(row).select().single();
-      if (error) throw error;
+      const resp = await fetch(SUPA_URL + "/rest/v1/keywords", {
+        method: "POST",
+        headers: {
+          "apikey": SUPA_ANON, "Authorization": "Bearer " + SUPA_ANON,
+          "Content-Type": "application/json", "Prefer": "return=representation",
+        },
+        body: JSON.stringify(row),
+      });
+      if (!resp.ok) throw new Error("INSERT failed " + resp.status);
+      const [data] = await resp.json();
       setPillars(prev => [...prev, { key, dbId: data.id, name, terms: [], enabled: true, color, isDefault: false }]);
       setNewPillarName(""); setShowAddPillar(false);
       showToast(`"${name}" pillar created!`);
