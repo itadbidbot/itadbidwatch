@@ -1,4 +1,4 @@
-<!-- v20260418-1 -->
+<!-- v20260422-1 -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -245,7 +245,7 @@ function docAvailBadge(docAvailable) {
 // DOC URL / BID DOC cell — file type badges + platform badges
 // Pass onExtract to get a "→" arrow on PDFs that triggers contact extraction
 // Pass docAvailable (true/false/null) to show availability indicator on Box links
-function docUrlCell(url, onExtract, docAvailable) {
+function docUrlCell(url, onExtract, docAvailable, onEmail) {
   if (!url) return <span style={{ color:"#4a6080" }}>—</span>;
   const u = url.toLowerCase();
   if (u.includes(".pdf")) {
@@ -261,7 +261,18 @@ function docUrlCell(url, onExtract, docAvailable) {
   if (u.match(/\.xlsx?(\?|$)/) || u.includes(".xlsx") || u.includes(".xls"))
     return badgeLink(url, "XLS", "rgba(16,185,129,0.15)", "rgba(16,185,129,0.35)", "#10b981");
   if (u.includes("docs.google.com") || u.includes("drive.google.com")) return badgeLink(url, "Google Drive", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
-  if (u.includes("box.com"))          return <span style={{ display:"inline-flex", alignItems:"center" }}>{badgeLink(url, "Box", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6")}{docAvailBadge(docAvailable)}</span>;
+  if (u.includes("box.com")) return (
+    <span style={{ display:"inline-flex", alignItems:"center", gap:"3px" }}>
+      {badgeLink(url, "Box", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6")}
+      {docAvailBadge(docAvailable)}
+      {docAvailable === true && onEmail && (
+        <button onClick={e => { e.stopPropagation(); onEmail(); }} title="Generate sales email"
+          style={{ background:"rgba(16,185,129,0.12)", border:"1px solid rgba(16,185,129,0.35)", color:"#10b981", fontSize:"10px", padding:"1px 5px", borderRadius:"3px", cursor:"pointer", lineHeight:1.4, fontWeight:700, flexShrink:0 }}>
+          ✉️
+        </button>
+      )}
+    </span>
+  );
   if (u.includes("dropbox.com"))      return badgeLink(url, "Dropbox", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
   return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"underline" }}>View</a>;
 }
@@ -2269,6 +2280,15 @@ function ScanHistoryView() {
 
 function SettingsView() {
   const [emailEnabled, setEmailEnabled] = useState(true);
+  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("GEMINI_API_KEY") || "");
+  const [geminiSaved, setGeminiSaved] = useState(false);
+
+  function saveGeminiKey() {
+    localStorage.setItem("GEMINI_API_KEY", geminiKey.trim());
+    setGeminiSaved(true);
+    setTimeout(() => setGeminiSaved(false), 2000);
+  }
+
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <WelcomeBanner pageKey="settings" title="Settings" description="Manage your account, notification preferences, and integrations here." />
@@ -2315,6 +2335,40 @@ function SettingsView() {
           <button style={{ padding:"9px 18px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
             Save Settings
           </button>
+        </div>
+
+        {/* ── API Keys ─────────────────────────────────────────────────────── */}
+        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px", display:"flex", alignItems:"center", gap:"8px" }}>
+            <Key size={14} color="#B0B7BC" /> API Keys
+          </div>
+
+          {/* SAM.gov key note */}
+          <div style={{ marginBottom:"20px" }}>
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>SAM.GOV API KEY</label>
+            <div style={{ fontSize:"12px", color:"#4a6080" }}>Managed on the SAM.gov page. Stored in localStorage under <code style={{ color:"#B0B7BC" }}>sam_gov_api_key</code>.</div>
+          </div>
+
+          {/* Gemini API key */}
+          <div>
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>GEMINI API KEY</label>
+            <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+              <input
+                type="password"
+                value={geminiKey}
+                onChange={e => setGeminiKey(e.target.value)}
+                placeholder="Paste your Google Gemini API key…"
+                style={{ flex:1, padding:"8px 12px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", color:"#ffffff", fontSize:"13px", outline:"none", boxSizing:"border-box" }}
+              />
+              <button onClick={saveGeminiKey}
+                style={{ padding:"8px 16px", background: geminiSaved ? "#10b981" : "linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", transition:"background 0.2s" }}>
+                {geminiSaved ? "✓ Saved" : "Save Key"}
+              </button>
+            </div>
+            <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>
+              Used for ✉️ email generation on Box documents. Stored in localStorage under <code style={{ color:"#B0B7BC" }}>GEMINI_API_KEY</code>. Never sent anywhere except Google's Gemini API.
+            </div>
+          </div>
         </div>
 
         <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px" }}>
@@ -2364,6 +2418,7 @@ function RFPBidsView() {
     Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
   });
   const [extractModal, setExtractModal] = useState({ open: false, loading: false, row: null, contact: null, error: null });
+  const [emailModal, setEmailModal] = useState({ open: false, loading: false, row: null, versions: null, error: null, activeTab: 0 });
   const [scanDateFilter, setScanDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sortCol, setSortCol] = useState("Scan Date");
@@ -2771,6 +2826,110 @@ function RFPBidsView() {
     }
   }
 
+  // ── Email generation via Gemini ─────────────────────────────────────────────
+  async function openEmailModal(row) {
+    const boxUrl = row["Bid Documents"] || row["bid_documents"] || "";
+    setEmailModal({ open: true, loading: true, row, versions: null, error: null, activeTab: 0 });
+    try {
+      const geminiKey = localStorage.getItem("GEMINI_API_KEY") || "";
+      if (!geminiKey) {
+        setEmailModal(m => ({ ...m, loading: false, error: "Gemini API key not set. Please add it in Settings." }));
+        return;
+      }
+      const title = row["Title"] || row.title || "";
+      const institution = row["Institution"] || row.institution || "";
+      const state = row["State"] || row.state || "";
+      const dueDate = row["Due Date"] || row.due_date || "";
+      const bidType = row["Bid Type"] || row.bid_type || "";
+
+      let pdfBase64 = null;
+      // Try CORS proxy to fetch Box page and extract PDF download link
+      if (boxUrl) {
+        try {
+          const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(boxUrl);
+          const boxResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) });
+          if (boxResp.ok) {
+            const html = await boxResp.text();
+            // Look for direct PDF download links in Box page HTML
+            const pdfPatterns = [
+              /["']([^"']*\.pdf[^"'?#]*(?:\?[^"']*)?)["']/gi,
+              /"download_url"\s*:\s*"([^"]+)"/gi,
+              /"shared_link"\s*:\s*\{[^}]*"url"\s*:\s*"([^"]+)"/gi,
+            ];
+            let pdfUrl = null;
+            for (const pat of pdfPatterns) {
+              const m = pat.exec(html);
+              if (m) { pdfUrl = m[1]; break; }
+            }
+            if (pdfUrl) {
+              try {
+                const pdfProxy = "https://corsproxy.io/?" + encodeURIComponent(pdfUrl);
+                const pdfResp = await fetch(pdfProxy, { signal: AbortSignal.timeout(30000) });
+                if (pdfResp.ok) {
+                  const blob = await pdfResp.blob();
+                  pdfBase64 = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result.split(",")[1]);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(blob);
+                  });
+                }
+              } catch(e) { console.warn("[email] PDF fetch failed:", e); }
+            }
+          }
+        } catch(e) { console.warn("[email] Box proxy failed:", e); }
+      }
+
+      const SYSTEM_PROMPT = `You are writing outbound sales emails for Tech Reboot, an IT asset disposition, pickup, reporting, and data-destruction services company. Read the pasted bid / RFP / procurement notice carefully before writing anything. Your first job is to understand what type of opportunity this is: 1. A refresh / replacement purchase that may create older devices coming out of service 2. An indirect doorway opportunity that is not directly in Tech Reboot's lane, but may connect to broader district equipment planning 3. A direct ITAD / electronics recycling / pickup / disposition / data-destruction bid that fits Tech Reboot immediately. Then write the email accordingly. Tech Reboot brand rules: Tech Reboot wins through trust, service, timing, secure process, and operational relief. Never lead with 'buy your surplus,' 'sell us your devices,' 'we buy used equipment,' or other commodity-buyer language. Lead with service language such as pickup coordination, chain of custody, serialized reporting, certified or documented data destruction, logistics support, and staff labor relief. This is a service sale first, not a pricing sale first. The company should sound operationally credible, professional, warm, and specific. The founder is a seasoned ITAD leader. Tech Reboot has more than 16 years of parent-company operating depth behind it. Email objectives: Open the downstream conversation about older devices or equipment coming out of service. Position Tech Reboot as the trusted service-side partner. Confirm whether this is the right person. If it is not the right person, ask who handles the retired or surplus technology side. Do not force a meeting or pricing request too early unless the bid is directly for ITAD / recycling / disposition services. Writing rules: Write only email bodies. 1 professional subject line. No intro commentary. No bullets. Keep each version to 3 to 4 short paragraphs. Professional but warm. Use the actual details from the pasted RFP or bid notice. Make the email sound like it was actually written after reading the document. If the bid clearly says email is not the submission path, explicitly make clear that the email is not a bid submission. If the opportunity is not directly in Tech Reboot's lane, use it as a doorway into broader refresh or retired-equipment planning. If the bid is directly for electronics recycling, disposition, pickup, data destruction, serialized reporting, or payout/recovery services, write more directly and position Tech Reboot as a qualified participating vendor. Logic by opportunity type: If the bid is for Chromebooks, laptops, tablets, desktops, Apple devices, docking stations, or similar refresh equipment, connect the purchase to the older devices that may be coming out of service. If the bid is for copiers or another non-core category, do not pretend Tech Reboot is competing on that purchase; use it only as a doorway into district operations and retired technology planning. If the bid is directly in Tech Reboot's lane, write a stronger vendor-introduction email tied to the actual scope. Output format: Write 3 versions labeled only as: Version 1, Version 2, Version 3. Each version: 1 subject line + 3 to 4 short paragraphs.`;
+
+      const metaText = `Organization: ${institution}\nState: ${state}\nBid Title: ${title}${bidType ? `\nBid Type: ${bidType}` : ""}${dueDate ? `\nDue Date: ${dueDate}` : ""}\nBox Document URL: ${boxUrl}`;
+
+      let parts;
+      if (pdfBase64) {
+        parts = [
+          { text: metaText + "\n\nPlease read the attached PDF document and write 3 email versions based on its contents." },
+          { inline_data: { mime_type: "application/pdf", data: pdfBase64 } },
+        ];
+      } else {
+        parts = [{ text: metaText + "\n\nNo PDF document was retrievable. Please use the metadata above to write 3 email versions." }];
+      }
+
+      const geminiResp = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-03-25:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [{ role: "user", parts }],
+          }),
+        }
+      );
+      if (!geminiResp.ok) {
+        const errText = await geminiResp.text();
+        throw new Error(`Gemini API error ${geminiResp.status}: ${errText.slice(0, 300)}`);
+      }
+      const geminiData = await geminiResp.json();
+      const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      if (!rawText) throw new Error("No text returned from Gemini");
+
+      // Parse versions
+      const versions = [];
+      const matches = [...rawText.matchAll(/Version\s+\d/gi)];
+      for (let i = 0; i < matches.length; i++) {
+        const start = matches[i].index + matches[i][0].length;
+        const end = i + 1 < matches.length ? matches[i + 1].index : rawText.length;
+        versions.push(rawText.slice(start, end).trim());
+      }
+      if (!versions.length) versions.push(rawText.trim());
+
+      setEmailModal(m => ({ ...m, loading: false, versions, error: null }));
+    } catch(err) {
+      console.error("[email] generation error:", err);
+      setEmailModal(m => ({ ...m, loading: false, error: err.message }));
+    }
+  }
+
   // ── Derived data ────────────────────────────────────────────────────────────
   const stateOptions = [...new Set(rows.map(r => r["State"] || r["state"] || "").filter(Boolean))].sort();
   const sectorOptions = [...new Set(rows.map(r => r["Market Sectors"] || r["market_sectors"] || "").filter(Boolean))].sort();
@@ -2985,7 +3144,7 @@ function RFPBidsView() {
                     </td>
                     <td style={colStyle} title={bidUrl}>{bidUrlCell(bidUrl)}</td>
                     <td style={colStyle} title={docUrl}>{docUrlCell(docUrl, docUrl ? () => extractContact(row) : null)}</td>
-                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null, row._doc_available)}</td>
+                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null, row._doc_available, !row._sample && bidDocUrl ? () => openEmailModal(row) : null)}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
@@ -3137,6 +3296,76 @@ function RFPBidsView() {
                   <span style={{ position:"absolute", top:"-22px", left:"50%", transform:"translateX(-50%)", background:"#002244", border:"1px solid #003875", color:"#B0B7BC", fontSize:"10px", padding:"2px 8px", borderRadius:"4px", whiteSpace:"nowrap" }}>Coming Soon</span>
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Email Generation Modal ────────────────────────────────────────── */}
+      {emailModal.open && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", zIndex:9200, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e => { if (e.target === e.currentTarget) setEmailModal(m => ({ ...m, open: false })); }}>
+          <div style={{ background:"#002244", border:"1px solid #003875", borderRadius:"14px", padding:"28px", width:"680px", maxWidth:"96vw", maxHeight:"88vh", boxShadow:"0 24px 60px rgba(0,0,0,0.7)", position:"relative", display:"flex", flexDirection:"column", gap:"16px" }}>
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+                <span style={{ fontSize:"18px" }}>✉️</span>
+                <div>
+                  <div style={{ fontWeight:700, fontSize:"15px", color:"#ffffff" }}>Generate Sales Email</div>
+                  {emailModal.row && <div style={{ fontSize:"11px", color:"#B0B7BC", marginTop:"2px", maxWidth:"480px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{emailModal.row["Institution"] || emailModal.row.institution || ""} — {emailModal.row["Title"] || emailModal.row.title || ""}</div>}
+                </div>
+              </div>
+              <button onClick={() => setEmailModal(m => ({ ...m, open: false }))}
+                style={{ background:"transparent", border:"none", color:"#B0B7BC", cursor:"pointer", fontSize:"18px", lineHeight:1, padding:"4px" }}>✕</button>
+            </div>
+
+            {/* Loading */}
+            {emailModal.loading && (
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"16px", padding:"32px 0" }}>
+                <RefreshCw size={32} color="#10b981" style={{ animation:"spin 1s linear infinite" }} />
+                <span style={{ color:"#B0B7BC", fontSize:"14px", fontWeight:600 }}>Generating email…</span>
+                <span style={{ color:"#4a6080", fontSize:"12px" }}>Fetching document and analyzing with Gemini 2.5 Pro</span>
+              </div>
+            )}
+
+            {/* Error */}
+            {emailModal.error && !emailModal.loading && (
+              <div style={{ background:"rgba(198,12,48,0.1)", border:"1px solid rgba(198,12,48,0.3)", borderRadius:"8px", padding:"14px", color:"#ff8080", fontSize:"13px", lineHeight:1.5 }}>
+                {emailModal.error}
+              </div>
+            )}
+
+            {/* Results */}
+            {emailModal.versions && !emailModal.loading && (
+              <>
+                {/* Tabs */}
+                <div style={{ display:"flex", gap:"6px", flexShrink:0, borderBottom:"1px solid #003366", paddingBottom:"10px" }}>
+                  {emailModal.versions.map((_, i) => (
+                    <button key={i} onClick={() => setEmailModal(m => ({ ...m, activeTab: i }))}
+                      style={{ padding:"6px 18px", borderRadius:"6px", border: emailModal.activeTab === i ? "1px solid #10b981" : "1px solid #003875", background: emailModal.activeTab === i ? "rgba(16,185,129,0.15)" : "transparent", color: emailModal.activeTab === i ? "#10b981" : "#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>
+                      Version {i + 1}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Email body */}
+                <div style={{ flex:1, overflow:"auto", minHeight:0 }}>
+                  <pre style={{ whiteSpace:"pre-wrap", wordBreak:"break-word", fontSize:"13px", color:"#e2e8f0", lineHeight:"1.65", fontFamily:"system-ui,-apple-system,sans-serif", margin:0, padding:"4px 0" }}>
+                    {emailModal.versions[emailModal.activeTab] || ""}
+                  </pre>
+                </div>
+
+                {/* Copy button */}
+                <div style={{ flexShrink:0, display:"flex", justifyContent:"flex-end", borderTop:"1px solid #003366", paddingTop:"12px" }}>
+                  <button onClick={() => {
+                    const text = emailModal.versions[emailModal.activeTab] || "";
+                    navigator.clipboard.writeText(text).then(() => showRfpToast("Copied to clipboard!")).catch(() => showRfpToast("Copy failed", "#C60C30"));
+                  }}
+                    style={{ padding:"8px 22px", borderRadius:"8px", background:"linear-gradient(135deg,#10b981,#059669)", border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+                    Copy Version {emailModal.activeTab + 1}
+                  </button>
+                </div>
+              </>
             )}
           </div>
         </div>
