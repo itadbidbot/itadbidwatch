@@ -3337,35 +3337,24 @@ function RFPBidsView() {
 
             {/* Results */}
             {emailModal.versions && !emailModal.loading && (
-              <>
-                {/* Tabs */}
-                <div style={{ display:"flex", gap:"6px", flexShrink:0, borderBottom:"1px solid #003366", paddingBottom:"10px" }}>
-                  {emailModal.versions.map((_, i) => (
-                    <button key={i} onClick={() => setEmailModal(m => ({ ...m, activeTab: i }))}
-                      style={{ padding:"6px 18px", borderRadius:"6px", border: emailModal.activeTab === i ? "1px solid #10b981" : "1px solid #003875", background: emailModal.activeTab === i ? "rgba(16,185,129,0.15)" : "transparent", color: emailModal.activeTab === i ? "#10b981" : "#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>
-                      Version {i + 1}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Email body */}
-                <div style={{ flex:1, overflow:"auto", minHeight:0 }}>
-                  <pre style={{ whiteSpace:"pre-wrap", wordBreak:"break-word", fontSize:"13px", color:"#e2e8f0", lineHeight:"1.65", fontFamily:"system-ui,-apple-system,sans-serif", margin:0, padding:"4px 0" }}>
-                    {emailModal.versions[emailModal.activeTab] || ""}
-                  </pre>
-                </div>
-
-                {/* Copy button */}
-                <div style={{ flexShrink:0, display:"flex", justifyContent:"flex-end", borderTop:"1px solid #003366", paddingTop:"12px" }}>
-                  <button onClick={() => {
-                    const text = emailModal.versions[emailModal.activeTab] || "";
-                    navigator.clipboard.writeText(text).then(() => showRfpToast("Copied to clipboard!")).catch(() => showRfpToast("Copy failed", "#C60C30"));
-                  }}
-                    style={{ padding:"8px 22px", borderRadius:"8px", background:"linear-gradient(135deg,#10b981,#059669)", border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
-                    Copy Version {emailModal.activeTab + 1}
-                  </button>
-                </div>
-              </>
+              <div style={{ flex:1, overflow:"auto", minHeight:0, display:"flex", flexDirection:"column", gap:"16px" }}>
+                {emailModal.versions.map((text, i) => (
+                  <div key={i} style={{ background:"#001a33", border:"1px solid #003366", borderRadius:"10px", padding:"16px", display:"flex", flexDirection:"column", gap:"10px" }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexShrink:0 }}>
+                      <span style={{ fontSize:"12px", fontWeight:700, color:"#10b981", letterSpacing:"0.06em", textTransform:"uppercase" }}>Version {i + 1}</span>
+                      <button onClick={() => {
+                        navigator.clipboard.writeText(text).then(() => showRfpToast(`Version ${i + 1} copied!`)).catch(() => showRfpToast("Copy failed", "#C60C30"));
+                      }}
+                        style={{ padding:"5px 14px", borderRadius:"6px", background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.35)", color:"#10b981", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>
+                        Copy
+                      </button>
+                    </div>
+                    <pre style={{ whiteSpace:"pre-wrap", wordBreak:"break-word", fontSize:"13px", color:"#e2e8f0", lineHeight:"1.65", fontFamily:"system-ui,-apple-system,sans-serif", margin:0 }}>
+                      {text}
+                    </pre>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </div>
