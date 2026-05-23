@@ -2646,11 +2646,22 @@ function RFPBidsView() {
     const _role = (window._currentUser && window._currentUser.role) || 'user';
     const _email = (window._currentUser && window._currentUser.email) || '';
     const _firstName = _email.split('@')[0].split('.')[0];
-    let rfpQuery = window._db.from("rfp_bids").select("*").order("file_date", { ascending: false }).range(0, 4999);
-    if (_role !== 'admin' && _firstName) rfpQuery = rfpQuery.or(`assignee.ilike.%${_firstName}%,assignee.ilike.%${_email}%`);
-    const { data, error } = await rfpQuery;
+    function buildQuery(from, to) {
+      let q = window._db.from("rfp_bids").select("*").order("file_date", { ascending: false }).range(from, to);
+      if (_role !== 'admin' && _firstName) q = q.or(`assignee.ilike.%${_firstName}%,assignee.ilike.%${_email}%`);
+      return q;
+    }
+    const [res1, res2, res3, res4, res5] = await Promise.all([
+      buildQuery(0, 999),
+      buildQuery(1000, 1999),
+      buildQuery(2000, 2999),
+      buildQuery(3000, 3999),
+      buildQuery(4000, 4999),
+    ]);
+    const error = res1.error || res2.error || res3.error || res4.error || res5.error;
     if (error) { console.error("RFP load error:", error); return; }
-    console.log("RFP bids loaded from Supabase:", data ? data.length : 0, "rows");
+    const data = [...(res1.data||[]), ...(res2.data||[]), ...(res3.data||[]), ...(res4.data||[]), ...(res5.data||[])];
+    console.log("RFP bids loaded from Supabase:", data.length, "rows");
     setDbLoaded(true);
     if (!data || !data.length) return;
     const withMeta = data.map((r, i) => ({
