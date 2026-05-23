@@ -2646,7 +2646,7 @@ function RFPBidsView() {
     const _role = (window._currentUser && window._currentUser.role) || 'user';
     const _email = (window._currentUser && window._currentUser.email) || '';
     const _firstName = _email.split('@')[0].split('.')[0];
-    let rfpQuery = window._db.from("rfp_bids").select("*").order("file_date", { ascending: false }).limit(5000);
+    let rfpQuery = window._db.from("rfp_bids").select("*").order("file_date", { ascending: false }).range(0, 4999);
     if (_role !== 'admin' && _firstName) rfpQuery = rfpQuery.or(`assignee.ilike.%${_firstName}%,assignee.ilike.%${_email}%`);
     const { data, error } = await rfpQuery;
     if (error) { console.error("RFP load error:", error); return; }
