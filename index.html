@@ -2844,31 +2844,27 @@ function RFPBidsView() {
     if (!window._db) return;
     bulkExtractAbort.current = false;
 
-    // Load rfp_bids rows that have a Box.com bid_documents PDF link
+    // Load rfp_bids with box.com document_url (where PDFs live)
     const { data: allRows, error: loadErr } = await window._db
       .from("rfp_bids")
-      .select("doc_id, title, institution, state, document_url, bid_documents")
-      .not("bid_documents", "is", null)
-      .neq("bid_documents", "")
-      .ilike("bid_documents", "%box.com%")
+      .select("doc_id, title, institution, state, document_url")
+      .not("document_url", "is", null)
+      .neq("document_url", "")
+      .ilike("document_url", "%box.com%")
       .order("file_date", { ascending: false })
-      .limit(50); // fetch more so we can find 10 with real PDFs
+      .limit(100);
 
     if (loadErr || !allRows) {
       setBulkExtractProgress(p => ({ ...p, done: true, error: "Failed to load rows: " + (loadErr?.message || "unknown") }));
       return;
     }
 
-    // Check which source_urls already exist in pdf_contacts to skip
-    const allDocUrls = allRows.map(r => r.bid_documents).filter(Boolean);
+    // Skip already-extracted rows (dedup by source_url)
+    const allDocUrls = allRows.map(r => r.document_url).filter(Boolean);
     const { data: alreadyDone } = await window._db
-      .from("pdf_contacts")
-      .select("source_url")
-      .in("source_url", allDocUrls);
+      .from("pdf_contacts").select("source_url").in("source_url", allDocUrls);
     const doneSet = new Set((alreadyDone || []).map(r => r.source_url));
-
-    // Filter to rows not yet extracted, cap at 10
-    const toProcess = allRows.filter(r => r.bid_documents && !doneSet.has(r.bid_documents)).slice(0, 10);
+    const toProcess = allRows.filter(r => r.document_url && !doneSet.has(r.document_url)).slice(0, 10);
 
     if (!toProcess.length) {
       setBulkExtractProgress(p => ({ ...p, done: true, error: "All available rows already extracted." }));
@@ -2877,126 +2873,138 @@ function RFPBidsView() {
 
     setBulkExtractProgress({ total: toProcess.length, current: 0, done: false, results: [], error: null });
 
+    // ── Free regex-based contact extractor ───────────────────────────────────
+    function extractContacts(text, company, state, bidTitle, sourceUrl) {
+      const contacts = [];
+      const seenEmails = new Set();
+      const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+      const phoneRe = /\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g;
+      const firstNames = new Set(["james","john","robert","michael","william","david","richard","joseph","thomas","charles","mary","patricia","jennifer","linda","barbara","elizabeth","susan","jessica","sarah","karen","christopher","daniel","paul","mark","donald","george","kenneth","steven","edward","brian","ashley","emily","donna","michelle","carol","amanda","melissa","deborah","stephanie","rebecca","sharon","laura","cynthia","kathleen","amy","angela","anna","brenda","pamela","jason","ryan","gary","eric","jeffrey","frank","scott","stephen","andrew","raymond","gregory","joshua","jerry","dennis","walter","patrick","peter","harold","douglas","henry","carl","arthur","roger","joe","jack","albert","jonathan","justin","terry","gerald","keith","samuel","willie","ralph","lawrence","nicholas","roy","benjamin","bruce","brandon","adam","harry","fred","wayne","billy","steve","louis","jeremy","aaron","randy","howard","eugene","carlos","russell","bobby","victor","martin","phillip","todd","jesse","craig","alan","shawn","sean","chris","johnny","earl","jimmy","antonio","danny","bryan","tony","luis","mike","lori","tracy","dawn","cheryl","tammy","gail","ann","marie","alice","julie","heather","teresa","doris","gloria","evelyn","jean","nancy","diane","judy","joyce","virginia","victoria","kelly","kim","debra","tina","lisa","betty","dorothy","sandra","helen","ruth","jane","frances","marilyn","judith","nicole","catherine","christine","samantha","janet","danielle","robin","april","crystal","tiffany"]);
+      const titleKws = ["director","superintendent","principal","coordinator","manager","supervisor","administrator","officer","chief","president","buyer","purchasing","procurement","technology","specialist","consultant","advisor","executive","dean","comptroller","controller","accountant","finance","operations"];
+
+      let em;
+      emailRe.lastIndex = 0;
+      while ((em = emailRe.exec(text)) !== null) {
+        const email = em[0].toLowerCase();
+        if (!email.includes("@") || !email.split("@")[1]?.includes(".")) continue;
+        if (["noreply","no-reply","donotreply","example.com","test@"].some(x => email.includes(x))) continue;
+        if (seenEmails.has(email)) continue;
+        seenEmails.add(email);
+
+        const pos = em.index;
+        const win = text.slice(Math.max(0, pos - 300), pos + 300);
+
+        // Phone
+        let phone = "", ext = "";
+        phoneRe.lastIndex = 0;
+        const pm = phoneRe.exec(win);
+        if (pm) {
+          const d = pm[0].replace(/\D/g,"");
+          if (d.length===10) phone = d.slice(0,3)+"-"+d.slice(3,6)+"-"+d.slice(6);
+          else if (d.length===11&&d[0]==="1") phone = d.slice(1,4)+"-"+d.slice(4,7)+"-"+d.slice(7);
+          const xm = /(?:x|ext\.?|extension)\s*(\d{1,6})/i.exec(pm[0]);
+          if (xm) ext = xm[1].slice(0,6);
+        }
+
+        // Name
+        let firstName = "", lastName = "";
+        const words = win.split(/\s+/);
+        for (let i = 0; i < words.length-1; i++) {
+          const w = words[i].replace(/[.,;:()'""\u201c\u201d]/g,"").toLowerCase();
+          if (firstNames.has(w)) {
+            const nx = words[i+1].replace(/[.,;:()'""\u201c\u201d]/g,"");
+            if (nx && nx[0]===nx[0].toUpperCase() && /^[A-Za-z]{2,20}$/.test(nx)) {
+              firstName = words[i].replace(/[.,;:()'""\u201c\u201d]/g,"");
+              lastName = nx; break;
+            }
+          }
+        }
+
+        // Job title
+        let jobTitle = "";
+        const wl = win.toLowerCase();
+        for (const kw of titleKws) {
+          if (wl.includes(kw)) {
+            const idx = wl.indexOf(kw);
+            jobTitle = win.slice(Math.max(0,idx-5),idx+kw.length+30).trim().replace(/[\r\n]+/g," ").slice(0,100);
+            break;
+          }
+        }
+
+        // Quality score
+        let score = 25; // email always found
+        if (company)   score += 20;
+        if (firstName) score += 15;
+        if (lastName)  score += 15;
+        if (phone)     score += 15;
+        if (jobTitle)  score += 10;
+        const flag = score>=90 ? "green" : score>=45 ? "yellow" : "red";
+
+        contacts.push({
+          first_name: firstName.slice(0,100), last_name: lastName.slice(0,100),
+          email: email.slice(0,200), phone: phone.slice(0,20), extension: ext.slice(0,6),
+          job_title: jobTitle.slice(0,200), company_name: (company||"").slice(0,300),
+          source_url: (sourceUrl||"").slice(0,500), bid_title: (bidTitle||"").slice(0,500),
+          data_source: "rfp_bids", state: (state||"").slice(0,10),
+          quality_score: score, quality_flag: flag, hubspot_ready: flag==="green",
+          created_at: new Date().toISOString(),
+        });
+      }
+      return contacts;
+    }
+
+    // ── Save to Supabase with email dedup ─────────────────────────────────────
+    async function saveContacts(contacts) {
+      if (!contacts.length) return 0;
+      const emails = contacts.map(c => c.email);
+      const { data: existing } = await window._db.from("pdf_contacts").select("email").in("email", emails);
+      const existingSet = new Set((existing||[]).map(r => r.email));
+      const toInsert = contacts.filter(c => !existingSet.has(c.email));
+      if (!toInsert.length) return 0;
+      const { error } = await window._db.from("pdf_contacts").insert(toInsert);
+      if (error) { console.warn("[contacts] insert error:", error); return 0; }
+      return toInsert.length;
+    }
+
     let results = [];
     for (let i = 0; i < toProcess.length; i++) {
       if (bulkExtractAbort.current) break;
       const row = toProcess[i];
-      const docUrl = row.bid_documents;
-      setBulkExtractProgress(p => ({ ...p, current: i + 1, currentTitle: row.title || docUrl }));
+      const boxUrl = row.document_url;
+      setBulkExtractProgress(p => ({ ...p, current: i+1, currentTitle: row.title || boxUrl }));
 
       try {
-        // Step 1: Fetch the PDF via CORS proxy and convert to base64
-        let pdfBase64 = null;
-        let fetchedUrl = docUrl;
-
-        // If it's a Box URL, try to extract the direct PDF download link first
-        if (docUrl.includes("box.com")) {
-          try {
-            const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(docUrl);
-            const boxResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) });
-            if (boxResp.ok) {
-              const html = await boxResp.text();
-              const pdfPatterns = [
-                /["']([^"']*\.pdf[^"'?#]*(?:\?[^"']*)?)["']/gi,
-                /"download_url"\s*:\s*"([^"]+)"/gi,
-              ];
-              for (const pat of pdfPatterns) {
-                const m = pat.exec(html);
-                if (m) { fetchedUrl = m[1]; break; }
-              }
-            }
-          } catch(e) { console.warn("[bulk] box proxy failed:", e); }
+        // Fetch Box page text via CORS proxy
+        let pageText = "";
+        const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(boxUrl);
+        const boxResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) });
+        if (boxResp.ok) {
+          const html = await boxResp.text();
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, "text/html");
+          pageText = doc.body ? (doc.body.innerText || doc.body.textContent || "") : "";
         }
 
-        // Fetch the actual PDF
-        try {
-          const pdfProxy = "https://corsproxy.io/?" + encodeURIComponent(fetchedUrl);
-          const pdfResp = await fetch(pdfProxy, { signal: AbortSignal.timeout(30000) });
-          if (pdfResp.ok) {
-            const blob = await pdfResp.blob();
-            pdfBase64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result.split(",")[1]);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-          }
-        } catch(e) { console.warn("[bulk] PDF fetch failed:", e); }
-
-        if (!pdfBase64) {
-          results.push({ title: row.title, count: 0, status: "could not fetch PDF" });
-          await new Promise(r => setTimeout(r, 400));
+        if (!pageText || pageText.trim().length < 30) {
+          results.push({ title: row.title, count: 0, status: "no content accessible" });
+          await new Promise(r => setTimeout(r, 300));
           setBulkExtractProgress(p => ({ ...p, results: [...results] }));
           continue;
         }
 
-        // Step 2: Send to Gemini free tier with base64 PDF
-        const geminiKey = localStorage.getItem("GEMINI_API_KEY") || "";
-        if (!geminiKey) {
-          results.push({ title: row.title, count: 0, status: "no Gemini key — add in Settings" });
-          setBulkExtractProgress(p => ({ ...p, results: [...results] }));
-          continue;
-        }
-
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{
-                parts: [
-                  { inline_data: { mime_type: "application/pdf", data: pdfBase64 } },
-                  { text: `Extract ALL contact information clusters from this document. A cluster is any combination of name, phone, email, job title found together. Return JSON only — an array of objects with these exact keys: [{"first_name":"","last_name":"","email":"","phone":"","extension":"","job_title":"","company_name":""}]. Format phone as xxx-xxx-xxxx. Extension max 6 digits. Email must contain @ and a dot. company_name is the school or organization name. Leave fields blank if not found. Return [] if no contacts found. No commentary, no markdown, just the JSON array.` },
-                ]
-              }],
-              generationConfig: { maxOutputTokens: 1024, temperature: 0 },
-            }),
-          }
-        );
-
-        if (!res.ok) throw new Error(await res.text());
-        const data = await res.json();
-        const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
-        const match = text.match(/\[[\s\S]*\]/);
-        if (!match) throw new Error("No JSON array returned");
-        const contacts = JSON.parse(match[0]);
-
-        if (Array.isArray(contacts) && contacts.length > 0) {
-          const toInsert = contacts
-            .filter(c => c.company_name || c.email || c.first_name)
-            .map(c => ({
-              first_name:   (c.first_name  || "").slice(0, 100),
-              last_name:    (c.last_name   || "").slice(0, 100),
-              email:        (c.email && c.email.includes("@") && c.email.includes(".")) ? c.email.slice(0, 200) : "",
-              phone:        (c.phone       || "").slice(0, 20),
-              extension:    (c.extension   || "").replace(/\D/g, "").slice(0, 6),
-              job_title:    (c.job_title   || "").slice(0, 200),
-              company_name: (c.company_name || row.institution || "").slice(0, 300),
-              source_url:   docUrl,
-              bid_title:    (row.title     || "").slice(0, 500),
-              data_source:  "rfp_bids",
-              state:        (row.state     || "").slice(0, 10),
-              created_at:   new Date().toISOString(),
-            }));
-
-          if (toInsert.length) {
-            const { error: insErr } = await window._db.from("pdf_contacts").insert(toInsert);
-            if (insErr) console.warn("[bulk extract] insert error:", insErr);
-            else results.push({ title: row.title, count: toInsert.length, status: "ok" });
-          } else {
-            results.push({ title: row.title, count: 0, status: "no valid contacts" });
-          }
-        } else {
-          results.push({ title: row.title, count: 0, status: "no contacts found" });
-        }
+        const contacts = extractContacts(pageText, row.institution||"", row.state||"", row.title||"", boxUrl);
+        const saved = await saveContacts(contacts);
+        const flags = contacts.reduce((a,c) => { a[c.quality_flag]=(a[c.quality_flag]||0)+1; return a; }, {});
+        results.push({
+          title: row.title, count: saved,
+          status: contacts.length ? "🟢"+(flags.green||0)+" 🟡"+(flags.yellow||0)+" 🔴"+(flags.red||0) : "no contacts found",
+        });
       } catch(err) {
-        console.warn("[bulk extract] error on row:", row.title, err.message);
-        results.push({ title: row.title, count: 0, status: "error: " + err.message.slice(0, 60) });
+        console.warn("[contacts] error:", row.title, err.message);
+        results.push({ title: row.title, count: 0, status: "error: " + err.message.slice(0,60) });
       }
 
-      // Small delay to avoid rate limits
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 500));
       setBulkExtractProgress(p => ({ ...p, results: [...results] }));
     }
 
@@ -3011,7 +3019,7 @@ function RFPBidsView() {
       .select("*")
       .order("created_at", { ascending: false });
     if (error || !data || !data.length) { alert("No contacts to export."); return; }
-    const cols = ["id","first_name","last_name","email","phone","extension","job_title","company_name","source_url","bid_title","data_source","state","created_at"];
+    const cols = ["id","first_name","last_name","email","phone","extension","job_title","company_name","quality_flag","quality_score","hubspot_ready","source_url","bid_title","data_source","state","created_at"];
     const escape = v => `"${String(v||"").replace(/"/g,'""')}"`;
     const csv = [cols.join(","), ...data.map(r => cols.map(c => escape(r[c])).join(","))].join("\n");
     const blob = new Blob([csv], { type:"text/csv" });
