@@ -2427,6 +2427,8 @@ function RFPBidsView() {
   const [dupModal, setDupModal] = useState({ open: false, filename: "", fileObj: null });
   const [boxProgress, setBoxProgress] = useState(null); // null=hidden | { total, checked, available, unavailable, done }
   const fileInputRef = useRef(null);
+  const [bulkExtractProgress, setBulkExtractProgress] = useState(null); // null=hidden | { total, current, done, results, error }
+  const bulkExtractAbort = React.useRef(false);
 
   // ── CSV parser ──────────────────────────────────────────────────────────────
   function parseCSV(text) {
@@ -2837,6 +2839,138 @@ function RFPBidsView() {
     }
   }
 
+  // ── Bulk PDF contact extraction → pdf_contacts table ───────────────────────
+  async function runBulkContactExtraction() {
+    if (!window._db) return;
+    bulkExtractAbort.current = false;
+
+    // Load first 10 rfp_bids rows that have a Doc URL
+    const { data: allRows, error: loadErr } = await window._db
+      .from("rfp_bids")
+      .select("doc_id, title, institution, state, document_url, bid_documents")
+      .not("document_url", "is", null)
+      .neq("document_url", "")
+      .order("file_date", { ascending: false })
+      .limit(50); // fetch more so we can find 10 with real URLs
+
+    if (loadErr || !allRows) {
+      setBulkExtractProgress(p => ({ ...p, done: true, error: "Failed to load rows: " + (loadErr?.message || "unknown") }));
+      return;
+    }
+
+    // Check which source_urls already exist in pdf_contacts to skip
+    const allDocUrls = allRows.map(r => r.document_url).filter(Boolean);
+    const { data: alreadyDone } = await window._db
+      .from("pdf_contacts")
+      .select("source_url")
+      .in("source_url", allDocUrls);
+    const doneSet = new Set((alreadyDone || []).map(r => r.source_url));
+
+    // Filter to rows not yet extracted, cap at 10
+    const toProcess = allRows.filter(r => r.document_url && !doneSet.has(r.document_url)).slice(0, 10);
+
+    if (!toProcess.length) {
+      setBulkExtractProgress(p => ({ ...p, done: true, error: "All available rows already extracted." }));
+      return;
+    }
+
+    setBulkExtractProgress({ total: toProcess.length, current: 0, done: false, results: [], error: null });
+
+    let results = [];
+    for (let i = 0; i < toProcess.length; i++) {
+      if (bulkExtractAbort.current) break;
+      const row = toProcess[i];
+      const docUrl = row.document_url;
+      setBulkExtractProgress(p => ({ ...p, current: i + 1, currentTitle: row.title || docUrl }));
+
+      try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": ANTHROPIC_KEY,
+            "anthropic-version": "2023-06-01",
+            "anthropic-dangerous-direct-browser-access": "true",
+          },
+          body: JSON.stringify({
+            model: "claude-haiku-4-5-20251001",
+            max_tokens: 1024,
+            messages: [{
+              role: "user",
+              content: [
+                { type: "document", source: { type: "url", url: docUrl } },
+                { type: "text", text: `Extract ALL contact information clusters from this document. A cluster is any combination of name, phone, email, job title found together. Return JSON only — an array of objects with these exact keys: [{"first_name":"","last_name":"","email":"","phone":"","extension":"","job_title":"","company_name":""}]. Format phone as xxx-xxx-xxxx. Extension max 6 digits. Email must contain @ and a dot. company_name is the school or organization name. Leave fields blank if not found. Return [] if no contacts found. No commentary, no markdown, just the JSON array.` },
+              ],
+            }],
+          }),
+        });
+
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const text = (data.content?.[0]?.text || "").trim();
+        const match = text.match(/\[[\s\S]*\]/);
+        if (!match) throw new Error("No JSON array returned");
+        const contacts = JSON.parse(match[0]);
+
+        if (Array.isArray(contacts) && contacts.length > 0) {
+          const toInsert = contacts
+            .filter(c => c.company_name || c.email || c.first_name)
+            .map(c => ({
+              first_name:   (c.first_name  || "").slice(0, 100),
+              last_name:    (c.last_name   || "").slice(0, 100),
+              email:        (c.email && c.email.includes("@") && c.email.includes(".")) ? c.email.slice(0, 200) : "",
+              phone:        (c.phone       || "").slice(0, 20),
+              extension:    (c.extension   || "").replace(/\D/g, "").slice(0, 6),
+              job_title:    (c.job_title   || "").slice(0, 200),
+              company_name: (c.company_name || row.institution || "").slice(0, 300),
+              source_url:   docUrl,
+              bid_title:    (row.title     || "").slice(0, 500),
+              data_source:  "rfp_bids",
+              state:        (row.state     || "").slice(0, 10),
+              created_at:   new Date().toISOString(),
+            }));
+
+          if (toInsert.length) {
+            const { error: insErr } = await window._db.from("pdf_contacts").insert(toInsert);
+            if (insErr) console.warn("[bulk extract] insert error:", insErr);
+            else results.push({ title: row.title, count: toInsert.length, status: "ok" });
+          } else {
+            results.push({ title: row.title, count: 0, status: "no valid contacts" });
+          }
+        } else {
+          results.push({ title: row.title, count: 0, status: "no contacts found" });
+        }
+      } catch(err) {
+        console.warn("[bulk extract] error on row:", row.title, err.message);
+        results.push({ title: row.title, count: 0, status: "error: " + err.message.slice(0, 60) });
+      }
+
+      // Small delay to avoid rate limits
+      await new Promise(r => setTimeout(r, 800));
+      setBulkExtractProgress(p => ({ ...p, results: [...results] }));
+    }
+
+    setBulkExtractProgress(p => ({ ...p, done: true, results }));
+  }
+
+  // ── Export pdf_contacts to CSV ───────────────────────────────────────────────
+  async function exportContactsCSV() {
+    if (!window._db) return;
+    const { data, error } = await window._db
+      .from("pdf_contacts")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error || !data || !data.length) { alert("No contacts to export."); return; }
+    const cols = ["id","first_name","last_name","email","phone","extension","job_title","company_name","source_url","bid_title","data_source","state","created_at"];
+    const escape = v => `"${String(v||"").replace(/"/g,'""')}"`;
+    const csv = [cols.join(","), ...data.map(r => cols.map(c => escape(r[c])).join(","))].join("\n");
+    const blob = new Blob([csv], { type:"text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `pdf_contacts_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+  }
+
   // ── Email generation via Gemini ─────────────────────────────────────────────
   async function openEmailModal(row) {
     const boxUrl = row["Bid Documents"] || row["bid_documents"] || "";
@@ -3060,6 +3194,14 @@ function RFPBidsView() {
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFile} style={{ display:"none" }} />
+          <button onClick={exportContactsCSV}
+            style={{ padding:"8px 16px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            ⬇ Export Contacts
+          </button>
+          <button onClick={() => { setBulkExtractProgress({ total:0, current:0, done:false, results:[], error:null }); runBulkContactExtraction(); }}
+            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#10b981,#059669)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            🔍 Extract Contact Data
+          </button>
           <button onClick={() => fileInputRef.current && fileInputRef.current.click()}
             style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
             <Upload size={13} /> Upload CSV
@@ -3248,6 +3390,73 @@ function RFPBidsView() {
       {rfpToast && (
         <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: rfpToast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : rfpToast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${rfpToast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"340px" }}>
           {rfpToast.msg}
+        </div>
+      )}
+
+      {/* ── Bulk Contact Extraction Progress Modal ───────────────────────── */}
+      {bulkExtractProgress && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.80)", zIndex:9500, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#002244", border:"1px solid #003875", borderRadius:"14px", padding:"32px", width:"520px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.7)", position:"relative" }}>
+            <div style={{ fontWeight:700, fontSize:"16px", color:"#ffffff", marginBottom:"6px", display:"flex", alignItems:"center", gap:"10px" }}>
+              🔍 Extract Contact Data
+            </div>
+
+            {!bulkExtractProgress.done ? (
+              <>
+                <div style={{ background:"rgba(198,12,48,0.10)", border:"1px solid rgba(198,12,48,0.30)", borderRadius:"8px", padding:"12px 16px", color:"#ff8080", fontSize:"13px", fontWeight:600, marginBottom:"20px", textAlign:"center" }}>
+                  ⚠️ Please be patient and do not leave this screen.<br/>
+                  <span style={{ fontWeight:400, fontSize:"12px", color:"#B0B7BC" }}>Extraction is running — navigating away will stop the process.</span>
+                </div>
+                <div style={{ marginBottom:"16px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", fontSize:"12px", color:"#B0B7BC", marginBottom:"6px" }}>
+                    <span>Processing {bulkExtractProgress.current} of {bulkExtractProgress.total || "…"}</span>
+                    <span>{bulkExtractProgress.total ? Math.round((bulkExtractProgress.current / bulkExtractProgress.total) * 100) : 0}%</span>
+                  </div>
+                  <div style={{ background:"#003366", borderRadius:"6px", height:"8px", overflow:"hidden" }}>
+                    <div style={{ background:"linear-gradient(90deg,#10b981,#059669)", height:"100%", width: bulkExtractProgress.total ? `${(bulkExtractProgress.current / bulkExtractProgress.total) * 100}%` : "0%", transition:"width 0.4s ease" }} />
+                  </div>
+                </div>
+                {bulkExtractProgress.currentTitle && (
+                  <div style={{ fontSize:"11px", color:"#B0B7BC", marginBottom:"16px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    Current: {bulkExtractProgress.currentTitle}
+                  </div>
+                )}
+                <RefreshCw size={20} color="#10b981" style={{ animation:"spin 1s linear infinite", display:"block", margin:"0 auto" }} />
+              </>
+            ) : (
+              <>
+                {bulkExtractProgress.error ? (
+                  <div style={{ background:"rgba(198,12,48,0.1)", border:"1px solid rgba(198,12,48,0.3)", borderRadius:"8px", padding:"12px", color:"#ff8080", fontSize:"13px", marginBottom:"16px" }}>
+                    {bulkExtractProgress.error}
+                  </div>
+                ) : (
+                  <div style={{ background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.25)", borderRadius:"8px", padding:"12px 16px", color:"#10b981", fontSize:"13px", fontWeight:600, marginBottom:"16px" }}>
+                    ✓ Extraction complete — {(bulkExtractProgress.results || []).reduce((s,r) => s + (r.count||0), 0)} contacts saved
+                  </div>
+                )}
+                <div style={{ maxHeight:"220px", overflowY:"auto", marginBottom:"20px" }}>
+                  {(bulkExtractProgress.results || []).map((r, i) => (
+                    <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"6px 0", borderBottom:"1px solid #003366", fontSize:"12px" }}>
+                      <span style={{ color:"#B0B7BC", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:"340px" }}>{r.title || "—"}</span>
+                      <span style={{ color: r.count > 0 ? "#10b981" : "#4a6080", fontWeight:600, marginLeft:"12px", whiteSpace:"nowrap" }}>
+                        {r.count > 0 ? `+${r.count} contacts` : r.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display:"flex", gap:"10px" }}>
+                  <button onClick={() => setBulkExtractProgress(null)}
+                    style={{ flex:1, padding:"10px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
+                    Close
+                  </button>
+                  <button onClick={exportContactsCSV}
+                    style={{ flex:1, padding:"10px", borderRadius:"8px", background:"linear-gradient(135deg,#10b981,#059669)", border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
+                    ⬇ Export to CSV
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       )}
 
