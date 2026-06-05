@@ -2839,60 +2839,68 @@ function RFPBidsView() {
     }
   }
 
-  // ── Bulk PDF contact extraction → pdf_contacts table ───────────────────────
+  // ── Bulk contact extraction from memo field (all rfp_bids) ─────────────────
   async function runBulkContactExtraction() {
     if (!window._db) return;
     bulkExtractAbort.current = false;
 
-    // Load rfp_bids with box.com document_url (where PDFs live)
-    const { data: allRows, error: loadErr } = await window._db
-      .from("rfp_bids")
-      .select("doc_id, title, institution, state, document_url")
-      .not("document_url", "is", null)
-      .neq("document_url", "")
-      .ilike("document_url", "%box.com%")
-      .order("file_date", { ascending: false })
-      .limit(100);
+    // Load ALL rfp_bids in batches
+    let allRows = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await window._db
+        .from("rfp_bids")
+        .select("doc_id, title, institution, state, bid_url, memo")
+        .order("file_date", { ascending: false })
+        .range(from, from + 999);
+      if (error || !data || !data.length) break;
+      allRows = allRows.concat(data);
+      if (data.length < 1000) break;
+      from += 1000;
+    }
 
-    if (loadErr || !allRows) {
-      setBulkExtractProgress(p => ({ ...p, done: true, error: "Failed to load rows: " + (loadErr?.message || "unknown") }));
+    if (!allRows.length) {
+      setBulkExtractProgress(p => ({ ...p, done: true, error: "No rows found in rfp_bids." }));
       return;
     }
 
-    // Skip already-extracted rows (dedup by source_url)
-    const allDocUrls = allRows.map(r => r.document_url).filter(Boolean);
+    // Check which titles already extracted
     const { data: alreadyDone } = await window._db
-      .from("pdf_contacts").select("source_url").in("source_url", allDocUrls);
-    const doneSet = new Set((alreadyDone || []).map(r => r.source_url));
-    const toProcess = allRows.filter(r => r.document_url && !doneSet.has(r.document_url)).slice(0, 10);
+      .from("pdf_contacts").select("bid_title")
+      .in("bid_title", allRows.map(r => (r.title||"").slice(0,500)));
+    const doneSet = new Set((alreadyDone || []).map(r => r.bid_title));
+    const toProcess = allRows.filter(r => !doneSet.has((r.title||"").slice(0,500)));
 
     if (!toProcess.length) {
-      setBulkExtractProgress(p => ({ ...p, done: true, error: "All available rows already extracted." }));
+      setBulkExtractProgress(p => ({ ...p, done: true, error: "All rows already extracted." }));
       return;
     }
 
     setBulkExtractProgress({ total: toProcess.length, current: 0, done: false, results: [], error: null });
 
-    // ── Free regex-based contact extractor ───────────────────────────────────
-    function extractContacts(text, company, state, bidTitle, sourceUrl) {
-      const contacts = [];
-      const seenEmails = new Set();
+    // ── Regex contact extractor ───────────────────────────────────────────────
+    function extractContacts(memo, company, state, bidTitle, bidUrl) {
       const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
       const phoneRe = /\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g;
-      const firstNames = new Set(["james","john","robert","michael","william","david","richard","joseph","thomas","charles","mary","patricia","jennifer","linda","barbara","elizabeth","susan","jessica","sarah","karen","christopher","daniel","paul","mark","donald","george","kenneth","steven","edward","brian","ashley","emily","donna","michelle","carol","amanda","melissa","deborah","stephanie","rebecca","sharon","laura","cynthia","kathleen","amy","angela","anna","brenda","pamela","jason","ryan","gary","eric","jeffrey","frank","scott","stephen","andrew","raymond","gregory","joshua","jerry","dennis","walter","patrick","peter","harold","douglas","henry","carl","arthur","roger","joe","jack","albert","jonathan","justin","terry","gerald","keith","samuel","willie","ralph","lawrence","nicholas","roy","benjamin","bruce","brandon","adam","harry","fred","wayne","billy","steve","louis","jeremy","aaron","randy","howard","eugene","carlos","russell","bobby","victor","martin","phillip","todd","jesse","craig","alan","shawn","sean","chris","johnny","earl","jimmy","antonio","danny","bryan","tony","luis","mike","lori","tracy","dawn","cheryl","tammy","gail","ann","marie","alice","julie","heather","teresa","doris","gloria","evelyn","jean","nancy","diane","judy","joyce","virginia","victoria","kelly","kim","debra","tina","lisa","betty","dorothy","sandra","helen","ruth","jane","frances","marilyn","judith","nicole","catherine","christine","samantha","janet","danielle","robin","april","crystal","tiffany"]);
-      const titleKws = ["director","superintendent","principal","coordinator","manager","supervisor","administrator","officer","chief","president","buyer","purchasing","procurement","technology","specialist","consultant","advisor","executive","dean","comptroller","controller","accountant","finance","operations"];
+      const firstNames = new Set(["james","john","robert","michael","william","david","richard","joseph","thomas","charles","mary","patricia","jennifer","linda","barbara","elizabeth","susan","jessica","sarah","karen","christopher","daniel","paul","mark","donald","george","kenneth","steven","edward","brian","ashley","emily","donna","michelle","carol","amanda","melissa","deborah","stephanie","rebecca","sharon","laura","cynthia","kathleen","amy","angela","anna","brenda","pamela","jason","ryan","gary","eric","jeffrey","frank","scott","stephen","andrew","raymond","gregory","joshua","jerry","dennis","walter","patrick","peter","harold","douglas","henry","carl","arthur","roger","joe","jack","albert","jonathan","justin","terry","gerald","keith","samuel","willie","ralph","lawrence","nicholas","roy","benjamin","bruce","brandon","adam","harry","fred","wayne","billy","steve","louis","jeremy","aaron","randy","howard","eugene","carlos","russell","bobby","victor","martin","phillip","todd","jesse","craig","alan","shawn","sean","chris","johnny","earl","jimmy","antonio","danny","bryan","tony","luis","mike","lori","tracy","dawn","cheryl","tammy","gail","ann","marie","alice","julie","heather","teresa","doris","gloria","evelyn","jean","nancy","diane","judy","joyce","virginia","victoria","kelly","kim","debra","tina","lisa","betty","dorothy","sandra","helen","ruth","jane","frances","marilyn","judith","nicole","catherine","christine","samantha","janet","danielle","robin","april","crystal","tiffany","matthew","lauren","jacqueline","asha","rob","jeffrey"]);
+      const titleKws = ["director","superintendent","principal","coordinator","manager","supervisor","administrator","officer","chief","president","buyer","purchasing","procurement","technology","specialist","consultant","advisor","executive","dean","comptroller","controller","accountant","finance","operations","agent","clerk","analyst"];
+      const junkEmails = ["noreply","no-reply","donotreply","example.com","bidsupport@rfpschoolwatch","customercare@rfpschoolwatch","isupplier@","contractadmin@"];
+
+      const text = memo || "";
+      const contacts = [];
+      const seenEmails = new Set();
 
       let em;
       emailRe.lastIndex = 0;
       while ((em = emailRe.exec(text)) !== null) {
         const email = em[0].toLowerCase();
         if (!email.includes("@") || !email.split("@")[1]?.includes(".")) continue;
-        if (["noreply","no-reply","donotreply","example.com","test@"].some(x => email.includes(x))) continue;
+        if (junkEmails.some(x => email.includes(x))) continue;
         if (seenEmails.has(email)) continue;
         seenEmails.add(email);
 
         const pos = em.index;
-        const win = text.slice(Math.max(0, pos - 300), pos + 300);
+        const win = text.slice(Math.max(0, pos - 400), pos + 400);
 
         // Phone
         let phone = "", ext = "";
@@ -2902,112 +2910,143 @@ function RFPBidsView() {
           const d = pm[0].replace(/\D/g,"");
           if (d.length===10) phone = d.slice(0,3)+"-"+d.slice(3,6)+"-"+d.slice(6);
           else if (d.length===11&&d[0]==="1") phone = d.slice(1,4)+"-"+d.slice(4,7)+"-"+d.slice(7);
-          const xm = /(?:x|ext\.?|extension)\s*(\d{1,6})/i.exec(pm[0]);
+          const xm = /(?:x|ext\.?|extension)\s*(\d{1,6})/i.exec(win);
           if (xm) ext = xm[1].slice(0,6);
         }
 
-        // Name
+        // Name — look for known first name followed by capitalized last name
         let firstName = "", lastName = "";
         const words = win.split(/\s+/);
         for (let i = 0; i < words.length-1; i++) {
-          const w = words[i].replace(/[.,;:()'""\u201c\u201d]/g,"").toLowerCase();
+          const cleaned = words[i].replace(/[.,;:()']/g,"");
+          const w = cleaned.toLowerCase();
           if (firstNames.has(w)) {
-            const nx = words[i+1].replace(/[.,;:()'""\u201c\u201d]/g,"");
+            const nx = words[i+1].replace(/[.,;:()']/g,"");
             if (nx && nx[0]===nx[0].toUpperCase() && /^[A-Za-z]{2,20}$/.test(nx)) {
-              firstName = words[i].replace(/[.,;:()'""\u201c\u201d]/g,"");
-              lastName = nx; break;
+              firstName = cleaned;
+              lastName = nx;
+              break;
             }
           }
         }
 
-        // Job title
+        // Title
         let jobTitle = "";
         const wl = win.toLowerCase();
         for (const kw of titleKws) {
           if (wl.includes(kw)) {
             const idx = wl.indexOf(kw);
-            jobTitle = win.slice(Math.max(0,idx-5),idx+kw.length+30).trim().replace(/[\r\n]+/g," ").slice(0,100);
+            jobTitle = win.slice(Math.max(0,idx-5),idx+kw.length+35).trim().replace(/[\r\n]+/g," ").slice(0,100);
             break;
           }
         }
 
         // Quality score
-        let score = 25; // email always found
+        let score = 25;
         if (company)   score += 20;
         if (firstName) score += 15;
         if (lastName)  score += 15;
         if (phone)     score += 15;
         if (jobTitle)  score += 10;
-        const flag = score>=90 ? "green" : score>=45 ? "yellow" : "red";
+        const flag = score>=90?"green":score>=45?"yellow":"red";
 
         contacts.push({
           first_name: firstName.slice(0,100), last_name: lastName.slice(0,100),
           email: email.slice(0,200), phone: phone.slice(0,20), extension: ext.slice(0,6),
           job_title: jobTitle.slice(0,200), company_name: (company||"").slice(0,300),
-          source_url: (sourceUrl||"").slice(0,500), bid_title: (bidTitle||"").slice(0,500),
+          source_url: (bidUrl||"").slice(0,500), bid_title: (bidTitle||"").slice(0,500),
           data_source: "rfp_bids", state: (state||"").slice(0,10),
           quality_score: score, quality_flag: flag, hubspot_ready: flag==="green",
           created_at: new Date().toISOString(),
         });
       }
+
+      // No email found — create red record so nothing is lost
+      if (contacts.length === 0) {
+        contacts.push({
+          first_name: "", last_name: "", email: "", phone: "", extension: "",
+          job_title: "", company_name: (company||"").slice(0,300),
+          source_url: (bidUrl||"").slice(0,500), bid_title: (bidTitle||"").slice(0,500),
+          data_source: "rfp_bids", state: (state||"").slice(0,10),
+          quality_score: 0, quality_flag: "red", hubspot_ready: false,
+          created_at: new Date().toISOString(),
+        });
+      }
+
       return contacts;
     }
 
-    // ── Save to Supabase with email dedup ─────────────────────────────────────
+    // ── Save to Supabase with dedup ───────────────────────────────────────────
     async function saveContacts(contacts) {
       if (!contacts.length) return 0;
-      const emails = contacts.map(c => c.email);
-      const { data: existing } = await window._db.from("pdf_contacts").select("email").in("email", emails);
-      const existingSet = new Set((existing||[]).map(r => r.email));
-      const toInsert = contacts.filter(c => !existingSet.has(c.email));
-      if (!toInsert.length) return 0;
-      const { error } = await window._db.from("pdf_contacts").insert(toInsert);
-      if (error) { console.warn("[contacts] insert error:", error); return 0; }
-      return toInsert.length;
-    }
+      const withEmail    = contacts.filter(c => c.email);
+      const withoutEmail = contacts.filter(c => !c.email);
+      let saved = 0;
 
-    let results = [];
-    for (let i = 0; i < toProcess.length; i++) {
-      if (bulkExtractAbort.current) break;
-      const row = toProcess[i];
-      const boxUrl = row.document_url;
-      setBulkExtractProgress(p => ({ ...p, current: i+1, currentTitle: row.title || boxUrl }));
-
-      try {
-        // Fetch Box page text via Jina Reader (handles JS-heavy and protected pages)
-        let pageText = "";
-        const jinaUrl = "https://r.jina.ai/" + boxUrl;
-        try {
-          const jinaResp = await fetch(jinaUrl, { signal: AbortSignal.timeout(25000) });
-          if (jinaResp.ok) {
-            pageText = await jinaResp.text();
-          }
-        } catch(e) { console.warn("[contacts] Jina fetch failed:", e); }
-
-        if (!pageText || pageText.trim().length < 30) {
-          results.push({ title: row.title, count: 0, status: "no content accessible" });
-          await new Promise(r => setTimeout(r, 300));
-          setBulkExtractProgress(p => ({ ...p, results: [...results] }));
-          continue;
+      if (withEmail.length) {
+        const emails = withEmail.map(c => c.email);
+        const { data: existing } = await window._db.from("pdf_contacts").select("email").in("email", emails);
+        const existingSet = new Set((existing||[]).map(r => r.email));
+        const toInsert = withEmail.filter(c => !existingSet.has(c.email));
+        if (toInsert.length) {
+          const { error } = await window._db.from("pdf_contacts").insert(toInsert);
+          if (!error) saved += toInsert.length;
         }
-
-        const contacts = extractContacts(pageText, row.institution||"", row.state||"", row.title||"", boxUrl);
-        const saved = await saveContacts(contacts);
-        const flags = contacts.reduce((a,c) => { a[c.quality_flag]=(a[c.quality_flag]||0)+1; return a; }, {});
-        results.push({
-          title: row.title, count: saved,
-          status: contacts.length ? "🟢"+(flags.green||0)+" 🟡"+(flags.yellow||0)+" 🔴"+(flags.red||0) : "no contacts found",
-        });
-      } catch(err) {
-        console.warn("[contacts] error:", row.title, err.message);
-        results.push({ title: row.title, count: 0, status: "error: " + err.message.slice(0,60) });
       }
 
-      await new Promise(r => setTimeout(r, 500));
-      setBulkExtractProgress(p => ({ ...p, results: [...results] }));
+      if (withoutEmail.length) {
+        const titles = withoutEmail.map(c => c.bid_title);
+        const { data: existingT } = await window._db.from("pdf_contacts").select("bid_title").in("bid_title", titles).is("email", null);
+        const existingTSet = new Set((existingT||[]).map(r => r.bid_title));
+        const toInsert = withoutEmail.filter(c => !existingTSet.has(c.bid_title));
+        if (toInsert.length) {
+          const { error } = await window._db.from("pdf_contacts").insert(toInsert);
+          if (!error) saved += toInsert.length;
+        }
+      }
+
+      return saved;
     }
 
-    setBulkExtractProgress(p => ({ ...p, done: true, results }));
+    // ── Process in batches of 50 ──────────────────────────────────────────────
+    const BATCH = 50;
+    let totalSaved = 0, totalGreen = 0, totalYellow = 0, totalRed = 0;
+
+    for (let i = 0; i < toProcess.length; i += BATCH) {
+      if (bulkExtractAbort.current) break;
+      const batch = toProcess.slice(i, i + BATCH);
+
+      let batchContacts = [];
+      for (const row of batch) {
+        const contacts = extractContacts(row.memo||"", row.institution||"", row.state||"", row.title||"", row.bid_url||"");
+        batchContacts = batchContacts.concat(contacts);
+        totalGreen  += contacts.filter(c=>c.quality_flag==="green").length;
+        totalYellow += contacts.filter(c=>c.quality_flag==="yellow").length;
+        totalRed    += contacts.filter(c=>c.quality_flag==="red").length;
+      }
+
+      const saved = await saveContacts(batchContacts);
+      totalSaved += saved;
+
+      setBulkExtractProgress(p => ({
+        ...p,
+        current: Math.min(i + BATCH, toProcess.length),
+        currentTitle: "Batch " + (Math.floor(i/BATCH)+1) + " of " + Math.ceil(toProcess.length/BATCH),
+        results: [{ title: "Progress", count: totalSaved, status: "🟢"+totalGreen+" 🟡"+totalYellow+" 🔴"+totalRed }],
+      }));
+
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    setBulkExtractProgress(p => ({
+      ...p, done: true,
+      results: [
+        { title: "Total saved to database", count: totalSaved, status: "🟢"+totalGreen+" 🟡"+totalYellow+" 🔴"+totalRed },
+        { title: "Green — HubSpot ready", count: totalGreen, status: "full contact captured" },
+        { title: "Yellow — partial contact", count: totalYellow, status: "has email, some fields missing" },
+        { title: "Red — needs manual lookup", count: totalRed, status: "no contact in memo — check bid_url" },
+      ]
+    }));
   }
 
   // ── Export pdf_contacts to CSV ───────────────────────────────────────────────
