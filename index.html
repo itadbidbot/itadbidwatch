@@ -2864,19 +2864,9 @@ function RFPBidsView() {
       return;
     }
 
-    // Check which titles already extracted
-    const { data: alreadyDone } = await window._db
-      .from("pdf_contacts").select("bid_title")
-      .in("bid_title", allRows.map(r => (r.title||"").slice(0,500)));
-    const doneSet = new Set((alreadyDone || []).map(r => r.bid_title));
-    const toProcess = allRows.filter(r => !doneSet.has((r.title||"").slice(0,500)));
-
-    if (!toProcess.length) {
-      setBulkExtractProgress(p => ({ ...p, done: true, error: "All rows already extracted." }));
-      return;
-    }
-
-    setBulkExtractProgress({ total: toProcess.length, current: 0, done: false, results: [], error: null });
+    // Check which doc_ids already have contacts (use doc_id stored in source_url)
+    // Instead of a massive IN query, we just attempt insert and let the unique index handle dedup
+    setBulkExtractProgress({ total: allRows.length, current: 0, done: false, results: [], error: null });
 
     // ── Regex contact extractor ───────────────────────────────────────────────
     function extractContacts(memo, company, state, bidTitle, bidUrl) {
@@ -2914,7 +2904,7 @@ function RFPBidsView() {
           if (xm) ext = xm[1].slice(0,6);
         }
 
-        // Name — look for known first name followed by capitalized last name
+        // Name
         let firstName = "", lastName = "";
         const words = win.split(/\s+/);
         for (let i = 0; i < words.length-1; i++) {
@@ -2923,9 +2913,7 @@ function RFPBidsView() {
           if (firstNames.has(w)) {
             const nx = words[i+1].replace(/[.,;:()']/g,"");
             if (nx && nx[0]===nx[0].toUpperCase() && /^[A-Za-z]{2,20}$/.test(nx)) {
-              firstName = cleaned;
-              lastName = nx;
-              break;
+              firstName = cleaned; lastName = nx; break;
             }
           }
         }
@@ -2941,7 +2929,7 @@ function RFPBidsView() {
           }
         }
 
-        // Quality score
+        // Score
         let score = 25;
         if (company)   score += 20;
         if (firstName) score += 15;
@@ -2961,7 +2949,7 @@ function RFPBidsView() {
         });
       }
 
-      // No email found — create red record so nothing is lost
+      // No email found — create red record
       if (contacts.length === 0) {
         contacts.push({
           first_name: "", last_name: "", email: "", phone: "", extension: "",
@@ -2972,49 +2960,16 @@ function RFPBidsView() {
           created_at: new Date().toISOString(),
         });
       }
-
       return contacts;
     }
 
-    // ── Save to Supabase with dedup ───────────────────────────────────────────
-    async function saveContacts(contacts) {
-      if (!contacts.length) return 0;
-      const withEmail    = contacts.filter(c => c.email);
-      const withoutEmail = contacts.filter(c => !c.email);
-      let saved = 0;
-
-      if (withEmail.length) {
-        const emails = withEmail.map(c => c.email);
-        const { data: existing } = await window._db.from("pdf_contacts").select("email").in("email", emails);
-        const existingSet = new Set((existing||[]).map(r => r.email));
-        const toInsert = withEmail.filter(c => !existingSet.has(c.email));
-        if (toInsert.length) {
-          const { error } = await window._db.from("pdf_contacts").insert(toInsert);
-          if (!error) saved += toInsert.length;
-        }
-      }
-
-      if (withoutEmail.length) {
-        const titles = withoutEmail.map(c => c.bid_title);
-        const { data: existingT } = await window._db.from("pdf_contacts").select("bid_title").in("bid_title", titles).is("email", null);
-        const existingTSet = new Set((existingT||[]).map(r => r.bid_title));
-        const toInsert = withoutEmail.filter(c => !existingTSet.has(c.bid_title));
-        if (toInsert.length) {
-          const { error } = await window._db.from("pdf_contacts").insert(toInsert);
-          if (!error) saved += toInsert.length;
-        }
-      }
-
-      return saved;
-    }
-
-    // ── Process in batches of 50 ──────────────────────────────────────────────
+    // ── Process in batches of 50, use upsert with ignoreDuplicates ────────────
     const BATCH = 50;
     let totalSaved = 0, totalGreen = 0, totalYellow = 0, totalRed = 0;
 
-    for (let i = 0; i < toProcess.length; i += BATCH) {
+    for (let i = 0; i < allRows.length; i += BATCH) {
       if (bulkExtractAbort.current) break;
-      const batch = toProcess.slice(i, i + BATCH);
+      const batch = allRows.slice(i, i + BATCH);
 
       let batchContacts = [];
       for (const row of batch) {
@@ -3025,17 +2980,43 @@ function RFPBidsView() {
         totalRed    += contacts.filter(c=>c.quality_flag==="red").length;
       }
 
-      const saved = await saveContacts(batchContacts);
-      totalSaved += saved;
+      // Separate email and no-email records
+      const withEmail    = batchContacts.filter(c => c.email);
+      const withoutEmail = batchContacts.filter(c => !c.email);
+
+      // Upsert email records — unique index on email handles dedup silently
+      if (withEmail.length) {
+        const { error, count } = await window._db
+          .from("pdf_contacts")
+          .upsert(withEmail, { onConflict: "email", ignoreDuplicates: true })
+          .select("id", { count: "exact", head: true });
+        if (!error) totalSaved += withEmail.length;
+      }
+
+      // Insert no-email records only if bid_title not already in table
+      if (withoutEmail.length) {
+        for (const rec of withoutEmail) {
+          const { data: exists } = await window._db
+            .from("pdf_contacts")
+            .select("id")
+            .eq("bid_title", rec.bid_title)
+            .is("email", null)
+            .limit(1);
+          if (!exists || !exists.length) {
+            await window._db.from("pdf_contacts").insert(rec);
+            totalSaved++;
+          }
+        }
+      }
 
       setBulkExtractProgress(p => ({
         ...p,
-        current: Math.min(i + BATCH, toProcess.length),
-        currentTitle: "Batch " + (Math.floor(i/BATCH)+1) + " of " + Math.ceil(toProcess.length/BATCH),
+        current: Math.min(i + BATCH, allRows.length),
+        currentTitle: "Batch " + (Math.floor(i/BATCH)+1) + " of " + Math.ceil(allRows.length/BATCH),
         results: [{ title: "Progress", count: totalSaved, status: "🟢"+totalGreen+" 🟡"+totalYellow+" 🔴"+totalRed }],
       }));
 
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise(r => setTimeout(r, 50));
     }
 
     setBulkExtractProgress(p => ({
@@ -3048,6 +3029,7 @@ function RFPBidsView() {
       ]
     }));
   }
+
 
   // ── Export pdf_contacts to CSV ───────────────────────────────────────────────
   async function exportContactsCSV() {
