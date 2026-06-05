@@ -2974,16 +2974,15 @@ function RFPBidsView() {
       setBulkExtractProgress(p => ({ ...p, current: i+1, currentTitle: row.title || boxUrl }));
 
       try {
-        // Fetch Box page text via CORS proxy
+        // Fetch Box page text via Jina Reader (handles JS-heavy and protected pages)
         let pageText = "";
-        const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(boxUrl);
-        const boxResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) });
-        if (boxResp.ok) {
-          const html = await boxResp.text();
-          const parser = new DOMParser();
-          const doc = parser.parseFromString(html, "text/html");
-          pageText = doc.body ? (doc.body.innerText || doc.body.textContent || "") : "";
-        }
+        const jinaUrl = "https://r.jina.ai/" + boxUrl;
+        try {
+          const jinaResp = await fetch(jinaUrl, { signal: AbortSignal.timeout(25000) });
+          if (jinaResp.ok) {
+            pageText = await jinaResp.text();
+          }
+        } catch(e) { console.warn("[contacts] Jina fetch failed:", e); }
 
         if (!pageText || pageText.trim().length < 30) {
           results.push({ title: row.title, count: 0, status: "no content accessible" });
