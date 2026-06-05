@@ -3210,19 +3210,115 @@ function RFPBidsView() {
   // ── Export pdf_contacts to CSV ───────────────────────────────────────────────
   async function exportContactsCSV() {
     if (!window._db) return;
-    const { data, error } = await window._db
-      .from("pdf_contacts")
-      .select("*")
-      .order("created_at", { ascending: false });
-    if (error || !data || !data.length) { alert("No contacts to export."); return; }
+    // Paginate to get ALL rows (Supabase default caps at 1000)
+    let all = [], from = 0;
+    while (true) {
+      const { data, error } = await window._db
+        .from("pdf_contacts").select("*")
+        .order("created_at", { ascending: false })
+        .range(from, from + 999);
+      if (error || !data || !data.length) break;
+      all = all.concat(data);
+      if (data.length < 1000) break;
+      from += 1000;
+    }
+    if (!all.length) { alert("No contacts to export."); return; }
     const cols = ["id","first_name","last_name","email","phone","extension","job_title","company_name","quality_flag","quality_score","hubspot_ready","source_url","bid_title","data_source","state","created_at"];
     const escape = v => `"${String(v||"").replace(/"/g,'""')}"`;
-    const csv = [cols.join(","), ...data.map(r => cols.map(c => escape(r[c])).join(","))].join("\n");
+    const csv = [cols.join(","), ...all.map(r => cols.map(c => escape(r[c])).join(","))].join("\n");
     const blob = new Blob([csv], { type:"text/csv" });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = url; a.download = `pdf_contacts_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click(); URL.revokeObjectURL(url);
+    a.href = URL.createObjectURL(blob);
+    a.download = `pdf_contacts_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+  }
+
+  // ── Import Apollo-enriched CSV back into pdf_contacts ───────────────────────
+  const apolloImportRef = React.useRef(null);
+  const [apolloImportStatus, setApolloImportStatus] = React.useState(null);
+
+  async function handleApolloImport(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    e.target.value = "";
+    setApolloImportStatus({ running: true, saved: 0, skipped: 0, done: false });
+
+    const text = await file.text();
+    const lines = text.split("\n");
+    const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g,"").trim());
+
+    const col = name => {
+      const i = headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+      return i >= 0 ? i : null;
+    };
+
+    const iFirst  = col("First Name");
+    const iLast   = col("Last Name");
+    const iTitle  = col("Title");
+    const iCo     = col("Company Name");
+    const iEmail  = col("Email");
+    const iPhone  = col("Phone");
+    const iLinked = col("Person Linkedin Url");
+
+    const parseRow = line => {
+      const vals = [];
+      let cur = "", inQ = false;
+      for (const ch of line) {
+        if (ch === '"') { inQ = !inQ; }
+        else if (ch === ',' && !inQ) { vals.push(cur.trim()); cur = ""; }
+        else cur += ch;
+      }
+      vals.push(cur.trim());
+      return vals;
+    };
+
+    let saved = 0, skipped = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      const v = parseRow(line);
+      const email = (iEmail !== null ? v[iEmail] : "").replace(/^"|"$/g,"").trim().toLowerCase();
+      const company = (iCo !== null ? v[iCo] : "").replace(/^"|"$/g,"").trim();
+      if (!email && !company) continue;
+
+      const firstName = (iFirst !== null ? v[iFirst] : "").replace(/^"|"$/g,"").trim();
+      const lastName  = (iLast  !== null ? v[iLast]  : "").replace(/^"|"$/g,"").trim();
+      const jobTitle  = (iTitle !== null ? v[iTitle] : "").replace(/^"|"$/g,"").trim();
+      const phone     = (iPhone !== null ? v[iPhone] : "").replace(/^"|"$/g,"").trim();
+
+      let score = 25;
+      if (company)   score += 20;
+      if (firstName) score += 15;
+      if (lastName)  score += 15;
+      if (phone)     score += 15;
+      if (jobTitle)  score += 10;
+      const flag = score >= 90 ? "green" : score >= 45 ? "yellow" : "red";
+
+      const rec = {
+        first_name: firstName.slice(0,100), last_name: lastName.slice(0,100),
+        email: email.slice(0,200), phone: phone.slice(0,20),
+        job_title: jobTitle.slice(0,200), company_name: company.slice(0,300),
+        data_source: "apollo_import", quality_score: score,
+        quality_flag: flag, hubspot_ready: flag === "green",
+        created_at: new Date().toISOString(),
+      };
+
+      if (window._db) {
+        const { error } = await window._db.from("pdf_contacts").insert(rec);
+        if (!error) saved++;
+        else if (error.code === "23505" || error.status === 409 || (error.message||"").includes("duplicate")) {
+          // update existing with better data from Apollo
+          if (email) {
+            await window._db.from("pdf_contacts")
+              .update({ first_name:firstName, last_name:lastName, phone, job_title:jobTitle, quality_score:score, quality_flag:flag, hubspot_ready:flag==="green", data_source:"apollo_import" })
+              .eq("email", email);
+          }
+          skipped++;
+        }
+      }
+      setApolloImportStatus({ running: true, saved, skipped, done: false });
+    }
+    setApolloImportStatus({ running: false, saved, skipped, done: true });
   }
 
   // ── Email generation via Gemini ─────────────────────────────────────────────
@@ -3452,6 +3548,21 @@ function RFPBidsView() {
             style={{ padding:"8px 16px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
             ⬇ Export Contacts
           </button>
+          <input ref={apolloImportRef} type="file" accept=".csv" onChange={handleApolloImport} style={{ display:"none" }} />
+          <button onClick={() => apolloImportRef.current && apolloImportRef.current.click()}
+            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#7c3aed,#5b21b6)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            ⬆ Import Apollo CSV
+          </button>
+          {apolloImportStatus && apolloImportStatus.done && (
+            <span style={{ fontSize:"12px", color:"#10b981", fontWeight:600 }}>
+              ✓ {apolloImportStatus.saved} saved, {apolloImportStatus.skipped} updated
+            </span>
+          )}
+          {apolloImportStatus && apolloImportStatus.running && (
+            <span style={{ fontSize:"12px", color:"#60a5fa" }}>
+              Importing… {apolloImportStatus.saved} saved
+            </span>
+          )}
           <button onClick={() => { setBulkExtractProgress({ total:0, current:0, done:false, results:[], error:null }); runBulkContactExtraction(); }}
             style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#10b981,#059669)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
             🔍 Extract Contact Data
