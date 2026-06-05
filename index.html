@@ -2844,14 +2844,15 @@ function RFPBidsView() {
     if (!window._db) return;
     bulkExtractAbort.current = false;
 
-    // Load first 10 rfp_bids rows that have a Doc URL
+    // Load rfp_bids rows that have a Box.com bid_documents PDF link
     const { data: allRows, error: loadErr } = await window._db
       .from("rfp_bids")
       .select("doc_id, title, institution, state, document_url, bid_documents")
-      .not("document_url", "is", null)
-      .neq("document_url", "")
+      .not("bid_documents", "is", null)
+      .neq("bid_documents", "")
+      .ilike("bid_documents", "%box.com%")
       .order("file_date", { ascending: false })
-      .limit(50); // fetch more so we can find 10 with real URLs
+      .limit(50); // fetch more so we can find 10 with real PDFs
 
     if (loadErr || !allRows) {
       setBulkExtractProgress(p => ({ ...p, done: true, error: "Failed to load rows: " + (loadErr?.message || "unknown") }));
@@ -2859,7 +2860,7 @@ function RFPBidsView() {
     }
 
     // Check which source_urls already exist in pdf_contacts to skip
-    const allDocUrls = allRows.map(r => r.document_url).filter(Boolean);
+    const allDocUrls = allRows.map(r => r.bid_documents).filter(Boolean);
     const { data: alreadyDone } = await window._db
       .from("pdf_contacts")
       .select("source_url")
@@ -2867,7 +2868,7 @@ function RFPBidsView() {
     const doneSet = new Set((alreadyDone || []).map(r => r.source_url));
 
     // Filter to rows not yet extracted, cap at 10
-    const toProcess = allRows.filter(r => r.document_url && !doneSet.has(r.document_url)).slice(0, 10);
+    const toProcess = allRows.filter(r => r.bid_documents && !doneSet.has(r.bid_documents)).slice(0, 10);
 
     if (!toProcess.length) {
       setBulkExtractProgress(p => ({ ...p, done: true, error: "All available rows already extracted." }));
@@ -2880,7 +2881,7 @@ function RFPBidsView() {
     for (let i = 0; i < toProcess.length; i++) {
       if (bulkExtractAbort.current) break;
       const row = toProcess[i];
-      const docUrl = row.document_url;
+      const docUrl = row.bid_documents;
       setBulkExtractProgress(p => ({ ...p, current: i + 1, currentTitle: row.title || docUrl }));
 
       try {
