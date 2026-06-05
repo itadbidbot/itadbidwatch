@@ -2282,11 +2282,19 @@ function SettingsView() {
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("GEMINI_API_KEY") || "");
   const [geminiSaved, setGeminiSaved] = useState(false);
+  const [apolloKey, setApolloKey] = useState(() => localStorage.getItem("APOLLO_API_KEY") || "");
+  const [apolloSaved, setApolloSaved] = useState(false);
 
   function saveGeminiKey() {
     localStorage.setItem("GEMINI_API_KEY", geminiKey.trim());
     setGeminiSaved(true);
     setTimeout(() => setGeminiSaved(false), 2000);
+  }
+
+  function saveApolloKey() {
+    localStorage.setItem("APOLLO_API_KEY", apolloKey.trim());
+    setApolloSaved(true);
+    setTimeout(() => setApolloSaved(false), 2000);
   }
 
   return (
@@ -2350,7 +2358,7 @@ function SettingsView() {
           </div>
 
           {/* Gemini API key */}
-          <div>
+          <div style={{ marginBottom:"20px" }}>
             <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>GEMINI API KEY</label>
             <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
               <input
@@ -2367,6 +2375,27 @@ function SettingsView() {
             </div>
             <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>
               Used for ✉️ email generation on Box documents. Stored in localStorage under <code style={{ color:"#B0B7BC" }}>GEMINI_API_KEY</code>. Never sent anywhere except Google's Gemini API.
+            </div>
+          </div>
+
+          {/* Apollo API key */}
+          <div>
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>APOLLO API KEY (MASTER)</label>
+            <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+              <input
+                type="password"
+                value={apolloKey}
+                onChange={e => setApolloKey(e.target.value)}
+                placeholder="Paste your Apollo master API key…"
+                style={{ flex:1, padding:"8px 12px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", color:"#ffffff", fontSize:"13px", outline:"none", boxSizing:"border-box" }}
+              />
+              <button onClick={saveApolloKey}
+                style={{ padding:"8px 16px", background: apolloSaved ? "#10b981" : "linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", transition:"background 0.2s" }}>
+                {apolloSaved ? "✓ Saved" : "Save Key"}
+              </button>
+            </div>
+            <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>
+              Used for 🚀 Apollo Enrich in RFP School Watch. Searches are free. Reveal email = 1 credit. Stored under <code style={{ color:"#B0B7BC" }}>APOLLO_API_KEY</code>.
             </div>
           </div>
         </div>
@@ -2429,6 +2458,11 @@ function RFPBidsView() {
   const fileInputRef = useRef(null);
   const [bulkExtractProgress, setBulkExtractProgress] = useState(null); // null=hidden | { total, current, done, results, error }
   const bulkExtractAbort = React.useRef(false);
+  const [apolloPanel, setApolloPanel] = useState(false); // show/hide Apollo enrichment panel
+  const [apolloResults, setApolloResults] = useState([]); // [{ company, bid_title, state, source_url, person_id, name, title, linkedin, enriched, email, phone, saving }]
+  const [apolloRunning, setApolloRunning] = useState(false);
+  const [apolloProgress, setApolloProgress] = useState({ current: 0, total: 0 });
+  const [apolloError, setApolloError] = useState(null);
 
   // ── CSV parser ──────────────────────────────────────────────────────────────
   function parseCSV(text) {
@@ -2984,12 +3018,14 @@ function RFPBidsView() {
       const withEmail    = batchContacts.filter(c => c.email);
       const withoutEmail = batchContacts.filter(c => !c.email);
 
-      // Insert email records one by one, skip if email already exists
+      // Insert email records one by one, skip if email already exists (409 = ok)
       if (withEmail.length) {
         for (const rec of withEmail) {
           const { error } = await window._db.from("pdf_contacts").insert(rec);
           if (!error) totalSaved++;
-          // error 23505 = unique violation (already exists) — that's fine, skip it
+          else if (error.code === "23505" || error.status === 409 || (error.message||"").includes("duplicate")) {
+            // duplicate email — already exists, skip silently
+          }
         }
       }
 
@@ -3030,6 +3066,146 @@ function RFPBidsView() {
     }));
   }
 
+
+  // ── Apollo enrichment ────────────────────────────────────────────────────────
+  async function runApolloSearch() {
+    const apolloKey = localStorage.getItem("APOLLO_API_KEY") || "";
+    if (!apolloKey) { setApolloError("No Apollo API key. Add it in Settings."); return; }
+    if (!window._db) return;
+
+    setApolloRunning(true);
+    setApolloError(null);
+    setApolloResults([]);
+
+    // Load red/yellow contacts from pdf_contacts that have no phone+email enriched by Apollo
+    let contacts = [];
+    let from = 0;
+    while (true) {
+      const { data, error } = await window._db.from("pdf_contacts")
+        .select("id, company_name, bid_title, state, source_url, quality_flag, first_name, last_name, email")
+        .in("quality_flag", ["red","yellow"])
+        .range(from, from + 999);
+      if (error || !data || !data.length) break;
+      contacts = contacts.concat(data);
+      if (data.length < 1000) break;
+      from += 1000;
+    }
+
+    // Deduplicate by company_name so we only search each company once
+    const seen = new Set();
+    const unique = contacts.filter(c => {
+      const k = (c.company_name||"").toLowerCase().trim();
+      if (!k || seen.has(k)) return false;
+      seen.add(k); return true;
+    });
+
+    setApolloProgress({ current: 0, total: unique.length });
+
+    const TITLES = [
+      "purchasing director","director of purchasing","procurement director",
+      "purchasing manager","procurement manager","technology director",
+      "director of technology","chief financial officer","superintendent",
+      "chief procurement officer","buyer","purchasing agent"
+    ];
+
+    const found = [];
+    for (let i = 0; i < unique.length; i++) {
+      const c = unique[i];
+      setApolloProgress({ current: i + 1, total: unique.length });
+      try {
+        const resp = await fetch("https://api.apollo.io/api/v1/mixed_people/api_search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": apolloKey, "Cache-Control": "no-cache" },
+          body: JSON.stringify({
+            q_organization_name: c.company_name,
+            person_titles: TITLES,
+            per_page: 3,
+            page: 1,
+          })
+        });
+        const data = await resp.json();
+        const people = data.people || [];
+        for (const p of people) {
+          found.push({
+            contact_id: c.id,
+            company: c.company_name,
+            bid_title: c.bid_title,
+            state: c.state,
+            source_url: c.source_url,
+            person_id: p.id,
+            name: p.name || "",
+            title: p.title || "",
+            linkedin: p.linkedin_url || "",
+            enriched: false,
+            email: "",
+            phone: "",
+            saving: false,
+          });
+        }
+      } catch(e) { /* skip failed searches */ }
+      await new Promise(r => setTimeout(r, 120)); // ~8 req/sec, safe under rate limit
+    }
+
+    setApolloResults(found);
+    setApolloRunning(false);
+    if (!found.length) setApolloError("No matches found. Try different company names or check your API key.");
+  }
+
+  async function apolloReveal(idx) {
+    const apolloKey = localStorage.getItem("APOLLO_API_KEY") || "";
+    if (!apolloKey) { setApolloError("No Apollo API key."); return; }
+    const r = apolloResults[idx];
+    if (!r || r.enriched) return;
+
+    // Mark as loading
+    setApolloResults(prev => prev.map((x,i) => i===idx ? {...x, saving:true} : x));
+
+    try {
+      const resp = await fetch("https://api.apollo.io/api/v1/people/match", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": apolloKey, "Cache-Control": "no-cache" },
+        body: JSON.stringify({ id: r.person_id, reveal_personal_emails: true })
+      });
+      const data = await resp.json();
+      const p = data.person || {};
+      const email = p.email || "";
+      const phone = (p.phone_numbers && p.phone_numbers[0] && p.phone_numbers[0].sanitized_number) || "";
+      const firstName = p.first_name || "";
+      const lastName = p.last_name || "";
+      const jobTitle = p.title || r.title;
+
+      // Score the enriched contact
+      let score = 25;
+      if (r.company) score += 20;
+      if (firstName) score += 15;
+      if (lastName)  score += 15;
+      if (phone)     score += 15;
+      if (jobTitle)  score += 10;
+      const flag = score>=90?"green":score>=45?"yellow":"red";
+
+      // Save to pdf_contacts — update existing red row for this company if possible
+      if (window._db && email) {
+        const rec = {
+          first_name: firstName, last_name: lastName, email,
+          phone, job_title: jobTitle,
+          company_name: r.company, source_url: r.source_url,
+          bid_title: r.bid_title, data_source: "apollo",
+          state: r.state, quality_score: score, quality_flag: flag,
+          hubspot_ready: flag==="green", created_at: new Date().toISOString(),
+        };
+        // Try insert; if duplicate email just update
+        const { error } = await window._db.from("pdf_contacts").insert(rec);
+        if (error && (error.code==="23505" || error.status===409)) {
+          await window._db.from("pdf_contacts").update({ first_name:firstName, last_name:lastName, phone, job_title:jobTitle, quality_score:score, quality_flag:flag, hubspot_ready:flag==="green" }).eq("email", email);
+        }
+      }
+
+      setApolloResults(prev => prev.map((x,i) => i===idx ? {...x, enriched:true, email, phone, saving:false} : x));
+    } catch(e) {
+      setApolloResults(prev => prev.map((x,i) => i===idx ? {...x, saving:false} : x));
+      setApolloError("Enrichment failed: " + e.message);
+    }
+  }
 
   // ── Export pdf_contacts to CSV ───────────────────────────────────────────────
   async function exportContactsCSV() {
@@ -3280,6 +3456,10 @@ function RFPBidsView() {
             style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#10b981,#059669)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
             🔍 Extract Contact Data
           </button>
+          <button onClick={() => setApolloPanel(p => !p)}
+            style={{ padding:"8px 16px", borderRadius:"8px", background: apolloPanel ? "linear-gradient(135deg,#7c3aed,#5b21b6)" : "linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            🚀 Apollo Enrich
+          </button>
           <button onClick={() => fileInputRef.current && fileInputRef.current.click()}
             style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
             <Upload size={13} /> Upload CSV
@@ -3468,6 +3648,127 @@ function RFPBidsView() {
       {rfpToast && (
         <div style={{ position:"fixed", bottom:"24px", right:"24px", zIndex:9999, background: rfpToast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : rfpToast.color === "#C60C30" ? "rgba(198,12,48,0.15)" : "rgba(16,185,129,0.15)", border:`1px solid ${rfpToast.color}`, borderRadius:"10px", padding:"12px 20px", color:"#ffffff", fontSize:"13px", fontWeight:600, boxShadow:"0 8px 32px rgba(0,0,0,0.4)", maxWidth:"340px" }}>
           {rfpToast.msg}
+        </div>
+      )}
+
+      {/* ── Apollo Enrichment Panel ──────────────────────────────────────── */}
+      {apolloPanel && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:9600, display:"flex", alignItems:"flex-start", justifyContent:"center", paddingTop:"40px", overflowY:"auto" }}>
+          <div style={{ background:"#002244", border:"1px solid #2563eb", borderRadius:"14px", padding:"28px", width:"900px", maxWidth:"96vw", boxShadow:"0 24px 60px rgba(0,0,0,0.7)", position:"relative", marginBottom:"40px" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"18px" }}>
+              <div style={{ fontWeight:700, fontSize:"16px", color:"#ffffff", display:"flex", alignItems:"center", gap:"10px" }}>
+                🚀 Apollo Enrichment
+                <span style={{ fontSize:"11px", fontWeight:400, color:"#60a5fa", background:"rgba(37,99,235,0.15)", padding:"2px 8px", borderRadius:"12px" }}>Searches are free · Reveal costs 1 credit each</span>
+              </div>
+              <button onClick={() => setApolloPanel(false)} style={{ background:"none", border:"none", color:"#B0B7BC", fontSize:"20px", cursor:"pointer", padding:"4px 8px" }}>✕</button>
+            </div>
+
+            {/* API key row */}
+            <div style={{ display:"flex", gap:"8px", alignItems:"center", marginBottom:"16px" }}>
+              <input
+                type="password"
+                defaultValue={localStorage.getItem("APOLLO_API_KEY") || ""}
+                placeholder="Apollo Master API Key…"
+                id="apollo-key-input"
+                style={{ flex:1, padding:"8px 12px", background:"#001a33", border:"1px solid #003875", borderRadius:"8px", color:"#ffffff", fontSize:"13px", outline:"none" }}
+              />
+              <button onClick={() => {
+                const k = document.getElementById("apollo-key-input").value.trim();
+                if (k) { localStorage.setItem("APOLLO_API_KEY", k); setApolloError(null); alert("Apollo key saved."); }
+              }} style={{ padding:"8px 14px", background:"#1d4ed8", border:"none", borderRadius:"8px", color:"#fff", fontSize:"12px", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap" }}>
+                Save Key
+              </button>
+              <button
+                onClick={runApolloSearch}
+                disabled={apolloRunning}
+                style={{ padding:"8px 18px", background: apolloRunning ? "#003366" : "linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none", borderRadius:"8px", color: apolloRunning ? "#4a6080" : "#fff", fontSize:"12px", fontWeight:700, cursor: apolloRunning ? "not-allowed" : "pointer", whiteSpace:"nowrap" }}>
+                {apolloRunning ? `Searching… ${apolloProgress.current}/${apolloProgress.total}` : "🔍 Search Apollo"}
+              </button>
+            </div>
+
+            {apolloError && (
+              <div style={{ background:"rgba(198,12,48,0.12)", border:"1px solid rgba(198,12,48,0.4)", borderRadius:"8px", padding:"10px 14px", color:"#f87171", fontSize:"13px", marginBottom:"14px" }}>
+                {apolloError}
+              </div>
+            )}
+
+            {apolloRunning && (
+              <div style={{ background:"rgba(37,99,235,0.1)", border:"1px solid rgba(37,99,235,0.3)", borderRadius:"8px", padding:"12px 16px", marginBottom:"14px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", color:"#93c5fd", fontSize:"12px", marginBottom:"6px" }}>
+                  <span>Searching {apolloProgress.current} of {apolloProgress.total} companies…</span>
+                  <span>{apolloProgress.total ? Math.round((apolloProgress.current/apolloProgress.total)*100) : 0}%</span>
+                </div>
+                <div style={{ background:"#001a33", borderRadius:"4px", height:"6px", overflow:"hidden" }}>
+                  <div style={{ background:"linear-gradient(90deg,#2563eb,#60a5fa)", height:"100%", width: apolloProgress.total ? `${(apolloProgress.current/apolloProgress.total)*100}%` : "0%", transition:"width 0.3s ease" }} />
+                </div>
+                <div style={{ color:"#4a6080", fontSize:"11px", marginTop:"6px" }}>Free search — no credits used yet</div>
+              </div>
+            )}
+
+            {apolloResults.length > 0 && (
+              <div>
+                <div style={{ color:"#B0B7BC", fontSize:"12px", marginBottom:"10px" }}>
+                  Found <strong style={{ color:"#60a5fa" }}>{apolloResults.length}</strong> people · Click <strong style={{ color:"#fbbf24" }}>Reveal</strong> to spend 1 credit and get their email
+                  <button onClick={() => {
+                    const enriched = apolloResults.filter(r => r.enriched && r.email);
+                    if (!enriched.length) { alert("No enriched contacts to export yet. Click Reveal on some rows first."); return; }
+                    const cols = ["name","title","email","phone","company","bid_title","state","linkedin"];
+                    const esc = v => `"${String(v||"").replace(/"/g,'""')}"`;
+                    const csv = [cols.join(","), ...enriched.map(r => cols.map(c => esc(r[c])).join(","))].join("\n");
+                    const blob = new Blob([csv], { type:"text/csv" });
+                    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+                    a.download = `apollo_enriched_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+                  }} style={{ marginLeft:"16px", padding:"4px 12px", background:"#003366", border:"1px solid #003875", borderRadius:"6px", color:"#B0B7BC", fontSize:"11px", fontWeight:600, cursor:"pointer" }}>
+                    ⬇ Export Enriched
+                  </button>
+                </div>
+                <div style={{ maxHeight:"420px", overflowY:"auto", border:"1px solid #003366", borderRadius:"8px" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"12px" }}>
+                    <thead>
+                      <tr style={{ background:"#001a33", position:"sticky", top:0 }}>
+                        {["Name","Title","Company","State","Email / Phone","Action"].map(h => (
+                          <th key={h} style={{ padding:"8px 10px", textAlign:"left", color:"#B0B7BC", fontWeight:600, borderBottom:"1px solid #003366", whiteSpace:"nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {apolloResults.map((r, i) => (
+                        <tr key={i} style={{ background: i%2===0 ? "#001a33" : "#002244", borderBottom:"1px solid rgba(0,56,117,0.4)" }}>
+                          <td style={{ padding:"7px 10px", color:"#ffffff" }}>
+                            {r.linkedin ? <a href={r.linkedin} target="_blank" rel="noreferrer" style={{ color:"#60a5fa", textDecoration:"none" }}>{r.name}</a> : r.name}
+                          </td>
+                          <td style={{ padding:"7px 10px", color:"#B0B7BC", maxWidth:"160px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={r.title}>{r.title}</td>
+                          <td style={{ padding:"7px 10px", color:"#B0B7BC", maxWidth:"160px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={r.company}>{r.company}</td>
+                          <td style={{ padding:"7px 10px", color:"#4a6080" }}>{r.state}</td>
+                          <td style={{ padding:"7px 10px" }}>
+                            {r.enriched ? (
+                              <div>
+                                {r.email && <div style={{ color:"#10b981", fontWeight:600 }}>{r.email}</div>}
+                                {r.phone && <div style={{ color:"#60a5fa", fontSize:"11px" }}>{r.phone}</div>}
+                                {!r.email && !r.phone && <span style={{ color:"#4a6080" }}>No data returned</span>}
+                              </div>
+                            ) : (
+                              <span style={{ color:"#4a6080", fontStyle:"italic" }}>—</span>
+                            )}
+                          </td>
+                          <td style={{ padding:"7px 10px" }}>
+                            {r.enriched ? (
+                              <span style={{ color:"#10b981", fontSize:"11px", fontWeight:600 }}>✓ Saved</span>
+                            ) : (
+                              <button onClick={() => apolloReveal(i)} disabled={r.saving}
+                                style={{ padding:"4px 12px", background: r.saving ? "#003366" : "linear-gradient(135deg,#f59e0b,#d97706)", border:"none", borderRadius:"6px", color: r.saving ? "#4a6080" : "#000", fontSize:"11px", fontWeight:700, cursor: r.saving ? "not-allowed" : "pointer" }}>
+                                {r.saving ? "…" : "Reveal"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
