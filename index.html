@@ -2884,30 +2884,79 @@ function RFPBidsView() {
       setBulkExtractProgress(p => ({ ...p, current: i + 1, currentTitle: row.title || docUrl }));
 
       try {
-        const res = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-api-key": ANTHROPIC_KEY,
-            "anthropic-version": "2023-06-01",
-            "anthropic-dangerous-direct-browser-access": "true",
-          },
-          body: JSON.stringify({
-            model: "claude-haiku-4-5-20251001",
-            max_tokens: 1024,
-            messages: [{
-              role: "user",
-              content: [
-                { type: "document", source: { type: "url", url: docUrl } },
-                { type: "text", text: `Extract ALL contact information clusters from this document. A cluster is any combination of name, phone, email, job title found together. Return JSON only — an array of objects with these exact keys: [{"first_name":"","last_name":"","email":"","phone":"","extension":"","job_title":"","company_name":""}]. Format phone as xxx-xxx-xxxx. Extension max 6 digits. Email must contain @ and a dot. company_name is the school or organization name. Leave fields blank if not found. Return [] if no contacts found. No commentary, no markdown, just the JSON array.` },
-              ],
-            }],
-          }),
-        });
+        // Step 1: Fetch the PDF via CORS proxy and convert to base64
+        let pdfBase64 = null;
+        let fetchedUrl = docUrl;
+
+        // If it's a Box URL, try to extract the direct PDF download link first
+        if (docUrl.includes("box.com")) {
+          try {
+            const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(docUrl);
+            const boxResp = await fetch(proxyUrl, { signal: AbortSignal.timeout(20000) });
+            if (boxResp.ok) {
+              const html = await boxResp.text();
+              const pdfPatterns = [
+                /["']([^"']*\.pdf[^"'?#]*(?:\?[^"']*)?)["']/gi,
+                /"download_url"\s*:\s*"([^"]+)"/gi,
+              ];
+              for (const pat of pdfPatterns) {
+                const m = pat.exec(html);
+                if (m) { fetchedUrl = m[1]; break; }
+              }
+            }
+          } catch(e) { console.warn("[bulk] box proxy failed:", e); }
+        }
+
+        // Fetch the actual PDF
+        try {
+          const pdfProxy = "https://corsproxy.io/?" + encodeURIComponent(fetchedUrl);
+          const pdfResp = await fetch(pdfProxy, { signal: AbortSignal.timeout(30000) });
+          if (pdfResp.ok) {
+            const blob = await pdfResp.blob();
+            pdfBase64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result.split(",")[1]);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          }
+        } catch(e) { console.warn("[bulk] PDF fetch failed:", e); }
+
+        if (!pdfBase64) {
+          results.push({ title: row.title, count: 0, status: "could not fetch PDF" });
+          await new Promise(r => setTimeout(r, 400));
+          setBulkExtractProgress(p => ({ ...p, results: [...results] }));
+          continue;
+        }
+
+        // Step 2: Send to Gemini free tier with base64 PDF
+        const geminiKey = localStorage.getItem("GEMINI_API_KEY") || "";
+        if (!geminiKey) {
+          results.push({ title: row.title, count: 0, status: "no Gemini key — add in Settings" });
+          setBulkExtractProgress(p => ({ ...p, results: [...results] }));
+          continue;
+        }
+
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { inline_data: { mime_type: "application/pdf", data: pdfBase64 } },
+                  { text: `Extract ALL contact information clusters from this document. A cluster is any combination of name, phone, email, job title found together. Return JSON only — an array of objects with these exact keys: [{"first_name":"","last_name":"","email":"","phone":"","extension":"","job_title":"","company_name":""}]. Format phone as xxx-xxx-xxxx. Extension max 6 digits. Email must contain @ and a dot. company_name is the school or organization name. Leave fields blank if not found. Return [] if no contacts found. No commentary, no markdown, just the JSON array.` },
+                ]
+              }],
+              generationConfig: { maxOutputTokens: 1024, temperature: 0 },
+            }),
+          }
+        );
 
         if (!res.ok) throw new Error(await res.text());
         const data = await res.json();
-        const text = (data.content?.[0]?.text || "").trim();
+        const text = (data.candidates?.[0]?.content?.parts?.[0]?.text || "").trim();
         const match = text.match(/\[[\s\S]*\]/);
         if (!match) throw new Error("No JSON array returned");
         const contacts = JSON.parse(match[0]);
