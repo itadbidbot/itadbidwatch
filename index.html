@@ -2984,13 +2984,13 @@ function RFPBidsView() {
       const withEmail    = batchContacts.filter(c => c.email);
       const withoutEmail = batchContacts.filter(c => !c.email);
 
-      // Upsert email records — unique index on email handles dedup silently
+      // Insert email records one by one, skip if email already exists
       if (withEmail.length) {
-        const { error, count } = await window._db
-          .from("pdf_contacts")
-          .upsert(withEmail, { onConflict: "email", ignoreDuplicates: true })
-          .select("id", { count: "exact", head: true });
-        if (!error) totalSaved += withEmail.length;
+        for (const rec of withEmail) {
+          const { error } = await window._db.from("pdf_contacts").insert(rec);
+          if (!error) totalSaved++;
+          // error 23505 = unique violation (already exists) — that's fine, skip it
+        }
       }
 
       // Insert no-email records only if bid_title not already in table
