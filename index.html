@@ -2571,9 +2571,18 @@ function RFPBidsView() {
     else console.log("upsertRfpRows: saved", toInsert.length, "rows, skipped", totalDuplicates, "duplicates");
 
     // Return box.com rows to caller so doUpload can run them with progress tracking.
-    // Filter requires bid_documents (the box.com URL) but NOT doc_id so rows without
-    // a doc_id still get their availability checked.
-    const boxRows = toInsert.filter(r => r.bid_documents && r.bid_documents.toLowerCase().includes("box.com"));
+    // Check both bid_documents AND document_url for Box links.
+    const boxRows = toInsert.filter(r => {
+      const bd = (r.bid_documents || "").toLowerCase();
+      const du = (r.document_url || "").toLowerCase();
+      return bd.includes("box.com") || du.includes("box.com");
+    });
+    // Attach the actual Box URL to use for checking
+    boxRows.forEach(r => {
+      r._box_url = (r.bid_documents && r.bid_documents.toLowerCase().includes("box.com"))
+        ? r.bid_documents
+        : r.document_url;
+    });
     console.log("[box-check] upsertRfpRows returning boxRows:", boxRows.length, "of", toInsert.length, "inserted rows");
     return { saved: toInsert.length, duplicates: totalDuplicates, boxRows, insertedRows: toInsert };
   }
@@ -2632,8 +2641,9 @@ function RFPBidsView() {
             let avail = 0, unavail = 0;
             for (let i = 0; i < boxRows.length; i++) {
               const row = boxRows[i];
-              const result = await checkBoxAvailability(row.bid_documents);
-              console.log(`[box-check] ${row.bid_documents.slice(0, 80)} -> ${result}`);
+              const boxUrl = row._box_url || row.bid_documents;
+              const result = await checkBoxAvailability(boxUrl);
+              console.log(`[box-check] ${boxUrl.slice(0, 80)} -> ${result}`);
               if (result === true)  avail++;
               if (result === false) unavail++;
               if (result !== null) {
@@ -2661,10 +2671,13 @@ function RFPBidsView() {
             for (const row of pdfRows) {
               try {
                 const jinaUrl = "https://r.jina.ai/" + row.document_url;
+                console.log(`[pdf-contacts] fetching: ${row.document_url.slice(0,80)}`);
                 const resp = await fetch(jinaUrl, { signal: AbortSignal.timeout(20000) });
-                if (!resp.ok) continue;
+                console.log(`[pdf-contacts] jina status: ${resp.status}`);
+                if (!resp.ok) { console.warn(`[pdf-contacts] bad status ${resp.status}`); continue; }
                 const text = await resp.text();
-                if (!text || text.length < 100) continue;
+                console.log(`[pdf-contacts] text length: ${text.length}`);
+                if (!text || text.length < 100) { console.warn(`[pdf-contacts] text too short`); continue; }
 
                 const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
                 const phoneRe = /\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g;
