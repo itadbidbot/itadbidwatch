@@ -2646,6 +2646,113 @@ function RFPBidsView() {
             setBoxProgress({ total: boxRows.length, checked: boxRows.length, available: avail, unavailable: unavail, done: true });
             // user dismisses via OK button
           }
+
+          // ── Extract contacts from direct PDF document_url links ───────────
+          const pdfRows = toInsert.filter(r =>
+            r.document_url && r.document_url.toLowerCase().trim().endsWith('.pdf')
+          );
+          if (pdfRows.length) {
+            console.log(`[pdf-contacts] found ${pdfRows.length} direct PDF links — extracting contacts`);
+            const JUNK = ["noreply","no-reply","donotreply","example.com","rfpschoolwatch","customercare","isupplier","contractadmin"];
+            const TITLES = ["director","superintendent","coordinator","manager","supervisor","administrator","officer","chief","purchasing","procurement","technology","specialist","buyer","agent","clerk"];
+            const FIRSTNAMES = new Set(["james","john","robert","michael","william","david","richard","joseph","thomas","charles","mary","patricia","jennifer","linda","barbara","elizabeth","susan","jessica","sarah","karen","christopher","daniel","paul","mark","jason","ryan","gary","eric","jeffrey","frank","scott","stephen","andrew","gregory","joshua","matthew","lisa","nancy","betty","dorothy","sandra","ashley","emily","donna","michelle","carol","amanda","melissa","deborah","stephanie","rebecca","sharon","laura","tammy","angela","brenda","pamela","lori","tracy","dawn","cheryl","ann","marie","alice","julie","heather","teresa","diane","judy","joyce","virginia","kelly","kim","debra","tina","danielle","robin","april","crystal","tiffany","lauren","samantha","janet","nicole","catherine","christine"]);
+
+            let pdfContactsSaved = 0, pdfContactsDupes = 0;
+
+            for (const row of pdfRows) {
+              try {
+                const jinaUrl = "https://r.jina.ai/" + row.document_url;
+                const resp = await fetch(jinaUrl, { signal: AbortSignal.timeout(20000) });
+                if (!resp.ok) continue;
+                const text = await resp.text();
+                if (!text || text.length < 100) continue;
+
+                const emailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+                const phoneRe = /\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/g;
+                let em;
+                const seenEmails = new Set();
+                emailRe.lastIndex = 0;
+                while ((em = emailRe.exec(text)) !== null) {
+                  const email = em[0].toLowerCase();
+                  if (JUNK.some(j => email.includes(j))) continue;
+                  if (seenEmails.has(email)) continue;
+                  seenEmails.add(email);
+
+                  const pos = em.index;
+                  const win = text.slice(Math.max(0, pos-400), pos+400);
+
+                  // Phone
+                  let phone = "";
+                  phoneRe.lastIndex = 0;
+                  const pm = phoneRe.exec(win);
+                  if (pm) {
+                    const d = pm[0].replace(/\D/g,"");
+                    if (d.length===10) phone = `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6)}`;
+                    else if (d.length===11&&d[0]==="1") phone = `${d.slice(1,4)}-${d.slice(4,7)}-${d.slice(7)}`;
+                  }
+
+                  // Name
+                  let firstName="", lastName="";
+                  const words = win.split(/\s+/);
+                  for (let wi=0; wi<words.length-1; wi++) {
+                    const cl = words[wi].replace(/[.,;:()']/g,"");
+                    if (FIRSTNAMES.has(cl.toLowerCase())) {
+                      const nx = words[wi+1].replace(/[.,;:()']/g,"");
+                      if (nx && nx[0]===nx[0].toUpperCase() && /^[A-Za-z]{2,20}$/.test(nx)) {
+                        firstName=cl; lastName=nx; break;
+                      }
+                    }
+                  }
+
+                  // Title
+                  let jobTitle="";
+                  const wl = win.toLowerCase();
+                  for (const kw of TITLES) {
+                    if (wl.includes(kw)) {
+                      const idx = wl.indexOf(kw);
+                      jobTitle = win.slice(Math.max(0,idx-5),idx+kw.length+35).trim().replace(/[\r\n]+/g," ").slice(0,100);
+                      break;
+                    }
+                  }
+
+                  let score = 25;
+                  if (row.institution) score += 20;
+                  if (firstName)       score += 15;
+                  if (lastName)        score += 15;
+                  if (phone)           score += 15;
+                  if (jobTitle)        score += 10;
+                  const flag = score>=90?"green":score>=45?"yellow":"red";
+
+                  const rec = {
+                    first_name: firstName.slice(0,100), last_name: lastName.slice(0,100),
+                    email: email.slice(0,200), phone: phone.slice(0,20),
+                    job_title: jobTitle.slice(0,200),
+                    company_name: (row.institution||"").slice(0,300),
+                    source_url: (row.document_url||"").slice(0,500),
+                    bid_title: (row.title||"").slice(0,500),
+                    data_source: "pdf_direct", state: (row.state||"").slice(0,10),
+                    quality_score: score, quality_flag: flag,
+                    hubspot_ready: flag==="green",
+                    file_date: fDate || null,
+                    created_at: new Date().toISOString(),
+                  };
+                  const { error: cErr } = await window._db.from("pdf_contacts").insert(rec);
+                  if (!cErr) {
+                    pdfContactsSaved++;
+                    console.log(`[pdf-contacts] saved ${email} from ${row.institution}`);
+                  } else if (cErr.code==="23505" || cErr.status===409) {
+                    pdfContactsDupes++;
+                  }
+                }
+              } catch(e) {
+                console.warn(`[pdf-contacts] error on ${row.document_url}:`, e.message);
+              }
+            }
+            console.log(`[pdf-contacts] done — saved: ${pdfContactsSaved} dupes: ${pdfContactsDupes}`);
+            if (pdfContactsSaved > 0) {
+              alert(`📋 PDF Contact Extraction Complete\n\n✅ New contacts saved: ${pdfContactsSaved}\n⏭ Duplicates skipped: ${pdfContactsDupes}\n\nCheck the Contacts tab to view them.`);
+            }
+          }
           resolve();
         } catch (err) {
           reject(err);
