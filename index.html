@@ -2529,29 +2529,28 @@ function RFPBidsView() {
     })).filter(r => r.bid_url);
     if (!allRecords.length) return { saved: 0, duplicates: 0 };
 
-    // Deduplicate within the CSV itself (title+institution, case-insensitive, keep first)
+    // Deduplicate within the CSV itself by doc_id (keep first occurrence)
     let csvDuplicates = 0;
     const csvSeen = new Set();
     const records = [];
     for (const rec of allRecords) {
-      const key = (rec.title || "").toLowerCase() + "||" + (rec.institution || "").toLowerCase();
-      if (csvSeen.has(key)) { csvDuplicates++; continue; }
+      const key = (rec.doc_id || "").toLowerCase();
+      if (!key || csvSeen.has(key)) { csvDuplicates++; continue; }
       csvSeen.add(key);
       records.push(rec);
     }
 
-    // Check existing rows in rfp_bids for matching title+institution
-    const titles      = [...new Set(records.map(r => r.title).filter(Boolean))];
-    const institutions = [...new Set(records.map(r => r.institution).filter(Boolean))];
-    let existingKeys = new Set();
-    if (titles.length) {
+    // Check existing rows in rfp_bids by doc_id only
+    const docIds = records.map(r => r.doc_id).filter(Boolean);
+    let existingDocIds = new Set();
+    if (docIds.length) {
       const { data: existing } = await window._db
         .from("rfp_bids")
-        .select("title, institution")
-        .in("title", titles);
+        .select("doc_id")
+        .in("doc_id", docIds);
       if (existing) {
         for (const row of existing) {
-          existingKeys.add((row.title || "").toLowerCase() + "||" + (row.institution || "").toLowerCase());
+          existingDocIds.add((row.doc_id || "").toLowerCase());
         }
       }
     }
@@ -2559,8 +2558,8 @@ function RFPBidsView() {
     let dbDuplicates = 0;
     const toInsert = [];
     for (const rec of records) {
-      const key = (rec.title || "").toLowerCase() + "||" + (rec.institution || "").toLowerCase();
-      if (existingKeys.has(key)) { dbDuplicates++; continue; }
+      const key = (rec.doc_id || "").toLowerCase();
+      if (key && existingDocIds.has(key)) { dbDuplicates++; continue; }
       toInsert.push(rec);
     }
 
