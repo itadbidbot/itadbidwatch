@@ -2564,7 +2564,7 @@ function RFPBidsView() {
     }
 
     const totalDuplicates = csvDuplicates + dbDuplicates;
-    if (!toInsert.length) return { saved: 0, duplicates: totalDuplicates, boxRows: [] };
+    if (!toInsert.length) return { saved: 0, duplicates: totalDuplicates, boxRows: [], insertedRows: [] };
 
     const { data: upsertData, error: upsertErr } = await window._db.from("rfp_bids").upsert(toInsert, { onConflict: "doc_id" });
     if (upsertErr) console.error("upsertRfpRows error:", JSON.stringify(upsertErr), upsertErr);
@@ -2575,7 +2575,7 @@ function RFPBidsView() {
     // a doc_id still get their availability checked.
     const boxRows = toInsert.filter(r => r.bid_documents && r.bid_documents.toLowerCase().includes("box.com"));
     console.log("[box-check] upsertRfpRows returning boxRows:", boxRows.length, "of", toInsert.length, "inserted rows");
-    return { saved: toInsert.length, duplicates: totalDuplicates, boxRows };
+    return { saved: toInsert.length, duplicates: totalDuplicates, boxRows, insertedRows: toInsert };
   }
 
   // ── Upload-history helpers ──────────────────────────────────────────────────
@@ -2620,7 +2620,7 @@ function RFPBidsView() {
         try {
           const parsed = parseCSV(ev.target.result);
           console.log("CSV parsed, total rows:", parsed.length, "first row:", parsed[0]);
-          const { saved, duplicates, boxRows } = await upsertRfpRows(parsed, fDate);
+          const { saved, duplicates, boxRows, insertedRows } = await upsertRfpRows(parsed, fDate);
           console.log("[doUpload] upsertRfpRows result — saved:", saved, "| duplicates:", duplicates, "| boxRows:", boxRows ? boxRows.length : "undefined");
           await loadAllRows();
           await recordUploadHistory(file.name);
@@ -2647,7 +2647,7 @@ function RFPBidsView() {
           }
 
           // ── Extract contacts from direct PDF document_url links ───────────
-          const pdfRows = toInsert.filter(r =>
+          const pdfRows = (insertedRows || []).filter(r =>
             r.document_url && r.document_url.toLowerCase().trim().endsWith('.pdf')
           );
           if (pdfRows.length) {
