@@ -2464,7 +2464,7 @@ function RFPBidsView() {
   const [colWidths, setColWidths] = useState({
     Title: 180, "Scan Date": 100, "Bid Type": 110, "Due Date": 100,
     Institution: 160, "Bid URL": 70, "Doc URL": 100, "Bid Doc": 80,
-    Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
+    Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 88,
   });
   const [extractModal, setExtractModal] = useState({ open: false, loading: false, row: null, contact: null, error: null });
   const [emailModal, setEmailModal] = useState({ open: false, loading: false, row: null, versions: null, error: null, activeTab: 0 });
@@ -2817,6 +2817,9 @@ function RFPBidsView() {
           }
           console.log(`[memo-contacts] saved: ${memoSaved} dupes: ${memoDupes}`);
 
+          const sourcesAdded = await autoAddSchoolSources(insertedRows || []);
+          console.log(`[auto-sources] added ${sourcesAdded} new school sources`);
+
           // ── Unified upload summary ────────────────────────────────────────
           const summaryLines = [
             `📅  File date: ${fDate || "unknown"}`,
@@ -2825,6 +2828,7 @@ function RFPBidsView() {
             `🔗  Box links checked: ${boxRows ? boxRows.length : 0}   |   Available: ${avail}   |   Unavailable: ${unavail}`,
             `📄  Direct PDFs processed: ${pdfRows.length}   |   Contacts found: ${pdfContactsSaved}`,
             `📝  Memo field contacts: ${memoSaved} new   |   ${memoDupes} already existed`,
+            `🏫  School sources auto-added: ${sourcesAdded}`,
             ``,
             saved > 0
               ? `☁  Run Box Extractor in Cloud Shell to extract contacts from Box PDFs:\npython3 box_contact_extractor.py --headless --since ${fDate || new Date().toISOString().slice(0,10)}`
@@ -2841,21 +2845,128 @@ function RFPBidsView() {
     });
   }
 
-  async function handleFile(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    e.target.value = "";
+  // ── School URL filter — keeps real district/school domains, rejects portals ──
+  const SKIP_DOMAINS = [
+    "box.com","bonfirehub.com","bidnetdirect.com","govdeals.com","bidprime.com",
+    "demandstar.com","ionwave.net","publicpurchase.com","planetbids.com",
+    "periscope.com","bidsync.com","sam.gov","ohio.gov","michigan.gov",
+    "wi.gov","maryland.gov","masslive.com","publicnotices","newspaper",
+    "classifieds","amazon","google.com","facebook","twitter","linkedin",
+    "thrillshare.com","beaconbid.com","govspend.com","commbuys.com",
+    "biddingo.com","merx.com","sciquest.com","jaggaer.com","coupa.com",
+  ];
+  const GOOD_DOMAINS = [
+    ".k12.",".edu",".sch.","school","district","schools","isd","csd","usd",
+    "county","parish","unified","independent","community","municipal","city",
+  ];
+  function isSchoolUrl(url) {
+    if (!url) return false;
     try {
-      const alreadyUploaded = await checkUploadHistory(file.name);
-      if (alreadyUploaded) {
-        setDupModal({ open: true, filename: file.name, fileObj: file });
-        return;
-      }
-      await doUpload(file);
-    } catch (err) {
-      console.error("RFP CSV upload error:", err);
-      showRfpToast("Upload failed: " + (err.message || "unknown error"), "#C60C30");
+      const u = new URL(url);
+      const host = u.hostname.toLowerCase();
+      if (SKIP_DOMAINS.some(d => host.includes(d))) return false;
+      if (GOOD_DOMAINS.some(d => host.includes(d) || url.toLowerCase().includes(d))) return true;
+      // Also accept .org and .gov that aren't portals
+      if ((host.endsWith(".org") || host.endsWith(".gov")) && !SKIP_DOMAINS.some(d => host.includes(d))) return true;
+      return false;
+    } catch { return false; }
+  }
+
+  async function autoAddSchoolSources(insertedRows) {
+    if (!insertedRows || !insertedRows.length || !window._db) return 0;
+    const seen = new Set();
+    let added = 0;
+    for (const row of insertedRows) {
+      const url = (row.bid_url || "").trim();
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      if (!isSchoolUrl(url)) continue;
+      // Check if already a source
+      const { data: existing } = await window._db.from("sources").select("id").eq("url", url).limit(1);
+      if (existing && existing.length) continue;
+      // Insert as source
+      const rawState = (row.state || "").trim();
+      const stateCode = rawState.length === 2 ? rawState.toUpperCase() : (rawState.length > 2 ? rawState.slice(0,2).toUpperCase() : null);
+      await window._db.from("sources").insert({
+        friendly_name: (row.institution || url).slice(0,300),
+        url: url.slice(0,2000),
+        state: stateCode,
+        site_type: "links_page",
+        captcha_protected: false,
+        status: "active",
+        date_added: new Date().toISOString().slice(0,10),
+        user_id: (window._currentUser && window._currentUser.id) || null,
+      });
+      added++;
     }
+    return added;
+  }
+
+  const [bulkUploadProgress, setBulkUploadProgress] = React.useState(null);
+
+  async function handleFile(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    e.target.value = "";
+
+    // Single file — existing flow with dupe check
+    if (files.length === 1) {
+      const file = files[0];
+      try {
+        const alreadyUploaded = await checkUploadHistory(file.name);
+        if (alreadyUploaded) {
+          setDupModal({ open: true, filename: file.name, fileObj: file });
+          return;
+        }
+        await doUpload(file);
+      } catch (err) {
+        console.error("RFP CSV upload error:", err);
+        showRfpToast("Upload failed: " + (err.message || "unknown error"), "#C60C30");
+      }
+      return;
+    }
+
+    // Multiple files — bulk mode
+    setBulkUploadProgress({ total: files.length, current: 0, done: false, results: [], skipped: 0, sourcesAdded: 0 });
+    let totalRows = 0, totalDupes = 0, totalSkipped = 0, totalSources = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      setBulkUploadProgress(p => ({ ...p, current: i + 1, currentFile: file.name }));
+      try {
+        const alreadyUploaded = await checkUploadHistory(file.name);
+        if (alreadyUploaded) {
+          totalSkipped++;
+          setBulkUploadProgress(p => ({ ...p, skipped: totalSkipped, results: [...p.results, { name: file.name, status: "⏭ Already uploaded" }] }));
+          continue;
+        }
+        // Parse and upsert
+        const text = await file.text();
+        const parsed = parseCSV(text);
+        let fDate = null;
+        const match = file.name.match(/(\d{8})/);
+        if (match) {
+          const raw = match[1];
+          fDate = `${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6,8)}`;
+        }
+        const { saved, duplicates, insertedRows } = await upsertRfpRows(parsed, fDate);
+        await recordUploadHistory(file.name);
+        // Auto-add school sources
+        const sourcesAdded = await autoAddSchoolSources(insertedRows || []);
+        totalRows += saved;
+        totalDupes += duplicates;
+        totalSources += sourcesAdded;
+        setBulkUploadProgress(p => ({
+          ...p,
+          sourcesAdded: totalSources,
+          results: [...p.results, { name: file.name, status: `✅ ${saved} rows, +${sourcesAdded} sources` }]
+        }));
+      } catch(err) {
+        setBulkUploadProgress(p => ({ ...p, results: [...p.results, { name: file.name, status: `❌ ${err.message?.slice(0,50) || "error"}` }] }));
+      }
+    }
+    await loadAllRows();
+    setBulkUploadProgress(p => ({ ...p, done: true, totalRows, totalDupes, totalSources }));
   }
 
   // ── Load all rows from rfp_bids ─────────────────────────────────────────────
@@ -3729,7 +3840,7 @@ function RFPBidsView() {
           {fileDate && <div style={{ color:"#C60C30", fontSize:"13px", marginTop:"4px" }}>File date: {fileDate}</div>}
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-          <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFile} style={{ display:"none" }} />
+          <input ref={fileInputRef} type="file" accept=".csv" multiple onChange={handleFile} style={{ display:"none" }} />
           <input ref={apolloImportRef} type="file" accept=".csv" onChange={handleApolloImport} style={{ display:"none" }} />
 
           {/* Contacts dropdown */}
@@ -3896,7 +4007,7 @@ function RFPBidsView() {
                         ) : (
                           <button onClick={() => addToSources(row)} disabled={srcSt === "adding" || !bidUrl}
                             style={{ padding:"3px 10px", borderRadius:"5px", background: (!bidUrl || srcSt==="adding") ? "#003366" : "#C60C30", border:"none", color: (!bidUrl || srcSt==="adding") ? "#4a6080" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!bidUrl || srcSt==="adding") ? "not-allowed" : "pointer" }}>
-                            {srcSt === "adding" ? "…" : "Add to Sources"}
+                            {srcSt === "adding" ? "…" : "+ Sources"}
                           </button>
                         )}
                         {!isRemoved ? (
@@ -3917,6 +4028,57 @@ function RFPBidsView() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Bulk Upload Progress Modal ───────────────────────────────────── */}
+      {bulkUploadProgress && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.80)", zIndex:9500, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ background:"#002244", border:"1px solid #003875", borderRadius:"14px", padding:"28px", width:"520px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.7)", display:"flex", flexDirection:"column", gap:"14px" }}>
+            <div style={{ fontWeight:700, fontSize:"16px", color:"#ffffff", display:"flex", alignItems:"center", gap:"10px" }}>
+              {bulkUploadProgress.done
+                ? <CheckCircle size={20} color="#10b981" />
+                : <RefreshCw size={20} color="#C60C30" style={{ animation:"spin 1s linear infinite" }} />
+              }
+              {bulkUploadProgress.done ? "Bulk Upload Complete" : `Uploading ${bulkUploadProgress.current} of ${bulkUploadProgress.total}…`}
+            </div>
+
+            {!bulkUploadProgress.done && (
+              <>
+                <div style={{ fontSize:"12px", color:"#B0B7BC", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {bulkUploadProgress.currentFile}
+                </div>
+                <div style={{ background:"#003366", borderRadius:"6px", height:"8px", overflow:"hidden" }}>
+                  <div style={{ background:"linear-gradient(90deg,#C60C30,#9a0a26)", height:"100%", width:`${Math.round((bulkUploadProgress.current/bulkUploadProgress.total)*100)}%`, transition:"width 0.3s ease" }} />
+                </div>
+              </>
+            )}
+
+            {bulkUploadProgress.done && (
+              <div style={{ background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.25)", borderRadius:"8px", padding:"12px 14px", fontSize:"13px", color:"#10b981" }}>
+                📥 {bulkUploadProgress.totalRows} rows saved &nbsp;|&nbsp;
+                🏫 {bulkUploadProgress.totalSources} school sources added &nbsp;|&nbsp;
+                ⏭ {bulkUploadProgress.skipped} files skipped
+              </div>
+            )}
+
+            <div style={{ maxHeight:"220px", overflowY:"auto", display:"flex", flexDirection:"column", gap:"4px" }}>
+              {(bulkUploadProgress.results || []).map((r, i) => (
+                <div key={i} style={{ fontSize:"11px", color:"#B0B7BC", display:"flex", gap:"8px" }}>
+                  <span style={{ color:"#4a6080", flexShrink:0, fontFamily:"monospace" }}>{String(i+1).padStart(3,'0')}</span>
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>{r.name}</span>
+                  <span style={{ flexShrink:0, color: r.status.startsWith("✅") ? "#10b981" : r.status.startsWith("⏭") ? "#4a6080" : "#C60C30" }}>{r.status}</span>
+                </div>
+              ))}
+            </div>
+
+            {bulkUploadProgress.done && (
+              <button onClick={() => setBulkUploadProgress(null)}
+                style={{ padding:"9px", borderRadius:"8px", background:"#10b981", border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer" }}>
+                Done
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -4301,7 +4463,7 @@ function BidPrimeView() {
   const fileInputRef = useRef(null);
   const [colWidths, setColWidths] = useState({
     Title: 200, "Alert Date": 100, State: 60, Agency: 160, "Due Date": 100,
-    "View Link": 70, "Doc Link": 80, Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
+    "View Link": 70, "Doc Link": 80, Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 88,
   });
 
   // ── Parse EML subject ──────────────────────────────────────────────────────
@@ -4818,7 +4980,7 @@ function BidPrimeView() {
                         ) : (
                           <button onClick={() => addToSources(row)} disabled={srcSt === "adding" || !row["View Link"]}
                             style={{ padding:"3px 10px", borderRadius:"5px", background: (!row["View Link"] || srcSt==="adding") ? "#003366" : "#C60C30", border:"none", color: (!row["View Link"] || srcSt==="adding") ? "#4a6080" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!row["View Link"] || srcSt==="adding") ? "not-allowed" : "pointer" }}>
-                            {srcSt === "adding" ? "…" : "Add to Sources"}
+                            {srcSt === "adding" ? "…" : "+ Sources"}
                           </button>
                         )}
                         {!isRemoved ? (
@@ -4883,7 +5045,7 @@ function SamGovView() {
   const [dbLoaded, setDbLoaded] = useState(false);
   const [colWidths, setColWidths] = useState({
     Title: 220, "Notice Type": 120, "Posted Date": 100, "Due Date": 110,
-    Institution: 200, State: 70, Link: 60, Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 110,
+    Institution: 200, State: 70, Link: 60, Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 88,
   });
 
   const COL_KEY = {
@@ -5308,7 +5470,7 @@ function SamGovView() {
                         ) : (
                           <button onClick={() => addToSources(row)} disabled={srcSt === "adding" || !link}
                             style={{ padding:"3px 10px", borderRadius:"5px", background: (!link || srcSt==="adding") ? "#003366" : "#C60C30", border:"none", color: (!link || srcSt==="adding") ? "#4a6080" : "#fff", fontSize:"11px", fontWeight:600, cursor: (!link || srcSt==="adding") ? "not-allowed" : "pointer" }}>
-                            {srcSt === "adding" ? "…" : "Add to Sources"}
+                            {srcSt === "adding" ? "…" : "+ Sources"}
                           </button>
                         )}
                         {!isRemoved ? (
