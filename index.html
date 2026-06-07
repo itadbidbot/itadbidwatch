@@ -2481,6 +2481,7 @@ function RFPBidsView() {
   const [apolloPanel, setApolloPanel] = useState(false); // show/hide Apollo enrichment panel
   const [apolloResults, setApolloResults] = useState([]); // [{ company, bid_title, state, source_url, person_id, name, title, linkedin, enriched, email, phone, saving }]
   const [apolloRunning, setApolloRunning] = useState(false);
+  const [contactsMenuOpen, setContactsMenuOpen] = useState(false);
   const [apolloProgress, setApolloProgress] = useState({ current: 0, total: 0 });
   const [apolloError, setApolloError] = useState(null);
 
@@ -3731,33 +3732,28 @@ function RFPBidsView() {
           <input ref={apolloImportRef} type="file" accept=".csv" onChange={handleApolloImport} style={{ display:"none" }} />
 
           {/* Contacts dropdown */}
-          {(() => {
-            const [contactsOpen, setContactsOpen] = React.useState(false);
-            return (
-              <div style={{ position:"relative" }}>
-                <button onClick={() => setContactsOpen(o => !o)}
-                  style={{ padding:"8px 14px", borderRadius:"8px", background:"#002244", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
-                  👥 Contacts {contactsOpen ? "▲" : "▼"}
+          <div style={{ position:"relative" }}>
+            <button onClick={() => setContactsMenuOpen(o => !o)}
+              style={{ padding:"8px 14px", borderRadius:"8px", background:"#002244", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+              👥 Contacts {contactsMenuOpen ? "▲" : "▼"}
+            </button>
+            {contactsMenuOpen && (
+              <div style={{ position:"absolute", right:0, top:"calc(100% + 4px)", background:"#001a33", border:"1px solid #003875", borderRadius:"8px", zIndex:100, minWidth:"180px", overflow:"hidden", boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
+                <button onClick={() => { exportContactsCSV(); setContactsMenuOpen(false); }}
+                  style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", borderBottom:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
+                  ⬇ Export Contacts
                 </button>
-                {contactsOpen && (
-                  <div style={{ position:"absolute", right:0, top:"calc(100% + 4px)", background:"#001a33", border:"1px solid #003875", borderRadius:"8px", zIndex:100, minWidth:"180px", overflow:"hidden", boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
-                    <button onClick={() => { exportContactsCSV(); setContactsOpen(false); }}
-                      style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", borderBottom:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
-                      ⬇ Export Contacts
-                    </button>
-                    <button onClick={() => { apolloImportRef.current && apolloImportRef.current.click(); setContactsOpen(false); }}
-                      style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", borderBottom:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
-                      ⬆ Import Apollo CSV
-                    </button>
-                    <button onClick={() => { setBulkExtractProgress({ total:0, current:0, done:false, results:[], error:null }); runBulkContactExtraction(); setContactsOpen(false); }}
-                      style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
-                      🔍 Extract from Memo
-                    </button>
-                  </div>
-                )}
+                <button onClick={() => { apolloImportRef.current && apolloImportRef.current.click(); setContactsMenuOpen(false); }}
+                  style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", borderBottom:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
+                  ⬆ Import Apollo CSV
+                </button>
+                <button onClick={() => { setBulkExtractProgress({ total:0, current:0, done:false, results:[], error:null }); runBulkContactExtraction(); setContactsMenuOpen(false); }}
+                  style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
+                  🔍 Extract from Memo
+                </button>
               </div>
-            );
-          })()}
+            )}
+          </div>
 
           {/* Apollo status */}
           {apolloImportStatus && apolloImportStatus.done && (
