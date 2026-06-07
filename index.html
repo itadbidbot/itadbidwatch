@@ -2781,10 +2781,55 @@ function RFPBidsView() {
               }
             }
             console.log(`[pdf-contacts] done — saved: ${pdfContactsSaved} dupes: ${pdfContactsDupes}`);
-            if (pdfContactsSaved > 0) {
-              alert(`📋 PDF Contact Extraction Complete\n\n✅ New contacts saved: ${pdfContactsSaved}\n⏭ Duplicates skipped: ${pdfContactsDupes}\n\nCheck the Contacts tab to view them.`);
+
+          // ── Auto memo extraction on new rows ─────────────────────────────
+          let memoSaved = 0, memoDupes = 0;
+          const memoRows = (insertedRows || []).filter(r => r.memo && r.memo.trim());
+          const memoEmailRe = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+          const JUNK_M = ["noreply","no-reply","donotreply","example.com","rfpschoolwatch","customercare"];
+          for (const row of memoRows) {
+            memoEmailRe.lastIndex = 0;
+            let em2;
+            const seenM = new Set();
+            while ((em2 = memoEmailRe.exec(row.memo)) !== null) {
+              const email = em2[0].toLowerCase();
+              if (JUNK_M.some(j => email.includes(j))) continue;
+              if (seenM.has(email)) continue;
+              seenM.add(email);
+              const rec = {
+                email: email.slice(0,200),
+                company_name: (row.institution||"").slice(0,300),
+                source_url: (row.bid_url||"").slice(0,500),
+                bid_title: (row.title||"").slice(0,500),
+                data_source: "memo_field",
+                state: (row.state||"").slice(0,10),
+                quality_score: 45, quality_flag: "yellow",
+                hubspot_ready: false,
+                file_date: fDate || null,
+                created_at: new Date().toISOString(),
+              };
+              const { error: mErr } = await window._db.from("pdf_contacts").insert(rec);
+              if (!mErr) memoSaved++;
+              else if (mErr.code==="23505" || mErr.status===409) memoDupes++;
             }
           }
+          console.log(`[memo-contacts] saved: ${memoSaved} dupes: ${memoDupes}`);
+
+          // ── Unified upload summary ────────────────────────────────────────
+          const summaryLines = [
+            `📅  File date: ${fDate || "unknown"}`,
+            ``,
+            `📥  Rows saved: ${saved}   |   Duplicates skipped: ${duplicates}`,
+            `🔗  Box links checked: ${boxRows ? boxRows.length : 0}   |   Available: ${avail}   |   Unavailable: ${unavail}`,
+            `📄  Direct PDFs processed: ${pdfRows.length}   |   Contacts found: ${pdfContactsSaved}`,
+            `📝  Memo field contacts: ${memoSaved} new   |   ${memoDupes} already existed`,
+            ``,
+            saved > 0
+              ? `☁  Run Box Extractor in Cloud Shell to extract contacts from Box PDFs:\npython3 box_contact_extractor.py --headless --since ${fDate || new Date().toISOString().slice(0,10)}`
+              : `ℹ  No new rows — Box extractor not needed today.`,
+          ].join('\n');
+
+          alert(summaryLines);
           resolve();
         } catch (err) {
           reject(err);
@@ -3681,44 +3726,57 @@ function RFPBidsView() {
           <h2 style={{ color:"#ffffff", fontSize:"20px", fontWeight:700, margin:0 }}>RFP School Watch</h2>
           {fileDate && <div style={{ color:"#C60C30", fontSize:"13px", marginTop:"4px" }}>File date: {fileDate}</div>}
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:"10px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
           <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFile} style={{ display:"none" }} />
-          <button onClick={exportContactsCSV}
-            style={{ padding:"8px 16px", borderRadius:"8px", background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
-            ⬇ Export Contacts
-          </button>
           <input ref={apolloImportRef} type="file" accept=".csv" onChange={handleApolloImport} style={{ display:"none" }} />
-          <button onClick={() => apolloImportRef.current && apolloImportRef.current.click()}
-            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#7c3aed,#5b21b6)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
-            ⬆ Import Apollo CSV
-          </button>
+
+          {/* Contacts dropdown */}
+          {(() => {
+            const [contactsOpen, setContactsOpen] = React.useState(false);
+            return (
+              <div style={{ position:"relative" }}>
+                <button onClick={() => setContactsOpen(o => !o)}
+                  style={{ padding:"8px 14px", borderRadius:"8px", background:"#002244", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+                  👥 Contacts {contactsOpen ? "▲" : "▼"}
+                </button>
+                {contactsOpen && (
+                  <div style={{ position:"absolute", right:0, top:"calc(100% + 4px)", background:"#001a33", border:"1px solid #003875", borderRadius:"8px", zIndex:100, minWidth:"180px", overflow:"hidden", boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
+                    <button onClick={() => { exportContactsCSV(); setContactsOpen(false); }}
+                      style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", borderBottom:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
+                      ⬇ Export Contacts
+                    </button>
+                    <button onClick={() => { apolloImportRef.current && apolloImportRef.current.click(); setContactsOpen(false); }}
+                      style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", borderBottom:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
+                      ⬆ Import Apollo CSV
+                    </button>
+                    <button onClick={() => { setBulkExtractProgress({ total:0, current:0, done:false, results:[], error:null }); runBulkContactExtraction(); setContactsOpen(false); }}
+                      style={{ width:"100%", padding:"10px 14px", background:"none", border:"none", color:"#B0B7BC", fontSize:"12px", fontWeight:600, cursor:"pointer", textAlign:"left", display:"flex", alignItems:"center", gap:"8px" }}>
+                      🔍 Extract from Memo
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Apollo status */}
           {apolloImportStatus && apolloImportStatus.done && (
-            <span style={{ fontSize:"12px", color:"#10b981", fontWeight:600 }}>
-              ✓ {apolloImportStatus.saved} saved, {apolloImportStatus.skipped} updated
-            </span>
+            <span style={{ fontSize:"11px", color:"#10b981", fontWeight:600 }}>✓ {apolloImportStatus.saved} saved</span>
           )}
-          {apolloImportStatus && apolloImportStatus.running && (
-            <span style={{ fontSize:"12px", color:"#60a5fa" }}>
-              Importing… {apolloImportStatus.saved} saved
-            </span>
-          )}
-          <button onClick={() => { setBulkExtractProgress({ total:0, current:0, done:false, results:[], error:null }); runBulkContactExtraction(); }}
-            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#10b981,#059669)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
-            🔍 Extract Contact Data
-          </button>
-          <button onClick={() => setApolloPanel(p => !p)}
-            style={{ padding:"8px 16px", borderRadius:"8px", background: apolloPanel ? "linear-gradient(135deg,#7c3aed,#5b21b6)" : "linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
-            🚀 Apollo Enrich
-          </button>
+
+          {/* Copy Box Command */}
           <button onClick={() => {
             const today = new Date().toISOString().slice(0,10);
             const cmd = `python3 box_contact_extractor.py --headless --since ${today}`;
-            navigator.clipboard.writeText(cmd).then(() => alert(`Copied to clipboard!\n\n${cmd}\n\nPaste this into Cloud Shell to extract Box contacts.`));
-          }} style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#0f766e,#0d9488)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
-            📋 Copy Box Command
+            navigator.clipboard.writeText(cmd).then(() => alert(`Copied!\n\n${cmd}\n\nPaste into Cloud Shell.`));
+          }} style={{ padding:"8px 14px", borderRadius:"8px", background:"linear-gradient(135deg,#0f766e,#0d9488)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}
+            title="Copy today's Box extractor command to clipboard">
+            ☁ Box Contacts
           </button>
+
+          {/* Upload CSV — primary action */}
           <button onClick={() => fileInputRef.current && fileInputRef.current.click()}
-            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px", boxShadow:"0 2px 8px rgba(198,12,48,0.4)" }}>
             <Upload size={13} /> Upload CSV
           </button>
         </div>
