@@ -2379,7 +2379,7 @@ function SettingsView() {
           </div>
 
           {/* Apollo API key */}
-          <div>
+          <div style={{ marginBottom:"20px" }}>
             <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>APOLLO API KEY (MASTER)</label>
             <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
               <input
@@ -2396,6 +2396,26 @@ function SettingsView() {
             </div>
             <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>
               Used for 🚀 Apollo Enrich in RFP School Watch. Searches are free. Reveal email = 1 credit. Stored under <code style={{ color:"#B0B7BC" }}>APOLLO_API_KEY</code>.
+            </div>
+          </div>
+
+          {/* Cloud Shell Bookmarklet */}
+          <div>
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>CLOUD SHELL BOOKMARKLET</label>
+            <div style={{ background:"#001a33", border:"1px solid #003875", borderRadius:"8px", padding:"12px 14px" }}>
+              <div style={{ fontSize:"12px", color:"#B0B7BC", marginBottom:"8px" }}>
+                Drag this button to your browser bookmarks bar. Click it anytime to open Cloud Shell with the Box extractor command ready to paste.
+              </div>
+              <a
+                href={`javascript:window.open('https://shell.cloud.google.com/cloudshell/editor?cloudshell_git_repo=&cloudshell_print=&cloudshell_tutorial=&cloudshell_working_dir=/home/itadbidbot&shellonly=true&cloudshell_command=python3+box_contact_extractor.py+--headless','_blank')`}
+                style={{ display:"inline-block", padding:"8px 16px", background:"linear-gradient(135deg,#0f766e,#0d9488)", borderRadius:"8px", color:"#ffffff", fontSize:"12px", fontWeight:700, textDecoration:"none" }}
+                onClick={e => e.preventDefault()}
+              >
+                🐚 Run Box Extractor
+              </a>
+              <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"8px" }}>
+                Drag the button above to your bookmarks bar. One click opens Cloud Shell and runs the extractor.
+              </div>
             </div>
           </div>
         </div>
@@ -3689,6 +3709,13 @@ function RFPBidsView() {
           <button onClick={() => setApolloPanel(p => !p)}
             style={{ padding:"8px 16px", borderRadius:"8px", background: apolloPanel ? "linear-gradient(135deg,#7c3aed,#5b21b6)" : "linear-gradient(135deg,#2563eb,#1d4ed8)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
             🚀 Apollo Enrich
+          </button>
+          <button onClick={() => {
+            const today = new Date().toISOString().slice(0,10);
+            const cmd = `python3 box_contact_extractor.py --headless --since ${today}`;
+            navigator.clipboard.writeText(cmd).then(() => alert(`Copied to clipboard!\n\n${cmd}\n\nPaste this into Cloud Shell to extract Box contacts.`));
+          }} style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#0f766e,#0d9488)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+            📋 Copy Box Command
           </button>
           <button onClick={() => fileInputRef.current && fileInputRef.current.click()}
             style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
