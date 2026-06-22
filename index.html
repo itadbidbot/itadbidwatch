@@ -2474,7 +2474,6 @@ function RFPBidsView() {
   const [sortDir, setSortDir] = useState("desc");
   const [dbLoaded, setDbLoaded] = useState(false);
   const [dupModal, setDupModal] = useState({ open: false, filename: "", fileObj: null });
-  const [boxProgress, setBoxProgress] = useState(null); // null=hidden | { total, checked, available, unavailable, done }
   const fileInputRef = useRef(null);
   const [bulkExtractProgress, setBulkExtractProgress] = useState(null); // null=hidden | { total, current, done, results, error }
   const bulkExtractAbort = React.useRef(false);
@@ -2509,22 +2508,15 @@ function RFPBidsView() {
     return results;
   }
 
-  // ── Box doc availability check (mirrors scanner.py logic via Jina Reader) ────
-  async function checkBoxAvailability(url) {
-    const jinaUrl = "https://r.jina.ai/" + url;
-    for (let attempt = 0; attempt < 2; attempt++) {
-      try {
-        const resp = await fetch(jinaUrl, { signal: AbortSignal.timeout(15000) });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const text = await resp.text();
-        if (text.includes("Currently Unavailable") || text.includes("Bid Document Currently Unavailable")) return false;
-        return true;
-      } catch (e) {
-        console.warn(`[box-check] attempt ${attempt + 1} error for ${url}:`, e);
-      }
-    }
-    return null;
-  }
+  // ── Box doc availability check ────────────────────────────────────────────
+  // REMOVED (2026-06-22): This used to call Jina Reader to check Box.com pages
+  // for the "Currently Unavailable" message. Jina blocks Box.com entirely and
+  // returns its own "Host not in allowlist" response instead of the real page,
+  // so this check was silently wrong — it often returned a false "available"
+  // result (green checkmark) even when the document was genuinely unavailable.
+  // The real check now happens server-side in box_contact_extractor.py via
+  // Playwright, which CAN load Box pages. New uploads leave doc_available as
+  // null (shown as "?" in the UI) until the next Cloud Shell run resolves it.
 
   // ── Upsert CSV rows to rfp_bids ─────────────────────────────────────────────
   async function upsertRfpRows(parsed, fDate) {
@@ -2655,27 +2647,12 @@ function RFPBidsView() {
           await loadAllRows();
           await recordUploadHistory(file.name);
           setUploadSuccess({ rows: saved, duplicates });
-          // ── Box availability checks with live progress banner ─────────────
-          if (boxRows && boxRows.length) {
-            console.log(`[box-check] starting loop for ${boxRows.length} box.com rows`);
-            setBoxProgress({ total: boxRows.length, checked: 0, available: 0, unavailable: 0, done: false });
-            let avail = 0, unavail = 0;
-            for (let i = 0; i < boxRows.length; i++) {
-              const row = boxRows[i];
-              const boxUrl = row._box_url || row.bid_documents;
-              const result = await checkBoxAvailability(boxUrl);
-              console.log(`[box-check] ${boxUrl.slice(0, 80)} -> ${result}`);
-              if (result === true)  avail++;
-              if (result === false) unavail++;
-              if (result !== null) {
-                const { error: updateErr } = await window._db.from("rfp_bids").update({ doc_available: result }).eq("doc_id", row.doc_id);
-                if (updateErr) console.warn("[box-check] update failed:", updateErr);
-              }
-              setBoxProgress({ total: boxRows.length, checked: i + 1, available: avail, unavailable: unavail, done: false });
-            }
-            setBoxProgress({ total: boxRows.length, checked: boxRows.length, available: avail, unavailable: unavail, done: true });
-            // user dismisses via OK button
-          }
+          // ── Box availability ────────────────────────────────────────────────
+          // REMOVED (2026-06-22): the old Jina-based check here was unreliable
+          // (Jina blocks Box.com entirely) and could show a false green
+          // checkmark. New Box rows are saved with doc_available = null
+          // (shown as "?" in the UI) and get resolved by box_contact_extractor.py
+          // in Cloud Shell, which uses Playwright and can actually load Box pages.
 
           // ── Extract contacts from direct PDF document_url links ───────────
           const pdfRows = (insertedRows || []).filter(r =>
@@ -2820,18 +2797,21 @@ function RFPBidsView() {
           const sourcesAdded = await autoAddSchoolSources(insertedRows || []);
           console.log(`[auto-sources] added ${sourcesAdded} new school sources`);
 
+          // ── Auto-refresh so the table reflects everything just processed ───
+          await loadAllRows();
+
           // ── Unified upload summary ────────────────────────────────────────
           const summaryLines = [
             `📅  File date: ${fDate || "unknown"}`,
             ``,
             `📥  Rows saved: ${saved}   |   Duplicates skipped: ${duplicates}`,
-            `🔗  Box links checked: ${boxRows ? boxRows.length : 0}   |   Available: ${avail}   |   Unavailable: ${unavail}`,
+            `🔗  Box links found: ${boxRows ? boxRows.length : 0} (availability will show as "?" until checked via Cloud Shell)`,
             `📄  Direct PDFs processed: ${pdfRows.length}   |   Contacts found: ${pdfContactsSaved}`,
             `📝  Memo field contacts: ${memoSaved} new   |   ${memoDupes} already existed`,
             `🏫  School sources auto-added: ${sourcesAdded}`,
             ``,
             saved > 0
-              ? `☁  Run Box Extractor in Cloud Shell to extract contacts from Box PDFs:\npython3 box_contact_extractor.py --headless --since ${fDate || new Date().toISOString().slice(0,10)}`
+              ? `☁  Run Box Extractor in Cloud Shell to extract contacts AND check document availability:\npython3 box_contact_extractor.py --headless --since ${fDate || new Date().toISOString().slice(0,10)}`
               : `ℹ  No new rows — Box extractor not needed today.`,
           ].join('\n');
 
@@ -3798,40 +3778,6 @@ function RFPBidsView() {
 
   return (
     <div style={{ flex:1, display:"flex", flexDirection:"column", overflow:"hidden", padding:"24px" }}>
-      {/* ── Box-check progress modal ──────────────────────────────────────── */}
-      {boxProgress && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9500, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <div style={{ background: boxProgress.done ? "#003d2b" : "#003366", border:`1px solid ${boxProgress.done ? "#10b981" : "#003875"}`, borderRadius:"14px", padding:"28px", width:"440px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)", display:"flex", flexDirection:"column", gap:"16px" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-              {boxProgress.done
-                ? <CheckCircle size={20} color="#10b981" style={{ flexShrink:0 }} />
-                : <RefreshCw size={20} color="#C60C30" style={{ animation:"spin 1s linear infinite", flexShrink:0 }} />
-              }
-              <span style={{ color:"#ffffff", fontSize:"15px", fontWeight:700 }}>
-                {boxProgress.done ? "Document Check Complete" : "Checking Document Availability"}
-              </span>
-            </div>
-            <div style={{ color:"rgba(255,255,255,0.85)", fontSize:"13px" }}>
-              {boxProgress.done
-                ? `${boxProgress.available} available, ${boxProgress.unavailable} unavailable out of ${boxProgress.total} links checked.`
-                : `Checking document availability — ${boxProgress.checked} of ${boxProgress.total} links checked`
-              }
-            </div>
-            {!boxProgress.done && (
-              <>
-                <div style={{ height:"6px", background:"rgba(255,255,255,0.12)", borderRadius:"3px", overflow:"hidden" }}>
-                  <div style={{ height:"100%", background:"#C60C30", borderRadius:"3px", transition:"width 0.35s ease", width:`${Math.round(boxProgress.checked / boxProgress.total * 100)}%` }} />
-                </div>
-                <div style={{ color:"rgba(255,165,0,0.85)", fontSize:"12px", fontWeight:600 }}>Please don't navigate away while checking is in progress.</div>
-              </>
-            )}
-            {boxProgress.done && (
-              <button onClick={() => setBoxProgress(null)} style={{ alignSelf:"flex-end", background:"#10b981", border:"none", borderRadius:"8px", color:"#ffffff", cursor:"pointer", fontSize:"13px", fontWeight:700, padding:"8px 24px" }}>OK</button>
-            )}
-          </div>
-        </div>
-      )}
-
       <WelcomeBanner pageKey="rfp_bids" title="RFP School Watch" description="Upload your RFP School Watch CSV exports here. New bids are automatically checked for document availability and added to your pipeline." />
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"12px", flexShrink:0 }}>
