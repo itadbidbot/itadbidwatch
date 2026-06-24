@@ -2495,6 +2495,7 @@ function RFPBidsView() {
   const [contactsMenuOpen, setContactsMenuOpen] = useState(false);
   const [apolloProgress, setApolloProgress] = useState({ current: 0, total: 0 });
   const [apolloError, setApolloError] = useState(null);
+  const [rebuildModal, setRebuildModal] = useState({ open: false, loading: false, count: null, error: null, copied: false });
 
   // ── CSV parser ──────────────────────────────────────────────────────────────
   function parseCSV(text) {
@@ -3522,6 +3523,72 @@ function RFPBidsView() {
     a.click();
   }
 
+  // ── Rebuild — count bids with a Box link but no genuine (green/yellow) ──────
+  // contact yet, matching the Python extractor's --reextract-failed logic.
+  // This is read-only (counts + copies a command) — the actual re-extraction
+  // still has to run in Cloud Shell/server, since this is a browser dashboard
+  // with no way to launch Playwright itself.
+  async function countRebuildEligible() {
+    if (!window._db) return;
+    setRebuildModal({ open: true, loading: true, count: null, error: null, copied: false });
+    try {
+      // 1. Get every Box-linked bid_documents/document_url value from rfp_bids
+      let allBoxUrls = new Set();
+      let from = 0;
+      while (true) {
+        const { data, error } = await window._db
+          .from("rfp_bids")
+          .select("bid_documents, document_url")
+          .range(from, from + 999);
+        if (error) throw error;
+        if (!data || !data.length) break;
+        for (const row of data) {
+          const bd = (row.bid_documents || "").toLowerCase();
+          const du = (row.document_url || "").toLowerCase();
+          if (bd.includes("box.com")) allBoxUrls.add(row.bid_documents.split("?")[0].trim());
+          else if (du.includes("box.com")) allBoxUrls.add(row.document_url.split("?")[0].trim());
+        }
+        if (data.length < 1000) break;
+        from += 1000;
+      }
+
+      // 2. Get every Box source_url in pdf_contacts that already has a real
+      //    (green/yellow) contact — these are genuinely done, skip them.
+      let succeededUrls = new Set();
+      from = 0;
+      while (true) {
+        const { data, error } = await window._db
+          .from("pdf_contacts")
+          .select("source_url")
+          .eq("data_source", "box_pdf")
+          .ilike("source_url", "%box.com%")
+          .in("quality_flag", ["green", "yellow"])
+          .range(from, from + 999);
+        if (error) throw error;
+        if (!data || !data.length) break;
+        for (const row of data) {
+          const url = (row.source_url || "").trim();
+          if (url) succeededUrls.add(url.split("?")[0].trim());
+        }
+        if (data.length < 1000) break;
+        from += 1000;
+      }
+
+      const eligible = [...allBoxUrls].filter(u => !succeededUrls.has(u));
+      setRebuildModal({ open: true, loading: false, count: eligible.length, error: null, copied: false });
+    } catch (err) {
+      console.error("[countRebuildEligible] error:", err);
+      setRebuildModal({ open: true, loading: false, count: null, error: err.message || "Failed to count eligible bids", copied: false });
+    }
+  }
+
+  function copyRebuildCommand() {
+    const cmd = "python3 box_contact_extractor.py --headless --reextract-failed";
+    navigator.clipboard.writeText(cmd).then(() => {
+      setRebuildModal(m => ({ ...m, copied: true }));
+    });
+  }
+
   // ── Import Apollo-enriched CSV back into pdf_contacts ───────────────────────
   const apolloImportRef = React.useRef(null);
   const [apolloImportStatus, setApolloImportStatus] = React.useState(null);
@@ -3840,6 +3907,13 @@ function RFPBidsView() {
             ☁ Box Contacts
           </button>
 
+          {/* Rebuild — quality assurance re-scan of zero-contact bids */}
+          <button onClick={countRebuildEligible}
+            style={{ padding:"8px 14px", borderRadius:"8px", background:"linear-gradient(135deg,#7c3aed,#6d28d9)", border:"none", color:"#ffffff", fontSize:"12px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}
+            title="Rebuild your contact list on bids that returned zero contacts on the first attempt. This is a quality assurance scan process. No data is lost, only gained, when implemented.">
+            🔄 Rebuild
+          </button>
+
           {/* Upload CSV — primary action */}
           <button onClick={() => fileInputRef.current && fileInputRef.current.click()}
             style={{ padding:"8px 16px", borderRadius:"8px", background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:"6px", boxShadow:"0 2px 8px rgba(198,12,48,0.4)" }}>
@@ -4047,6 +4121,63 @@ function RFPBidsView() {
 
       {/* ── Upload Success Modal ─────────────────────────────────────────── */}
       {uploadSuccess && <UploadSuccessModal rows={uploadSuccess.rows} duplicates={uploadSuccess.duplicates} onOk={() => setUploadSuccess(null)} />}
+
+      {/* ── Rebuild Modal — quality assurance re-scan ────────────────────── */}
+      {rebuildModal.open && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:9300, display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e => { if (e.target === e.currentTarget) setRebuildModal({ open:false, loading:false, count:null, error:null, copied:false }); }}>
+          <div style={{ background:"#002244", border:"1px solid #7c3aed", borderRadius:"14px", padding:"28px", width:"460px", maxWidth:"95vw", boxShadow:"0 24px 60px rgba(0,0,0,0.6)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"16px" }}>
+              <span style={{ fontSize:"20px" }}>🔄</span>
+              <span style={{ fontWeight:700, fontSize:"15px", color:"#ffffff" }}>Rebuild — Quality Assurance Scan</span>
+            </div>
+
+            {rebuildModal.loading && (
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"14px", padding:"24px 0" }}>
+                <RefreshCw size={26} color="#a78bfa" style={{ animation:"spin 1s linear infinite" }} />
+                <span style={{ color:"#B0B7BC", fontSize:"13px" }}>Counting bids with no contact found yet…</span>
+              </div>
+            )}
+
+            {rebuildModal.error && !rebuildModal.loading && (
+              <div style={{ background:"rgba(198,12,48,0.1)", border:"1px solid rgba(198,12,48,0.3)", borderRadius:"8px", padding:"12px", color:"#ff8080", fontSize:"13px" }}>
+                {rebuildModal.error}
+              </div>
+            )}
+
+            {rebuildModal.count !== null && !rebuildModal.loading && (
+              <div>
+                <div style={{ background:"rgba(124,58,237,0.1)", border:"1px solid rgba(124,58,237,0.3)", borderRadius:"10px", padding:"16px", marginBottom:"18px" }}>
+                  <div style={{ fontSize:"28px", fontWeight:800, color:"#a78bfa", fontFamily:"'Courier New',monospace", lineHeight:1 }}>{rebuildModal.count}</div>
+                  <div style={{ fontSize:"12px", color:"#B0B7BC", marginTop:"6px" }}>
+                    Box-linked bids with no contact found yet. These will be re-checked — nothing already found is touched or re-counted.
+                  </div>
+                </div>
+
+                <div style={{ fontSize:"12px", color:"#B0B7BC", marginBottom:"10px" }}>
+                  This rebuild runs in Cloud Shell (or your server), not in the browser. Copy the command below and run it there:
+                </div>
+                <div style={{ background:"#001a33", border:"1px solid #003875", borderRadius:"8px", padding:"10px 12px", fontFamily:"'Courier New',monospace", fontSize:"12px", color:"#10b981", marginBottom:"14px", wordBreak:"break-all" }}>
+                  python3 box_contact_extractor.py --headless --reextract-failed
+                </div>
+
+                <button onClick={copyRebuildCommand} style={{
+                  width:"100%", padding:"10px", borderRadius:"8px",
+                  background: rebuildModal.copied ? "#10b981" : "linear-gradient(135deg,#7c3aed,#6d28d9)",
+                  border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer"
+                }}>
+                  {rebuildModal.copied ? "✓ Copied!" : "Copy Command"}
+                </button>
+              </div>
+            )}
+
+            <button onClick={() => setRebuildModal({ open:false, loading:false, count:null, error:null, copied:false })}
+              style={{ width:"100%", padding:"9px", marginTop:"12px", borderRadius:"8px", background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"13px", cursor:"pointer" }}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Duplicate-filename warning modal ─────────────────────────────── */}
       {dupModal.open && (
