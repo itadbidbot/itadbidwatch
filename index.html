@@ -2670,13 +2670,12 @@ function RFPBidsView() {
           const pdfRows = (insertedRows || []).filter(r =>
             r.document_url && r.document_url.toLowerCase().trim().endsWith('.pdf')
           );
+          let pdfContactsSaved = 0, pdfContactsDupes = 0;
           if (pdfRows.length) {
             console.log(`[pdf-contacts] found ${pdfRows.length} direct PDF links — extracting contacts`);
             const JUNK = ["noreply","no-reply","donotreply","example.com","rfpschoolwatch","customercare","isupplier","contractadmin"];
             const TITLES = ["director","superintendent","coordinator","manager","supervisor","administrator","officer","chief","purchasing","procurement","technology","specialist","buyer","agent","clerk"];
             const FIRSTNAMES = new Set(["james","john","robert","michael","william","david","richard","joseph","thomas","charles","mary","patricia","jennifer","linda","barbara","elizabeth","susan","jessica","sarah","karen","christopher","daniel","paul","mark","jason","ryan","gary","eric","jeffrey","frank","scott","stephen","andrew","gregory","joshua","matthew","lisa","nancy","betty","dorothy","sandra","ashley","emily","donna","michelle","carol","amanda","melissa","deborah","stephanie","rebecca","sharon","laura","tammy","angela","brenda","pamela","lori","tracy","dawn","cheryl","ann","marie","alice","julie","heather","teresa","diane","judy","joyce","virginia","kelly","kim","debra","tina","danielle","robin","april","crystal","tiffany","lauren","samantha","janet","nicole","catherine","christine"]);
-
-            let pdfContactsSaved = 0, pdfContactsDupes = 0;
 
             for (const row of pdfRows) {
               try {
