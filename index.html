@@ -2475,15 +2475,13 @@ function RFPBidsView() {
   const ANTHROPIC_KEY = ["sk-ant-","api03-4Hf-a69pSKHEb","BAboHpW0UXU7v-J4hPWw","6LuwAXIHe0XfHI6rG53n","RvFAIM5_n4aPNAvRjzCbw","OgIsxqWLffqg-1O9RFQAA"].join("");
   const [colWidths, setColWidths] = useState({
     Title: 180, "Scan Date": 100, "Bid Type": 110, "Due Date": 100,
-    Institution: 160, "Bid URL": 70, "Doc URL": 100, "Bid Doc": 80,
+    Institution: 160, State: 50, "Bid URL": 70, "Doc URL": 100, "Bid Doc": 80,
     Assignee: 90, Status: 110, Hubspot: 68, "Add to Sources": 88,
   });
   const [extractModal, setExtractModal] = useState({ open: false, loading: false, row: null, contact: null, error: null });
   const [emailModal, setEmailModal] = useState({ open: false, loading: false, row: null, versions: null, error: null, activeTab: 0 });
   const [scanDateFilter, setScanDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [directionFilter, setDirectionFilter] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("");
   const [sortCol, setSortCol] = useState("Scan Date");
   const [sortDir, setSortDir] = useState("desc");
   const [dbLoaded, setDbLoaded] = useState(false);
@@ -3005,7 +3003,6 @@ function RFPBidsView() {
       "Bid Documents":  r.bid_documents  || "",
       _doc_available:   r.doc_available  ?? null,
       _bid_direction:   r.bid_direction  || "unknown",
-      _bid_category:    r.bid_category   || "electronics",
       "Publish Date":   r.publish_date   || "",
       "Pre-bid Date":   r.pre_bid_date   || "",
       "Due Date":       r.due_date       || "",
@@ -3791,9 +3788,9 @@ function RFPBidsView() {
 
   const COL_KEY = {
     "Title": "Title", "Scan Date": "Scan Date", "Bid Type": "Bid Type",
-    "Due Date": "Due Date", "Institution": "Institution", "Bid URL": "Bid URL",
-    "Doc URL": "Doc URL", "Bid Doc": "Bid Documents", "Assignee": "_assignee",
-    "Status": "_status",
+    "Due Date": "Due Date", "Institution": "Institution", "State": "State",
+    "Bid URL": "Bid URL", "Doc URL": "Doc URL", "Bid Doc": "Bid Documents",
+    "Assignee": "_assignee", "Status": "_status",
   };
 
   const displayed = rows
@@ -3809,9 +3806,7 @@ function RFPBidsView() {
       const matchSector = !sectorFilter || (r["Market Sectors"] || r["market_sectors"] || "") === sectorFilter;
       const matchScanDate = !scanDateFilter || (r["Scan Date"] || "") === scanDateFilter;
       const matchStatus = !statusFilter || (r._status || "pending").toLowerCase() === statusFilter.toLowerCase();
-      const matchDirection = !directionFilter || (r._bid_direction || "").toLowerCase() === directionFilter;
-      const matchCategory = !categoryFilter || (r._bid_category || "").toLowerCase() === categoryFilter;
-      return matchText && matchState && matchSector && matchScanDate && matchStatus && matchDirection && matchCategory;
+      return matchText && matchState && matchSector && matchScanDate && matchStatus;
     })
     .slice()
     .sort((a, b) => {
@@ -3854,7 +3849,7 @@ function RFPBidsView() {
   const colStyle = { padding:"8px 10px", borderBottom:"1px solid #003366", color:"#B0B7BC", fontSize:"12px", verticalAlign:"middle", overflow:"visible", whiteSpace:"normal", wordBreak:"break-word" };
   const thBase = { padding:"8px 10px", borderBottom:"1px solid #003366", background:"#002244", color:"#B0B7BC", fontWeight:700, fontSize:"11px", textTransform:"uppercase", letterSpacing:"0.06em", position:"sticky", top:0, zIndex:2, overflow:"hidden" };
 
-  const cols = ["Title","Scan Date","Bid Type","Due Date","Institution","Bid URL","Doc URL","Bid Doc","Assignee","Status","Hubspot","Add to Sources"];
+  const cols = ["Title","Scan Date","Bid Type","Due Date","Institution","State","Bid URL","Doc URL","Bid Doc","Assignee","Status","Hubspot","Add to Sources"];
 
   const resizeHandle = (col) => (
     <span onMouseDown={e => { e.stopPropagation(); makeResizer(col)(e); }} style={{ cursor:"col-resize", marginLeft:"4px", color:"#003875", userSelect:"none", fontSize:"12px", flexShrink:0 }} title="Drag to resize">⇔</span>
@@ -3957,19 +3952,6 @@ function RFPBidsView() {
           <option value="completed">Completed</option>
           <option value="dead">Dead</option>
         </select>
-        <select value={directionFilter} onChange={e => setDirectionFilter(e.target.value)}
-          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
-          <option value="">All Directions</option>
-          <option value="buy">Buy</option>
-          <option value="sell">Sell</option>
-          <option value="unknown">Unknown</option>
-        </select>
-        <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
-          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
-          <option value="">All Categories</option>
-          <option value="electronics">Electronics</option>
-          <option value="paper_shredding">Paper Shredding</option>
-        </select>
         <button onClick={() => setShowRemoved(v => !v)}
           style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#003875" : "#003366", border:"1px solid #003875", color: showRemoved ? "#ffffff" : "#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
           {showRemoved ? "Hide removed" : "Show removed"}
@@ -4031,6 +4013,7 @@ function RFPBidsView() {
                     <td style={colStyle} title={row["Institution"] || ""}>
                       <span>{row["Institution"] || ""}</span>
                     </td>
+                    <td style={colStyle} title={row["State"] || ""}>{row["State"] || ""}</td>
                     <td style={colStyle} title={bidUrl}>{bidUrlCell(bidUrl)}</td>
                     <td style={colStyle} title={docUrl}>{docUrlCell(docUrl, docUrl ? () => extractContact(row) : null)}</td>
                     <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null, row._doc_available, !row._sample && bidDocUrl ? () => openEmailModal(row) : null)}</td>
