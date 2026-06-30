@@ -2476,6 +2476,7 @@ function RFPBidsView() {
   const [statusFilter, setStatusFilter] = useState("");
   const [directionFilter, setDirectionFilter] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
+  const [portalTypeFilter, setPortalTypeFilter] = useState("");
   const [sortCol, setSortCol] = useState("Scan Date");
   const [sortDir, setSortDir] = useState("desc");
   const [dbLoaded, setDbLoaded] = useState(false);
@@ -2998,6 +2999,7 @@ function RFPBidsView() {
       _doc_available:   r.doc_available  ?? null,
       _bid_direction:   r.bid_direction  || "unknown",
       _bid_category:    r.bid_category   || "electronics",
+      _doc_portal_type: r.doc_portal_type || null,
       "Publish Date":   r.publish_date   || "",
       "Pre-bid Date":   r.pre_bid_date   || "",
       "Due Date":       r.due_date       || "",
@@ -3803,7 +3805,9 @@ function RFPBidsView() {
       const matchStatus = !statusFilter || (r._status || "pending").toLowerCase() === statusFilter.toLowerCase();
       const matchDirection = !directionFilter || (r._bid_direction || "").toLowerCase() === directionFilter;
       const matchCategory = !categoryFilter || (r._bid_category || "").toLowerCase() === categoryFilter;
-      return matchText && matchState && matchSector && matchScanDate && matchStatus && matchDirection && matchCategory;
+      const matchPortalType = !portalTypeFilter
+        || (portalTypeFilter === "direct" ? !r._doc_portal_type : (r._doc_portal_type || "").toLowerCase() === portalTypeFilter);
+      return matchText && matchState && matchSector && matchScanDate && matchStatus && matchDirection && matchCategory && matchPortalType;
     })
     .slice()
     .sort((a, b) => {
@@ -3963,6 +3967,15 @@ function RFPBidsView() {
           <option value="paper_shredding">Paper Shredding</option>
           <option value="print_copier">Print / Copier</option>
           <option value="construction">Construction</option>
+        </select>
+        <select value={portalTypeFilter} onChange={e => setPortalTypeFilter(e.target.value)}
+          style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 10px", borderRadius:"8px", outline:"none" }}>
+          <option value="">All Doc Types</option>
+          <option value="direct">Direct (Open)</option>
+          <option value="portal">Portal</option>
+          <option value="govt">Govt</option>
+          <option value="notice">Notice</option>
+          <option value="auction">Auction</option>
         </select>
         <button onClick={() => setShowRemoved(v => !v)}
           style={{ padding:"6px 12px", borderRadius:"8px", background: showRemoved ? "#003875" : "#003366", border:"1px solid #003875", color: showRemoved ? "#ffffff" : "#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
