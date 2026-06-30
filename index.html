@@ -215,6 +215,34 @@ function badgeLink(url, label, bg, border, color) {
   );
 }
 
+// ── Third-party Doc URL detection ────────────────────────────────────────────
+// Returns badge config if the URL belongs to a procurement portal, government
+// system, public notice board, or auction site — i.e. we can't extract from it.
+// Returns null for directly accessible documents (Box, PDF, ThrillShare, etc.).
+function getDocUrlBadge(url) {
+  if (!url) return null;
+  const u = url.toLowerCase();
+  const PORTAL  = ["bidnetdirect.com","planetbids.com","opengov.com","demandstar.com",
+    "sciquest.com","publicpurchase.com","beaconbid.com","bonfirehub.com","rampla.org",
+    "allaroundphilly.com","buildingconnected.com","ionwave.net"];
+  const GOVT    = ["emma.maryland.gov","ohiobuys.ohio.gov","doas.state.ga.us","txsmartbuy.gov",
+    "commbuys.com","sigma.michigan.gov","evp.nc.gov","contracts.ocp.dc.gov","lacovss.lacounty.gov",
+    "alabamabuys.gov","portal.ct.gov","phlcontracts.phila.gov","emarketplace.state.pa.us",
+    "prd311.wvoasis.gov","columbusvendorservices.powerappsportals.com","dcregs.dc.gov",
+    "business.metro.net","springfield-ma.gov"];
+  const NOTICE  = ["nyscr.ny.gov","capublicnotice.com","column.us","mopublicnotices.com",
+    "publicnoticepa.com","texaspublicnotices.com","masspublicnotices.org","poughkeepsiejournal.com",
+    "classifieds.mcclatchy.com","kypublicnotices.newzgroup.com","connecticutpublicnotices.com",
+    "publicnoticeillinois.com","floridapublicnotices.com","classifieds.nj.com",
+    "tnpublicnotice.com","mspublicnotices.org"];
+  const AUCTION = ["centralauctionhouse.com"];
+  if (PORTAL.some(d  => u.includes(d))) return { label:"Portal",  bg:"rgba(198,12,48,0.15)",   border:"rgba(198,12,48,0.35)",   color:"#C60C30" };
+  if (GOVT.some(d    => u.includes(d))) return { label:"Govt",    bg:"rgba(59,130,246,0.15)",  border:"rgba(59,130,246,0.35)",  color:"#3b82f6" };
+  if (NOTICE.some(d  => u.includes(d))) return { label:"Notice",  bg:"rgba(176,183,188,0.15)", border:"rgba(176,183,188,0.35)", color:"#B0B7BC" };
+  if (AUCTION.some(d => u.includes(d))) return { label:"Auction", bg:"rgba(249,115,22,0.15)",  border:"rgba(249,115,22,0.35)",  color:"#f97316" };
+  return null;
+}
+
 // BID URL cell — known platforms get a badge link; generic URLs show nothing
 function bidUrlCell(url) {
   if (!url) return <span style={{ color:"#4a6080" }}>—</span>;
@@ -286,7 +314,9 @@ function docUrlCell(url, onExtract, docAvailable, onEmail) {
     </span>
   );
   if (u.includes("dropbox.com"))      return badgeLink(url, "Dropbox", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6");
-  return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"underline" }}>View</a>;
+  const tpBadge = getDocUrlBadge(url);
+  if (tpBadge) return badgeLink(url, tpBadge.label, tpBadge.bg, tpBadge.border, tpBadge.color);
+  return <a href={url} target="_blank" rel="noreferrer" style={{ color:"#B0B7BC", fontSize:"11px", textDecoration:"underline" }}>Open</a>;
 }
 
 // ─── COMPONENTS ───────────────────────────────────────────────────────────────
