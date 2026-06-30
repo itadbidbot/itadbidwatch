@@ -344,44 +344,6 @@ function TopBar({ stateFilter, setStateFilter, entityFilter, setEntityFilter, on
         </div>
       </div>
 
-      <div style={{ width:"1px", height:"28px", background:"#003366" }} />
-
-      {/* State filter */}
-      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-        <Filter size={13} color="#B0B7BC" />
-        <label style={{ fontSize:"11px", color:"#B0B7BC", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>State</label>
-        <select value={stateFilter} onChange={e=>setStateFilter(e.target.value)} style={{
-          background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px",
-          padding:"4px 28px 4px 10px", borderRadius:"6px", cursor:"pointer", outline:"none",
-          appearance:"none", minWidth:"80px"
-        }}>
-          <option value="all">All States</option>
-          {STATES_LIST.map(s=><option key={s} value={s}>{s}</option>)}
-        </select>
-      </div>
-
-      {/* Entity type — placeholder */}
-      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-        <label style={{ fontSize:"11px", color:"#B0B7BC", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Entity</label>
-        <select disabled style={{
-          background:"#003366", border:"1px solid #003366", color:"#4a6080", fontSize:"12px",
-          padding:"4px 10px", borderRadius:"6px", cursor:"not-allowed", outline:"none", opacity:0.5
-        }}>
-          <option>Coming Soon</option>
-        </select>
-      </div>
-
-      {/* Class — placeholder */}
-      <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
-        <label style={{ fontSize:"11px", color:"#B0B7BC", fontWeight:600, letterSpacing:"0.08em", textTransform:"uppercase" }}>Class</label>
-        <select disabled style={{
-          background:"#003366", border:"1px solid #003366", color:"#4a6080", fontSize:"12px",
-          padding:"4px 10px", borderRadius:"6px", cursor:"not-allowed", outline:"none", opacity:0.5
-        }}>
-          <option>Coming Soon</option>
-        </select>
-      </div>
-
       <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:"12px" }}>
         {/* User info */}
         {currentUser && (
