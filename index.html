@@ -224,18 +224,18 @@ function getDocUrlBadge(url) {
   const u = url.toLowerCase();
   const PORTAL  = ["bidnetdirect.com","planetbids.com","opengov.com","demandstar.com",
     "sciquest.com","publicpurchase.com","beaconbid.com","bonfirehub.com","rampla.org",
-    "allaroundphilly.com","buildingconnected.com","ionwave.net"];
+    "allaroundphilly.com","buildingconnected.com","ionwave.net","centralauctionhouse.com"];
   const GOVT    = ["emma.maryland.gov","ohiobuys.ohio.gov","doas.state.ga.us","txsmartbuy.gov",
     "commbuys.com","sigma.michigan.gov","evp.nc.gov","contracts.ocp.dc.gov","lacovss.lacounty.gov",
     "alabamabuys.gov","portal.ct.gov","phlcontracts.phila.gov","emarketplace.state.pa.us",
     "prd311.wvoasis.gov","columbusvendorservices.powerappsportals.com","dcregs.dc.gov",
-    "business.metro.net","springfield-ma.gov"];
+    "business.metro.net","springfield-ma.gov","scbo.sc.gov","greenwichct.gov"];
   const NOTICE  = ["nyscr.ny.gov","capublicnotice.com","column.us","mopublicnotices.com",
     "publicnoticepa.com","texaspublicnotices.com","masspublicnotices.org","poughkeepsiejournal.com",
     "classifieds.mcclatchy.com","kypublicnotices.newzgroup.com","connecticutpublicnotices.com",
     "publicnoticeillinois.com","floridapublicnotices.com","classifieds.nj.com",
-    "tnpublicnotice.com","mspublicnotices.org"];
-  const AUCTION = ["centralauctionhouse.com"];
+    "tnpublicnotice.com","mspublicnotices.org","hattiesburgamerican.com"];
+  const AUCTION = [];
   if (PORTAL.some(d  => u.includes(d))) return { label:"Portal",  bg:"rgba(198,12,48,0.15)",   border:"rgba(198,12,48,0.35)",   color:"#C60C30" };
   if (GOVT.some(d    => u.includes(d))) return { label:"Govt",    bg:"rgba(59,130,246,0.15)",  border:"rgba(59,130,246,0.35)",  color:"#3b82f6" };
   if (NOTICE.some(d  => u.includes(d))) return { label:"Notice",  bg:"rgba(176,183,188,0.15)", border:"rgba(176,183,188,0.35)", color:"#B0B7BC" };
