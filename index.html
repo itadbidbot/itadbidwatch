@@ -3685,7 +3685,11 @@ function RFPBidsView() {
     // flow below only when no stored draft exists yet.
     try {
       const docUrl = row["Doc URL"] || row["document_url"] || "";
-      const lookupUrls = [boxUrl, docUrl].filter(Boolean);
+      // Normalize exactly like the extractor's normalize_box_url():
+      // strip query params + trailing slashes, since pdf_contacts.source_url
+      // is stored normalized. Raw-URL matching would silently miss drafts.
+      const normUrl = u => (u || "").split("?")[0].trim().replace(/\/+$/, "");
+      const lookupUrls = [boxUrl, docUrl].map(normUrl).filter(Boolean);
       if (lookupUrls.length) {
         const { data: draftRows, error: draftErr } = await window._db
           .from("pdf_contacts")
@@ -3695,16 +3699,8 @@ function RFPBidsView() {
           .order("email_drafted_at", { ascending: false })
           .limit(1);
         if (!draftErr && draftRows && draftRows.length && draftRows[0].sales_email_draft) {
-          const rawText = draftRows[0].sales_email_draft;
-          const versions = [];
-          const vMatches = [...rawText.matchAll(/Version\s+\d/gi)];
-          for (let i = 0; i < vMatches.length; i++) {
-            const start = vMatches[i].index + vMatches[i][0].length;
-            const end = i + 1 < vMatches.length ? vMatches[i + 1].index : rawText.length;
-            versions.push(rawText.slice(start, end).trim());
-          }
-          if (!versions.length) versions.push(rawText.trim());
-          setEmailModal(m => ({ ...m, loading: false, versions, error: null, stored: true, storedAt: draftRows[0].email_drafted_at }));
+          const rawText = draftRows[0].sales_email_draft.trim();
+          setEmailModal(m => ({ ...m, loading: false, versions: [rawText], error: null, stored: true, storedAt: draftRows[0].email_drafted_at }));
           return;
         }
       }
