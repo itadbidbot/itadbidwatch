@@ -285,7 +285,32 @@ function bidDirectionBadge(direction) {
 // DOC URL / BID DOC cell — file type badges + platform badges
 // Pass onExtract to get a "→" arrow on PDFs that triggers contact extraction
 // Pass docAvailable (true/false/null) to show availability indicator on Box links
-function docUrlCell(url, onExtract, docAvailable, onEmail) {
+function emailAuthorIcon(source) {
+  // Gemini — orange sparkle burst
+  if (source === "gemini") return (
+    <svg width="14" height="14" viewBox="0 0 24 24" title="Email drafted by Gemini (free)">
+      <path fill="#f97316" d="M12 0c.6 4.8 1.6 7.6 3.4 9.6C17.2 11.6 20 12.6 24 13.2c-4.8.6-7.6 1.6-9.6 3.4C12.6 18.6 11.6 21.4 11 26c-.6-4.8-1.6-7.6-3.4-9.6C5.8 14.6 3 13.6 0 13c4.8-.6 7.6-1.6 9.6-3.4C11.4 7.8 12.4 5 12 0z" transform="scale(0.9) translate(1,-1)"/>
+    </svg>
+  );
+  // Anthropic fallback — colorful diamond (used only when Gemini failed)
+  if (source === "anthropic") return (
+    <svg width="14" height="14" viewBox="0 0 24 24" title="Email drafted by Claude (Gemini fallback — small cost)">
+      <path fill="#3b82f6" d="M12 1 22 12 12 23z" opacity="0.85"/>
+      <path fill="#f97316" d="M12 1 2 12l10-4z" opacity="0.85"/>
+      <path fill="#10b981" d="M2 12l10 11-10-7z" opacity="0.85"/>
+      <path fill="#eab308" d="M22 12 12 23l10-7z" opacity="0.85"/>
+    </svg>
+  );
+  // No email drafted yet
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" title="No email drafted yet">
+      <circle cx="12" cy="12" r="10" fill="none" stroke="#C60C30" strokeWidth="2"/>
+      <line x1="5" y1="19" x2="19" y2="5" stroke="#C60C30" strokeWidth="2"/>
+    </svg>
+  );
+}
+
+function docUrlCell(url, onExtract, docAvailable, onEmail, emailSource) {
   if (!url) return <span style={{ color:"#4a6080" }}>—</span>;
   const u = url.toLowerCase();
   if (u.includes(".pdf")) {
@@ -304,11 +329,11 @@ function docUrlCell(url, onExtract, docAvailable, onEmail) {
   if (u.includes("box.com")) return (
     <span style={{ display:"inline-flex", alignItems:"center", gap:"3px" }}>
       {badgeLink(url, "Box", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6")}
-      {docAvailBadge(docAvailable)}
+      {docAvailable === false && docAvailBadge(docAvailable)}
       {docAvailable === true && onEmail && (
-        <button onClick={e => { e.stopPropagation(); onEmail(); }} title="Generate sales email"
-          style={{ background:"rgba(16,185,129,0.12)", border:"1px solid rgba(16,185,129,0.35)", color:"#10b981", fontSize:"10px", padding:"1px 5px", borderRadius:"3px", cursor:"pointer", lineHeight:1.4, fontWeight:700, flexShrink:0 }}>
-          ✉️
+        <button onClick={e => { e.stopPropagation(); onEmail(); }} title={emailSource === "gemini" ? "Email drafted by Gemini — click to view" : emailSource === "anthropic" ? "Email drafted by Claude (Gemini fallback) — click to view" : "No email drafted yet — click to generate"}
+          style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.12)", padding:"2px 4px", borderRadius:"3px", cursor:"pointer", lineHeight:0, flexShrink:0, display:"inline-flex", alignItems:"center" }}>
+          {emailAuthorIcon(emailSource)}
         </button>
       )}
     </span>
@@ -3013,6 +3038,30 @@ function RFPBidsView() {
     setRows(withMeta);
     const latest = data.find(r => r.file_date);
     if (latest) setFileDate(latest.file_date);
+
+    // Bulk lookup: who authored each bid's sales email (Gemini/Anthropic),
+    // one query for the whole page instead of a per-row fetch. Powers the
+    // author icon in docUrlCell below.
+    try {
+      const normUrl = u => (u || "").split("?")[0].trim().replace(/\/+$/, "");
+      const { data: draftRows, error: draftErr } = await window._db
+        .from("pdf_contacts")
+        .select("source_url, ai_source, sales_email_draft")
+        .not("sales_email_draft", "is", null);
+      if (!draftErr && draftRows && draftRows.length) {
+        const sourceMap = {};
+        for (const dr of draftRows) {
+          const key = normUrl(dr.source_url);
+          if (key) sourceMap[key] = dr.ai_source || "gemini";
+        }
+        setRows(prev => prev.map(r => {
+          const key1 = normUrl(r["Bid Documents"]);
+          const key2 = normUrl(r["Doc URL"]);
+          const src = sourceMap[key1] || sourceMap[key2] || null;
+          return src ? { ...r, _email_source: src } : r;
+        }));
+      }
+    } catch (e) { console.warn("[email-source] bulk lookup failed:", e); }
   }, []);
 
   useEffect(() => { loadAllRows(); }, [loadAllRows]);
@@ -4069,7 +4118,7 @@ function RFPBidsView() {
                     <td style={colStyle} title={row["State"] || ""}>{row["State"] || ""}</td>
                     <td style={colStyle} title={bidUrl}>{bidUrlCell(bidUrl)}</td>
                     <td style={colStyle} title={docUrl}>{docUrlCell(docUrl, docUrl ? () => extractContact(row) : null)}</td>
-                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null, row._doc_available, !row._sample && bidDocUrl ? () => openEmailModal(row) : null)}</td>
+                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null, row._doc_available, !row._sample && bidDocUrl ? () => openEmailModal(row) : null, row._email_source)}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
