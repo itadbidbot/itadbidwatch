@@ -3048,18 +3048,26 @@ function RFPBidsView() {
         .from("pdf_contacts")
         .select("source_url, ai_source, sales_email_draft")
         .not("sales_email_draft", "is", null);
+      console.log("[email-source] query returned:", draftRows ? draftRows.length : 0, "rows, error:", draftErr);
       if (!draftErr && draftRows && draftRows.length) {
         const sourceMap = {};
         for (const dr of draftRows) {
           const key = normUrl(dr.source_url);
           if (key) sourceMap[key] = dr.ai_source || "gemini";
         }
-        setRows(prev => prev.map(r => {
-          const key1 = normUrl(r["Bid Documents"]);
-          const key2 = normUrl(r["Doc URL"]);
-          const src = sourceMap[key1] || sourceMap[key2] || null;
-          return src ? { ...r, _email_source: src } : r;
-        }));
+        console.log("[email-source] sourceMap keys:", Object.keys(sourceMap));
+        let matchCount = 0;
+        setRows(prev => {
+          const next = prev.map(r => {
+            const key1 = normUrl(r["Bid Documents"]);
+            const key2 = normUrl(r["Doc URL"]);
+            const src = sourceMap[key1] || sourceMap[key2] || null;
+            if (src) matchCount++;
+            return src ? { ...r, _email_source: src } : r;
+          });
+          console.log("[email-source] matched", matchCount, "of", prev.length, "visible rows");
+          return next;
+        });
       }
     } catch (e) { console.warn("[email-source] bulk lookup failed:", e); }
   }, []);
