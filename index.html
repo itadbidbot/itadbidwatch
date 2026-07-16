@@ -304,11 +304,14 @@ function emailAuthorIcon(source) {
       <path fill="#eab308" d="M22 12 12 23l10-7z" opacity="0.85"/>
     </svg>
   );
-  // No email drafted yet
+  // No stored draft yet — but this only ever renders when a live click WILL
+  // work (docAvailable is true), so an envelope is accurate here. A truly
+  // blocked case (no document at all) shows a separate red ✕ via
+  // docAvailBadge, not this icon.
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" title="No email drafted yet">
-      <circle cx="12" cy="12" r="10" fill="none" stroke="#C60C30" strokeWidth="2"/>
-      <line x1="5" y1="19" x2="19" y2="5" stroke="#C60C30" strokeWidth="2"/>
+    <svg width="14" height="14" viewBox="0 0 24 24" title="No draft saved yet — click to generate">
+      <rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="#B0B7BC" strokeWidth="2"/>
+      <path d="M3 5l9 7 9-7" fill="none" stroke="#B0B7BC" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
     </svg>
   );
 }
@@ -334,7 +337,7 @@ function docUrlCell(url, onExtract, docAvailable, onEmail, emailSource) {
       {badgeLink(url, "Box", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6")}
       {docAvailable === false && docAvailBadge(docAvailable)}
       {docAvailable === true && onEmail && (
-        <button onClick={e => { e.stopPropagation(); onEmail(); }} title={emailSource === "gemini" ? "Email drafted by Gemini — click to view" : emailSource === "anthropic" ? "Email drafted by Claude (Gemini fallback) — click to view" : "No email drafted yet — click to generate"}
+        <button onClick={e => { e.stopPropagation(); onEmail(); }} title={emailSource === "gemini" ? "Email drafted by Gemini — click to view" : (emailSource && emailSource.startsWith("anthropic")) ? "Email drafted by Claude (Gemini fallback) — click to view" : "No draft saved yet — click to generate"}
           style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.12)", padding:"2px 4px", borderRadius:"3px", cursor:"pointer", lineHeight:0, flexShrink:0, display:"inline-flex", alignItems:"center" }}>
           {emailAuthorIcon(emailSource)}
         </button>
@@ -3064,7 +3067,8 @@ function RFPBidsView() {
           const next = prev.map(r => {
             const key1 = normUrl(r["Bid Documents"]);
             const key2 = normUrl(r["Doc URL"]);
-            const src = sourceMap[key1] || sourceMap[key2] || null;
+            const key3 = normUrl(r["Bid URL"]);
+            const src = sourceMap[key1] || sourceMap[key2] || sourceMap[key3] || null;
             if (src) matchCount++;
             return src ? { ...r, _email_source: src } : r;
           });
@@ -3745,11 +3749,12 @@ function RFPBidsView() {
     // flow below only when no stored draft exists yet.
     try {
       const docUrl = row["Doc URL"] || row["document_url"] || "";
+      const rawBidUrl = row["Bid URL"] || row["bid_url"] || "";
       // Normalize exactly like the extractor's normalize_box_url():
       // strip query params + trailing slashes, since pdf_contacts.source_url
       // is stored normalized. Raw-URL matching would silently miss drafts.
       const normUrl = u => (u || "").split("?")[0].trim().replace(/\/+$/, "");
-      const lookupUrls = [boxUrl, docUrl].map(normUrl).filter(Boolean);
+      const lookupUrls = [boxUrl, docUrl, rawBidUrl].map(normUrl).filter(Boolean);
       if (lookupUrls.length) {
         const { data: draftRows, error: draftErr } = await window._db
           .from("pdf_contacts")
