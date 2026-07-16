@@ -293,7 +293,10 @@ function emailAuthorIcon(source) {
     </svg>
   );
   // Anthropic fallback — colorful diamond (used only when Gemini failed)
-  if (source === "anthropic") return (
+  // Note: the extractor saves this as "anthropic_fallback", not "anthropic" —
+  // match on prefix so this doesn't silently break again if the exact string
+  // changes on either side.
+  if (source && source.startsWith("anthropic")) return (
     <svg width="14" height="14" viewBox="0 0 24 24" title="Email drafted by Claude (Gemini fallback — small cost)">
       <path fill="#3b82f6" d="M12 1 22 12 12 23z" opacity="0.85"/>
       <path fill="#f97316" d="M12 1 2 12l10-4z" opacity="0.85"/>
