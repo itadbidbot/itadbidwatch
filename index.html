@@ -285,7 +285,7 @@ function bidDirectionBadge(direction) {
 // DOC URL / BID DOC cell — file type badges + platform badges
 // Pass onExtract to get a "→" arrow on PDFs that triggers contact extraction
 // Pass docAvailable (true/false/null) to show availability indicator on Box links
-function emailAuthorIcon(source) {
+function emailAuthorIcon(source, isScanned) {
   // Gemini — orange sparkle burst
   if (source === "gemini") return (
     <svg width="14" height="14" viewBox="0 0 24 24" title="Email drafted by Gemini (free)">
@@ -304,6 +304,18 @@ function emailAuthorIcon(source) {
       <path fill="#eab308" d="M22 12 12 23l10-7z" opacity="0.85"/>
     </svg>
   );
+  // No stored draft yet. If this bid was flagged as a likely scanned-image
+  // PDF (real files opened, but almost no text came out — confirmed real
+  // case: LSU Health Shreveport), show a distinct camera icon rather than
+  // the generic envelope: there IS something here worth a human look, it's
+  // just not something any current text-based method (or AI) can read.
+  if (isScanned) return (
+    <svg width="14" height="14" viewBox="0 0 24 24" title="Scanned image PDF — has content, but no extractable text. Needs a human look.">
+      <rect x="2" y="5" width="20" height="15" rx="2" fill="none" stroke="#eab308" strokeWidth="2"/>
+      <circle cx="12" cy="12.5" r="4" fill="none" stroke="#eab308" strokeWidth="2"/>
+      <rect x="8" y="2" width="4" height="3" rx="1" fill="#eab308"/>
+    </svg>
+  );
   // No stored draft yet — but this only ever renders when a live click WILL
   // work (docAvailable is true), so an envelope is accurate here. A truly
   // blocked case (no document at all) shows a separate red ✕ via
@@ -316,7 +328,7 @@ function emailAuthorIcon(source) {
   );
 }
 
-function docUrlCell(url, onExtract, docAvailable, onEmail, emailSource) {
+function docUrlCell(url, onExtract, docAvailable, onEmail, emailSource, isScanned) {
   if (!url) return <span style={{ color:"#4a6080" }}>—</span>;
   const u = url.toLowerCase();
   if (u.includes(".pdf")) {
@@ -337,9 +349,9 @@ function docUrlCell(url, onExtract, docAvailable, onEmail, emailSource) {
       {badgeLink(url, "Box", "rgba(59,130,246,0.15)", "rgba(59,130,246,0.35)", "#3b82f6")}
       {docAvailable === false && docAvailBadge(docAvailable)}
       {docAvailable === true && onEmail && (
-        <button onClick={e => { e.stopPropagation(); onEmail(); }} title={emailSource === "gemini" ? "Email drafted by Gemini — click to view" : (emailSource && emailSource.startsWith("anthropic")) ? "Email drafted by Claude (Gemini fallback) — click to view" : "No draft saved yet — click to generate"}
+        <button onClick={e => { e.stopPropagation(); onEmail(); }} title={emailSource === "gemini" ? "Email drafted by Gemini — click to view" : (emailSource && emailSource.startsWith("anthropic")) ? "Email drafted by Claude (Gemini fallback) — click to view" : isScanned ? "Scanned image PDF — has content, but no extractable text. Needs a human look." : "No draft saved yet — click to generate"}
           style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.12)", padding:"2px 4px", borderRadius:"3px", cursor:"pointer", lineHeight:0, flexShrink:0, display:"inline-flex", alignItems:"center" }}>
-          {emailAuthorIcon(emailSource)}
+          {emailAuthorIcon(emailSource, isScanned)}
         </button>
       )}
     </span>
@@ -3077,6 +3089,31 @@ function RFPBidsView() {
         });
       }
     } catch (e) { console.warn("[email-source] bulk lookup failed:", e); }
+
+    // Second, independent lookup: bids flagged as likely scanned-image PDFs
+    // (real files opened, but almost no text came out — confirmed real case:
+    // LSU Health Shreveport, a flattened/scanned document with zero
+    // extractable text despite a visible "BUYER EMAIL:" field on the page).
+    // Kept separate from the draft-source lookup since it's a different
+    // concern — "is there something here a human should look at" rather
+    // than "who authored the draft".
+    try {
+      const normUrl = u => (u || "").split("?")[0].trim().replace(/\/+$/, "");
+      const { data: scanRows, error: scanErr } = await window._db
+        .from("pdf_contacts")
+        .select("source_url")
+        .eq("likely_scanned_image", true);
+      if (!scanErr && scanRows && scanRows.length) {
+        const scanSet = new Set(scanRows.map(r => normUrl(r.source_url)).filter(Boolean));
+        setRows(prev => prev.map(r => {
+          const key1 = normUrl(r["Bid Documents"]);
+          const key2 = normUrl(r["Doc URL"]);
+          const key3 = normUrl(r["Bid URL"]);
+          const isScanned = scanSet.has(key1) || scanSet.has(key2) || scanSet.has(key3);
+          return isScanned ? { ...r, _likely_scanned: true } : r;
+        }));
+      }
+    } catch (e) { console.warn("[scanned-image] bulk lookup failed:", e); }
   }, []);
 
   useEffect(() => { loadAllRows(); }, [loadAllRows]);
@@ -4134,7 +4171,7 @@ function RFPBidsView() {
                     <td style={colStyle} title={row["State"] || ""}>{row["State"] || ""}</td>
                     <td style={colStyle} title={bidUrl}>{bidUrlCell(bidUrl)}</td>
                     <td style={colStyle} title={docUrl}>{docUrlCell(docUrl, docUrl ? () => extractContact(row) : null)}</td>
-                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null, row._doc_available, !row._sample && bidDocUrl ? () => openEmailModal(row) : null, row._email_source)}</td>
+                    <td style={colStyle} title={bidDocUrl}>{docUrlCell(bidDocUrl, null, row._doc_available, !row._sample && bidDocUrl ? () => openEmailModal(row) : null, row._email_source, row._likely_scanned)}</td>
                     <td style={{ ...colStyle, whiteSpace:"normal" }}>
                       <select value={row._assignee} onChange={e => updateRow(row._id, "_assignee", e.target.value)}
                         style={{ background:"#003366", border:"1px solid #003875", color:"#B0B7BC", fontSize:"11px", padding:"3px 4px", borderRadius:"4px", width:"100%" }}>
