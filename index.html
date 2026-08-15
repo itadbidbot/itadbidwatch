@@ -2435,32 +2435,23 @@ function BuildProposalView({ currentUser, onDone }) {
   const orgDebounce = useRef(null);
   const contactDebounce = useRef(null);
 
-  function hubspotToken() {
-    try { return (localStorage.getItem("HUBSPOT_API_KEY") || "").trim(); } catch(e) { return ""; }
-  }
-
-  async function hubspotFetch(path, options) {
-    const token = hubspotToken();
-    if (!token) throw new Error("No HubSpot API key set. Add one in Settings → API Keys.");
-    const res = await fetch(`https://api.hubapi.com${path}`, {
-      ...options,
-      headers: { "Content-Type":"application/json", "Authorization":`Bearer ${token}`, ...((options && options.headers) || {}) }
+  async function hubspotProxySearch(objectType, query, companyId) {
+    const res = await fetch(`${PROPOSALS_EMAIL_API}/hubspot/search`, {
+      method:"POST",
+      headers: { "Content-Type":"application/json" },
+      body: JSON.stringify({ objectType, query, companyId: companyId || undefined })
     });
-    if (!res.ok) {
-      const body = await res.text().catch(()=>"");
-      throw new Error(`HubSpot API error ${res.status}: ${body.slice(0,200) || res.statusText}`);
+    const data = await res.json().catch(()=>({}));
+    if (!res.ok || data.status === "error") {
+      throw new Error(data.message || `HubSpot search failed (${res.status})`);
     }
-    return res.json();
+    return data.results || [];
   }
 
   async function searchOrgs(q) {
     setOrgSearching(true); setOrgError("");
     try {
-      const data = await hubspotFetch("/crm/v3/objects/companies/search", {
-        method:"POST",
-        body: JSON.stringify({ query:q, properties:["name","address","city","state","zip","phone"], limit:6 })
-      });
-      setOrgResults(data.results || []);
+      setOrgResults(await hubspotProxySearch("companies", q));
     } catch(e) {
       setOrgError(e.message);
       setOrgResults([]);
@@ -2472,30 +2463,7 @@ function BuildProposalView({ currentUser, onDone }) {
   async function searchContacts(q) {
     setContactSearching(true); setContactError("");
     try {
-      let results = [];
-      if (selectedOrg) {
-        const assoc = await hubspotFetch(`/crm/v3/objects/companies/${selectedOrg.id}/associations/contacts`);
-        const ids = (assoc.results || []).map(r => r.id || r.toObjectId).filter(Boolean);
-        if (ids.length) {
-          const batch = await hubspotFetch("/crm/v3/objects/contacts/batch/read", {
-            method:"POST",
-            body: JSON.stringify({ properties:["firstname","lastname","email","phone","jobtitle"], inputs: ids.map(id => ({ id })) })
-          });
-          const ql = q.toLowerCase();
-          results = (batch.results || []).filter(c => {
-            const full = `${(c.properties||{}).firstname||""} ${(c.properties||{}).lastname||""}`.toLowerCase();
-            return full.includes(ql);
-          });
-        }
-      }
-      if (!results.length) {
-        const data = await hubspotFetch("/crm/v3/objects/contacts/search", {
-          method:"POST",
-          body: JSON.stringify({ query:q, properties:["firstname","lastname","email","phone","jobtitle"], limit:6 })
-        });
-        results = data.results || [];
-      }
-      setContactResults(results);
+      setContactResults(await hubspotProxySearch("contacts", q, selectedOrg ? selectedOrg.id : null));
     } catch(e) {
       setContactError(e.message);
       setContactResults([]);
@@ -3219,8 +3187,6 @@ function SettingsView() {
   const [geminiSaved, setGeminiSaved] = useState(false);
   const [apolloKey, setApolloKey] = useState(() => localStorage.getItem("APOLLO_API_KEY") || "");
   const [apolloSaved, setApolloSaved] = useState(false);
-  const [hubspotKey, setHubspotKey] = useState(() => localStorage.getItem("HUBSPOT_API_KEY") || "");
-  const [hubspotSaved, setHubspotSaved] = useState(false);
 
   function saveGeminiKey() {
     localStorage.setItem("GEMINI_API_KEY", geminiKey.trim());
@@ -3232,12 +3198,6 @@ function SettingsView() {
     localStorage.setItem("APOLLO_API_KEY", apolloKey.trim());
     setApolloSaved(true);
     setTimeout(() => setApolloSaved(false), 2000);
-  }
-
-  function saveHubspotKey() {
-    localStorage.setItem("HUBSPOT_API_KEY", hubspotKey.trim());
-    setHubspotSaved(true);
-    setTimeout(() => setHubspotSaved(false), 2000);
   }
 
   return (
@@ -3342,24 +3302,11 @@ function SettingsView() {
             </div>
           </div>
 
-          {/* HubSpot API key */}
+          {/* HubSpot */}
           <div style={{ marginBottom:"20px" }}>
-            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>HUBSPOT PRIVATE APP TOKEN</label>
-            <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
-              <input
-                type="password"
-                value={hubspotKey}
-                onChange={e => setHubspotKey(e.target.value)}
-                placeholder="Paste your HubSpot private app access token…"
-                style={{ flex:1, padding:"8px 12px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", color:"#ffffff", fontSize:"13px", outline:"none", boxSizing:"border-box" }}
-              />
-              <button onClick={saveHubspotKey}
-                style={{ padding:"8px 16px", background: hubspotSaved ? "#10b981" : "linear-gradient(135deg,#f97316,#ea580c)", border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", transition:"background 0.2s" }}>
-                {hubspotSaved ? "✓ Saved" : "Save Key"}
-              </button>
-            </div>
-            <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>
-              Used for organization/contact search in 💵 Build Proposal. Needs CRM read scopes (crm.objects.companies.read, crm.objects.contacts.read). Stored in localStorage under <code style={{ color:"#B0B7BC" }}>HUBSPOT_API_KEY</code>. Never sent anywhere except HubSpot's API.
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>HUBSPOT</label>
+            <div style={{ fontSize:"12px", color:"#4a6080" }}>
+              Used for organization/contact search in 💵 Build Proposal. Configured server-side on the proposal notifications service — no key needed here.
             </div>
           </div>
 
