@@ -1,45 +1,85 @@
 # For Claude Code: Start Here
 
-## Before You Touch Code
+## Before You Code
 
-1. **Read the spec (required):**
-   - `BUILD_PLAN.md` — Full 5-part operational specification
+Read these files in order:
 
-2. **Know the checklist:**
-   - `MVP_CHECKLIST.md` — Phases 1-5, what to build when
+1. **BUILD_PLAN.md** — How the system works (the flow, 4 components, 5 phases)
+2. **MVP_CHECKLIST.md** — Detailed tasks for each phase
+3. **This file** — Questions to answer before starting
 
-3. **Understand the business logic (CRITICAL):**
-   - Part 1: 10-stage workflow (bid → proposal → outcome)
-   - Part 4: Turnaround term is ONE field reused everywhere
-   - Part 4: Qualification rules (device qualifies ONLY if ALL criteria met)
-   - Part 5A: MVP tech stack (HubSpot, Google Sheets, Make.com, Google Docs)
+---
+
+## The Simple Flow
+
+```
+Rep fills form → Send to Bruce
+Bruce adds pricing → Send back to rep
+Rep approves → PDF sent to customer
+```
+
+That's it. 4 components. 12 days.
+
+---
+
+## Questions Before You Start
+
+**Q: Where do organization/contact lookups come from?**  
+A: HubSpot API. Search by name, return address/email/phone.
+
+**Q: Where does the PDF proposal template come from?**  
+A: Use the existing Pompton Lakes template: `Pompton_Lakes_Schools_Proposal_7-15-2026.docx`
+
+**Q: Where are proposals stored?**  
+A: Cloud storage (Google Drive or AWS S3). Get shareable URL.
+
+**Q: Who can do what?**  
+A: Rep submits form + approves proposals. Bruce adds pricing only. Customer views PDF only.
+
+**Q: What if Bruce doesn't add pricing?**  
+A: Status stays "Pending pricing". Rep gets reminded after 2 days.
+
+**Q: What if customer doesn't confirm?**  
+A: Status stays "Sent". Rep can manually follow up or resend after 5 days.
+
+---
 
 ## Your Starting Point
 
-**Phase 1 (Week 1):** HubSpot Setup & Data Foundation
-- Create HubSpot custom properties (list in Part 5A, "HubSpot Property Setup for MVP")
-- Build pricing reference in Google Sheets
-- Create HubSpot landing form with field mapping (Part 5A, "Landing Form Field Mapping")
+**Phase 1: Form Component (Days 1-2)**
 
-See Part 5A step-by-step for detailed instructions.
+See MVP_CHECKLIST.md for detailed tasks.
 
-## Key Constraints (Don't Skip)
+Quick summary:
+- Build form with org/contact search (HubSpot autocomplete)
+- Auto-fill address, city, state, zip from org
+- Auto-fill contact email/phone/title from contact
+- Add fields: devices (textarea), pickup date (optional), notes (optional)
+- Add "Send to Bruce" button
+- Save data, send email to Bruce
 
-- **Turnaround term:** Must be single field (`turnaround_days`) reused in ALL proposal sections
-- **Pricing exceptions:** Devices not in pricing table → Route to Bruce Manssuer
-- **Value approvals:** Deals > $15,000 → Route to Michael Stott
-- **QA validation:** No proposal generated without passing all checks (Part 4E)
+---
 
-## Questions?
+## How to Commit Your Work
 
-- "Where's the pricing table structure?" → Part 3, Object 9
-- "What are merge fields?" → Part 4D, Merge Field Reference
-- "How does Make workflow work?" → Part 5A, Phase 3 step-by-step
-- "What's the data model?" → Part 3, Objects 1-10
+After each phase:
+1. Push code to GitHub
+2. Create GitHub issue: "Phase X complete"
+3. Link to PR/commits
+4. Wait for feedback
 
-## Next Action
+---
 
-1. Read BUILD_PLAN.md (especially Part 5A)
-2. Create GitHub issue for Phase 1
-3. Start with HubSpot property creation
-4. Commit progress back to this repo
+## Questions Not Answered Here?
+
+See BUILD_PLAN.md for:
+- Technical requirements (HubSpot API, PDF generation, email system)
+- All 5 email templates
+- Database schema (what to store)
+- Testing checklist
+
+---
+
+## Go
+
+Read BUILD_PLAN.md now. Start Phase 1.
