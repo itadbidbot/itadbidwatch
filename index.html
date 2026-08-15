@@ -2334,6 +2334,30 @@ function ScanHistoryView() {
 // is_pricer() in supabase/migrations/003_proposals_pricing.sql.
 const PRICING_EMAIL = "itadbidbot@gmail.com";
 
+// Cloud Run service that sends the proposal-workflow emails (Phase 3).
+// Source: https://github.com/itadbidbot/bidbot-proposals-api
+const PROPOSALS_EMAIL_API = "https://bidbot-proposals-api-378239271278.us-central1.run.app";
+
+// Fire-and-forget: email delivery failure shouldn't block the underlying
+// status change, which has already been saved to Supabase by the caller.
+async function sendProposalEmail(type, to, fields) {
+  try {
+    const res = await fetch(`${PROPOSALS_EMAIL_API}/notify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ type, to, fields })
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(()=>"");
+      console.warn(`sendProposalEmail(${type}) failed:`, res.status, body);
+    }
+  } catch(e) {
+    console.warn(`sendProposalEmail(${type}) failed:`, e.message);
+  }
+}
+
+const BUILD_PROPOSAL_URL = () => `${window.location.origin}${window.location.pathname}#build_proposal`;
+
 const PROPOSAL_STATUS = {
   pending_pricing: { label:"Pending Pricing", color:"#f97316" },
   review:          { label:"Ready for Review", color:"#eab308" },
@@ -2557,6 +2581,13 @@ function BuildProposalView({ currentUser, onDone }) {
       const res = await window._db.from("proposals").insert([record]).select();
       if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
       setSubmitted(true);
+      sendProposalEmail("bruce_pricing_request", PRICING_EMAIL, {
+        rep_name: record.submitted_by_name, org_name: record.org_name,
+        address: record.address, city: record.city, state: record.state, zip: record.zip,
+        contact_name: record.contact_name, contact_email: record.contact_email, contact_phone: record.contact_phone,
+        devices: record.devices, pickup_date: record.pickup_date, notes: record.notes,
+        proposal_url: BUILD_PROPOSAL_URL(),
+      });
     } catch(e) {
       setSubmitError(e.message || "Failed to submit proposal.");
     } finally {
@@ -2925,6 +2956,12 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
       const res = await window._db.from("proposals").update(payload).eq("id", proposalId).select().single();
       if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
       setProposal(res.data);
+      if (res.data.submitted_by_email) {
+        sendProposalEmail("rep_pricing_ready", res.data.submitted_by_email, {
+          rep_name: res.data.submitted_by_name, org_name: res.data.org_name,
+          contact_email: res.data.contact_email, proposal_url: BUILD_PROPOSAL_URL(),
+        });
+      }
     } catch(e) {
       setSaveError(e.message || "Failed to save pricing.");
     } finally {
@@ -2945,6 +2982,17 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
       const res = await window._db.from("proposals").update(payload).eq("id", proposalId).select().single();
       if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
       setProposal(res.data);
+      const d = res.data;
+      sendProposalEmail("bruce_approved", PRICING_EMAIL, {
+        org_name: d.org_name, address: d.address, city: d.city, state: d.state, zip: d.zip,
+        contact_name: d.contact_name, contact_email: d.contact_email, contact_phone: d.contact_phone,
+        rep_name: d.approved_by_name, approved_at: d.approved_at,
+      });
+      if (d.submitted_by_email) {
+        sendProposalEmail("rep_congrats", d.submitted_by_email, {
+          rep_name: d.submitted_by_name, org_name: d.org_name, contact_email: d.contact_email,
+        });
+      }
     } catch(e) {
       setSaveError(e.message || "Failed to approve.");
     } finally {
