@@ -2415,6 +2415,8 @@ function BuildProposalView({ currentUser, onDone }) {
   const [contactSearching, setContactSearching] = useState(false);
   const [contactError, setContactError] = useState("");
   const [selectedContact, setSelectedContact] = useState(null);
+  const [orgContacts, setOrgContacts] = useState(null); // null = not loaded yet; [] = loaded, none found
+  const [manualContact, setManualContact] = useState(false);
 
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
@@ -2460,13 +2462,29 @@ function BuildProposalView({ currentUser, onDone }) {
     }
   }
 
+  // Free-text contact search — only used when no org is selected yet (no
+  // company to scope by) or when the rep opts into manual entry.
   async function searchContacts(q) {
     setContactSearching(true); setContactError("");
     try {
-      setContactResults(await hubspotProxySearch("contacts", q, selectedOrg ? selectedOrg.id : null));
+      setContactResults(await hubspotProxySearch("contacts", q, null));
     } catch(e) {
       setContactError(e.message);
       setContactResults([]);
+    } finally {
+      setContactSearching(false);
+    }
+  }
+
+  // Loads every contact HubSpot has associated with the selected company —
+  // these are the only ones eligible to show up in the contact dropdown.
+  async function loadOrgContacts(companyId) {
+    setContactSearching(true); setContactError("");
+    try {
+      setOrgContacts(await hubspotProxySearch("contacts", "", companyId));
+    } catch(e) {
+      setContactError(e.message);
+      setOrgContacts([]);
     } finally {
       setContactSearching(false);
     }
@@ -2482,11 +2500,12 @@ function BuildProposalView({ currentUser, onDone }) {
 
   useEffect(() => {
     clearTimeout(contactDebounce.current);
+    if (selectedOrg && !manualContact) return; // dropdown of org-scoped contacts handles this case
     if (selectedContact && contactQuery === selectedContact.name) return;
     if (!contactQuery || contactQuery.trim().length < 2) { setContactResults([]); return; }
     contactDebounce.current = setTimeout(() => searchContacts(contactQuery.trim()), 350);
     return () => clearTimeout(contactDebounce.current);
-  }, [contactQuery, selectedOrg]);
+  }, [contactQuery, selectedOrg, manualContact]);
 
   function pickOrg(org) {
     const p = org.properties || {};
@@ -2497,6 +2516,11 @@ function BuildProposalView({ currentUser, onDone }) {
     setCity(p.city || "");
     setState(p.state || "");
     setZip(p.zip || "");
+    // Company changed — any previously chosen contact no longer applies.
+    setSelectedContact(null); setContactQuery(""); setContactEmail(""); setContactPhone(""); setContactTitle("");
+    setManualContact(false);
+    setOrgContacts(null);
+    loadOrgContacts(org.id);
   }
 
   function pickContact(contact) {
@@ -2511,8 +2535,8 @@ function BuildProposalView({ currentUser, onDone }) {
   }
 
   function resetForm() {
-    setOrgQuery(""); setSelectedOrg(null); setOrgResults([]); setOrgError("");
-    setContactQuery(""); setSelectedContact(null); setContactResults([]); setContactError("");
+    setOrgQuery(""); setSelectedOrg(null); setOrgResults([]); setOrgError(""); setOrgContacts(null);
+    setContactQuery(""); setSelectedContact(null); setContactResults([]); setContactError(""); setManualContact(false);
     setAddress(""); setCity(""); setState(""); setZip("");
     setContactEmail(""); setContactPhone(""); setContactTitle("");
     setDevices(""); setPickupDate(""); setNotes("");
@@ -2624,7 +2648,11 @@ function BuildProposalView({ currentUser, onDone }) {
             <label style={labelStyle}>ORGANIZATION NAME *</label>
             <input
               value={orgQuery}
-              onChange={e => { setOrgQuery(e.target.value); setSelectedOrg(null); }}
+              onChange={e => {
+                setOrgQuery(e.target.value); setSelectedOrg(null); setOrgContacts(null);
+                setSelectedContact(null); setContactQuery(""); setContactEmail(""); setContactPhone(""); setContactTitle("");
+                setManualContact(false);
+              }}
               placeholder="Search HubSpot companies or type a name…"
               style={inputStyle}
               autoComplete="off"
@@ -2675,27 +2703,66 @@ function BuildProposalView({ currentUser, onDone }) {
 
           <div style={fieldStyle}>
             <label style={labelStyle}>CONTACT NAME *</label>
-            <input
-              value={contactQuery}
-              onChange={e => { setContactQuery(e.target.value); setSelectedContact(null); }}
-              placeholder="Search HubSpot contacts or type a name…"
-              style={inputStyle}
-              autoComplete="off"
-            />
-            {contactSearching && <div style={hintStyle}>Searching HubSpot…</div>}
-            {contactError && <div style={{ ...hintStyle, color:"#C60C30" }}>{contactError}</div>}
-            {contactResults.length > 0 && (
-              <div style={dropdownStyle}>
-                {contactResults.map(c => (
-                  <div key={c.id} style={dropdownItemStyle}
-                    onClick={() => pickContact(c)}
-                    onMouseEnter={e => e.currentTarget.style.background = "#003366"}
-                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    <div style={{ fontWeight:600 }}>{(c.properties||{}).firstname} {(c.properties||{}).lastname}</div>
-                    <div style={{ fontSize:"11px", color:"#B0B7BC" }}>{(c.properties||{}).email || ""}</div>
+
+            {selectedOrg && !manualContact ? (
+              <>
+                {contactSearching && <div style={hintStyle}>Loading {selectedOrg.name}'s HubSpot contacts…</div>}
+                {contactError && <div style={{ ...hintStyle, color:"#C60C30" }}>{contactError}</div>}
+                {!contactSearching && orgContacts && orgContacts.length === 0 && !contactError && (
+                  <div style={hintStyle}>No HubSpot contacts found for {selectedOrg.name}.</div>
+                )}
+                {orgContacts && orgContacts.length > 0 && (
+                  <select
+                    value={selectedContact ? selectedContact.id : ""}
+                    onChange={e => {
+                      const c = orgContacts.find(x => x.id === e.target.value);
+                      if (c) pickContact(c);
+                    }}
+                    style={{ ...inputStyle, color: selectedContact ? "#ffffff" : "#B0B7BC" }}>
+                    <option value="">Select a contact at {selectedOrg.name}…</option>
+                    {orgContacts.map(c => {
+                      const p = c.properties || {};
+                      const full = `${p.firstname||""} ${p.lastname||""}`.trim() || "(no name)";
+                      return <option key={c.id} value={c.id}>{full}{p.email ? ` — ${p.email}` : ""}</option>;
+                    })}
+                  </select>
+                )}
+                <button type="button" onClick={() => { setManualContact(true); setContactQuery(""); setSelectedContact(null); }}
+                  style={{ background:"transparent", border:"none", color:"#B0B7BC", fontSize:"11px", cursor:"pointer", padding:"6px 0 0", textDecoration:"underline" }}>
+                  Can't find them? Enter manually
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  value={contactQuery}
+                  onChange={e => { setContactQuery(e.target.value); setSelectedContact(null); }}
+                  placeholder={selectedOrg ? "Type the contact's name…" : "Search HubSpot contacts or type a name…"}
+                  style={inputStyle}
+                  autoComplete="off"
+                />
+                {!selectedOrg && contactSearching && <div style={hintStyle}>Searching HubSpot…</div>}
+                {!selectedOrg && contactError && <div style={{ ...hintStyle, color:"#C60C30" }}>{contactError}</div>}
+                {!selectedOrg && contactResults.length > 0 && (
+                  <div style={dropdownStyle}>
+                    {contactResults.map(c => (
+                      <div key={c.id} style={dropdownItemStyle}
+                        onClick={() => pickContact(c)}
+                        onMouseEnter={e => e.currentTarget.style.background = "#003366"}
+                        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                        <div style={{ fontWeight:600 }}>{(c.properties||{}).firstname} {(c.properties||{}).lastname}</div>
+                        <div style={{ fontSize:"11px", color:"#B0B7BC" }}>{(c.properties||{}).email || ""}</div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                )}
+                {selectedOrg && manualContact && (
+                  <button type="button" onClick={() => { setManualContact(false); setContactQuery(""); }}
+                    style={{ background:"transparent", border:"none", color:"#B0B7BC", fontSize:"11px", cursor:"pointer", padding:"6px 0 0", textDecoration:"underline" }}>
+                    ← Back to {selectedOrg.name}'s contact list
+                  </button>
+                )}
+              </>
             )}
           </div>
 
