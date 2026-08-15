@@ -2327,9 +2327,47 @@ function ScanHistoryView() {
   );
 }
 
-// ─── BUILD PROPOSAL (Phase 1: Form) ───────────────────────────────────────────
-// Spec: docs/proposal-automation/BUILD_PLAN.md — Component 1: Proposal Form
-function BuildProposalView({ currentUser }) {
+// ─── BUILD PROPOSAL (Phase 1: Form, Phase 2: Editor) ──────────────────────────
+// Spec: docs/proposal-automation/BUILD_PLAN.md
+
+// PLACEHOLDER: stand-in for Bruce's real email until it's known. Must match
+// is_pricer() in supabase/migrations/003_proposals_pricing.sql.
+const PRICING_EMAIL = "itadbidbot@gmail.com";
+
+const PROPOSAL_STATUS = {
+  pending_pricing: { label:"Pending Pricing", color:"#f97316" },
+  review:          { label:"Ready for Review", color:"#eab308" },
+  approved:        { label:"Approved",         color:"#10b981" },
+  sent:            { label:"Sent",             color:"#3b82f6" },
+};
+
+function ProposalStatusBadge({ status }) {
+  const c = PROPOSAL_STATUS[status] || { label:status||"Unknown", color:"#B0B7BC" };
+  return (
+    <span style={{
+      background:`${c.color}20`, border:`1px solid ${c.color}55`, color:c.color,
+      fontSize:"11px", fontWeight:700, padding:"3px 10px", borderRadius:"99px",
+      letterSpacing:"0.03em", whiteSpace:"nowrap"
+    }}>{c.label}</span>
+  );
+}
+
+// "200x ASUS Chromebook C204, 25x Dell Latitude 3120" -> line items Bruce can price
+function parseDevicesToLineItems(text) {
+  if (!text) return [];
+  return text.split(",").map(seg => seg.trim()).filter(Boolean).map(seg => {
+    const m = seg.match(/^(\d+)\s*x\s*(.+)$/i);
+    return m ? { device:m[2].trim(), qty:parseInt(m[1],10)||1, unit_price:0 }
+              : { device:seg, qty:1, unit_price:0 };
+  });
+}
+
+function money(n) {
+  const v = Number(n);
+  return isFinite(v) ? `$${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—";
+}
+
+function BuildProposalView({ currentUser, onDone }) {
   const inputStyle = {
     width:"100%", padding:"9px 12px", background:"#002244",
     border:"1px solid #003875", borderRadius:"8px", color:"#ffffff",
@@ -2543,14 +2581,24 @@ function BuildProposalView({ currentUser }) {
           <CheckCircle size={40} color="#10b981" style={{ marginBottom:"16px" }} />
           <h2 style={{ margin:"0 0 8px", fontSize:"18px", fontWeight:700, color:"#ffffff" }}>Sent to Bruce for Pricing</h2>
           <p style={{ color:"#B0B7BC", fontSize:"13px", lineHeight:"1.6", margin:"0 0 24px" }}>
-            You'll be notified when pricing is ready. You can track this proposal's status from this page once status tracking ships.
+            You'll be notified when pricing is ready. You can track this proposal's status from the Proposals list.
           </p>
-          <button onClick={resetForm} style={{
-            padding:"10px 20px", background:"linear-gradient(135deg,#C60C30,#9a0a26)",
-            border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer"
-          }}>
-            Start Another Proposal
-          </button>
+          <div style={{ display:"flex", gap:"10px", justifyContent:"center" }}>
+            <button onClick={resetForm} style={{
+              padding:"10px 20px", background:"linear-gradient(135deg,#C60C30,#9a0a26)",
+              border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer"
+            }}>
+              Start Another Proposal
+            </button>
+            {onDone && (
+              <button onClick={onDone} style={{
+                padding:"10px 20px", background:"transparent", border:"1px solid #003875",
+                borderRadius:"8px", color:"#B0B7BC", fontSize:"13px", fontWeight:700, cursor:"pointer"
+              }}>
+                View Proposals
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
@@ -2560,6 +2608,11 @@ function BuildProposalView({ currentUser }) {
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
       <WelcomeBanner pageKey="build_proposal" title="Build Proposal" description="Fill in the customer's org and contact info, list the devices, and send it to Bruce for pricing. He'll price it and send it back to you for approval." />
       <div style={{ marginBottom:"24px" }}>
+        {onDone && (
+          <button onClick={onDone} style={{ background:"transparent", border:"none", color:"#B0B7BC", fontSize:"12px", cursor:"pointer", padding:0, marginBottom:"10px" }}>
+            ← Back to Proposals
+          </button>
+        )}
         <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Build Proposal</h1>
         <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Step 1 of 3 — submit the request, Bruce adds pricing, then you approve &amp; send.</p>
       </div>
@@ -2713,6 +2766,402 @@ function BuildProposalView({ currentUser }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// ─── PROPOSALS LIST (Phase 2) ──────────────────────────────────────────────────
+function ProposalsListView({ currentUser, onOpen, onNew }) {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => { load(); }, []);
+
+  async function load() {
+    setLoading(true); setError("");
+    try {
+      if (!window._db) throw new Error("Database connection not ready. Please refresh and try again.");
+      const res = await window._db.from("proposals").select("*").order("created_at", { ascending:false });
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      setRows(res.data || []);
+    } catch(e) {
+      setError(e.message || "Failed to load proposals.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      <WelcomeBanner pageKey="build_proposal" title="Build Proposal" description="Submit a proposal request, Bruce prices it, and you approve it for the customer. Click any row below to open it." />
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"24px" }}>
+        <div>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Build Proposal</h1>
+          <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Track proposals through pricing, review, and approval.</p>
+        </div>
+        <button onClick={onNew} style={{
+          padding:"10px 18px", borderRadius:"10px", background:"linear-gradient(135deg,#C60C30,#9a0a26)",
+          border:"none", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer",
+          display:"flex", alignItems:"center", gap:"8px"
+        }}>
+          <Plus size={14} /> New Proposal
+        </button>
+      </div>
+
+      {loading && <div style={{ color:"#B0B7BC", fontSize:"13px" }}>Loading…</div>}
+      {error && (
+        <div style={{ padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
+          {error}
+        </div>
+      )}
+      {!loading && !error && rows.length === 0 && (
+        <div style={{ color:"#4a6080", fontSize:"13px", padding:"40px 0", textAlign:"center" }}>
+          No proposals yet. Click "New Proposal" to get started.
+        </div>
+      )}
+
+      {!loading && rows.length > 0 && (
+        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", overflow:"hidden" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse" }}>
+            <thead>
+              <tr style={{ borderBottom:"1px solid #002244" }}>
+                {["Organization","Contact","Status","Qualified Value","Submitted By","Submitted"].map(h => (
+                  <th key={h} style={{ textAlign:"left", padding:"12px 16px", fontSize:"11px", color:"#B0B7BC", fontWeight:700, letterSpacing:"0.05em" }}>{h.toUpperCase()}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(r => (
+                <tr key={r.id} onClick={() => onOpen(r.id)} style={{ cursor:"pointer", borderBottom:"1px solid #002244", transition:"background 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#003875"}
+                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  <td style={{ padding:"12px 16px", fontSize:"13px", color:"#ffffff", fontWeight:600 }}>{r.org_name}</td>
+                  <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.contact_name}</td>
+                  <td style={{ padding:"12px 16px" }}><ProposalStatusBadge status={r.status} /></td>
+                  <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC", fontFamily:"monospace" }}>{r.qualified_value != null ? money(r.qualified_value) : "—"}</td>
+                  <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.submitted_by_name || r.submitted_by_email || "—"}</td>
+                  <td style={{ padding:"12px 16px", fontSize:"12px", color:"#4a6080" }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── PROPOSAL EDITOR (Phase 2) ─────────────────────────────────────────────────
+// Spec: docs/proposal-automation/BUILD_PLAN.md — Component 2: Proposal Editor
+function ProposalEditorView({ proposalId, currentUser, onBack }) {
+  const inputStyle = {
+    width:"100%", padding:"8px 10px", background:"#002244",
+    border:"1px solid #003875", borderRadius:"6px", color:"#ffffff",
+    fontSize:"13px", outline:"none", boxSizing:"border-box"
+  };
+  const labelStyle = {
+    fontSize:"11px", color:"#B0B7BC", fontWeight:600,
+    display:"block", marginBottom:"6px", letterSpacing:"0.06em"
+  };
+
+  const [proposal, setProposal] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [lineItems, setLineItems] = useState([]);
+  const [qualifiedValue, setQualifiedValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  const isBruce = ((currentUser && currentUser.email) || "").toLowerCase() === PRICING_EMAIL.toLowerCase();
+  const isSubmitter = !!(proposal && currentUser && proposal.submitted_by === currentUser.id);
+
+  useEffect(() => { load(); }, [proposalId]);
+
+  async function load() {
+    setLoading(true); setLoadError("");
+    try {
+      if (!window._db) throw new Error("Database connection not ready. Please refresh and try again.");
+      const res = await window._db.from("proposals").select("*").eq("id", proposalId).single();
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      setProposal(res.data);
+      const items = (res.data.pricing && res.data.pricing.length) ? res.data.pricing : parseDevicesToLineItems(res.data.devices);
+      setLineItems(items);
+      setQualifiedValue(res.data.qualified_value != null ? String(res.data.qualified_value) : "");
+    } catch(e) {
+      setLoadError(e.message || "Failed to load proposal.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const lineSubtotal = row => (Number(row.qty)||0) * (Number(row.unit_price)||0);
+  const computedTotal = lineItems.reduce((sum, r) => sum + lineSubtotal(r), 0);
+
+  function updateLine(idx, field, value) {
+    setLineItems(items => items.map((it,i) => i===idx ? { ...it, [field]:value } : it));
+  }
+  function addLine() {
+    setLineItems(items => [...items, { device:"", qty:1, unit_price:0 }]);
+  }
+  function removeLine(idx) {
+    setLineItems(items => items.filter((_,i) => i!==idx));
+  }
+
+  const canEditPricing = isBruce && proposal && proposal.status === "pending_pricing";
+  const canApprove = !isBruce && isSubmitter && proposal && proposal.status === "review";
+
+  async function sendBackToRep() {
+    setSaving(true); setSaveError("");
+    try {
+      const payload = {
+        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r) })),
+        qualified_value: qualifiedValue !== "" ? Number(qualifiedValue) : computedTotal,
+        status: "review",
+        priced_at: new Date().toISOString(),
+        priced_by: currentUser.id,
+        priced_by_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
+        priced_by_email: currentUser.email,
+      };
+      const res = await window._db.from("proposals").update(payload).eq("id", proposalId).select().single();
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      setProposal(res.data);
+    } catch(e) {
+      setSaveError(e.message || "Failed to save pricing.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function approveAndSend() {
+    setSaving(true); setSaveError("");
+    try {
+      const payload = {
+        status: "approved",
+        approved_at: new Date().toISOString(),
+        approved_by: currentUser.id,
+        approved_by_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
+        approved_by_email: currentUser.email,
+      };
+      const res = await window._db.from("proposals").update(payload).eq("id", proposalId).select().single();
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      setProposal(res.data);
+    } catch(e) {
+      setSaveError(e.message || "Failed to approve.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return <div style={{ padding:"28px", color:"#B0B7BC", fontSize:"13px" }}>Loading proposal…</div>;
+  }
+  if (loadError || !proposal) {
+    return (
+      <div style={{ padding:"28px" }}>
+        <button onClick={onBack} style={{ background:"transparent", border:"none", color:"#B0B7BC", fontSize:"12px", cursor:"pointer", padding:0, marginBottom:"16px" }}>← Back to Proposals</button>
+        <div style={{ padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
+          {loadError || "Proposal not found."}
+        </div>
+      </div>
+    );
+  }
+
+  const timeline = [];
+  if (proposal.created_at) timeline.push({ who: proposal.submitted_by_name || proposal.submitted_by_email || "Rep", action:"submitted this proposal", at: proposal.created_at });
+  if (proposal.priced_at) timeline.push({ who: proposal.priced_by_name || proposal.priced_by_email || "Bruce", action:`added pricing — qualified value ${money(proposal.qualified_value)}`, at: proposal.priced_at });
+  if (proposal.approved_at) timeline.push({ who: proposal.approved_by_name || proposal.approved_by_email || "Rep", action:"approved and sent to customer", at: proposal.approved_at });
+
+  const sectionStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" };
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      <button onClick={onBack} style={{ background:"transparent", border:"none", color:"#B0B7BC", fontSize:"12px", cursor:"pointer", padding:0, marginBottom:"16px" }}>← Back to Proposals</button>
+
+      <div style={{ display:"flex", alignItems:"center", gap:"12px", marginBottom:"24px" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:0 }}>{proposal.org_name}</h1>
+        <ProposalStatusBadge status={proposal.status} />
+      </div>
+
+      <div style={{ maxWidth:"720px" }}>
+        <div style={sectionStyle}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Request Details</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px", marginBottom:"14px" }}>
+            <div>
+              <label style={labelStyle}>ORGANIZATION</label>
+              <div style={{ color:"#ffffff", fontSize:"13px" }}>{proposal.org_name}</div>
+              <div style={{ color:"#B0B7BC", fontSize:"12px", marginTop:"2px" }}>
+                {[proposal.address, proposal.city, proposal.state, proposal.zip].filter(Boolean).join(", ") || "—"}
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>CONTACT</label>
+              <div style={{ color:"#ffffff", fontSize:"13px" }}>{proposal.contact_name}</div>
+              <div style={{ color:"#B0B7BC", fontSize:"12px", marginTop:"2px" }}>
+                {[proposal.contact_email, proposal.contact_phone, proposal.contact_title].filter(Boolean).join(" · ") || "—"}
+              </div>
+            </div>
+          </div>
+          <div style={{ marginBottom:"14px" }}>
+            <label style={labelStyle}>DEVICES</label>
+            <div style={{ color:"#ffffff", fontSize:"13px", lineHeight:"1.6" }}>{proposal.devices}</div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px" }}>
+            <div>
+              <label style={labelStyle}>PICKUP DATE</label>
+              <div style={{ color:"#B0B7BC", fontSize:"13px" }}>{proposal.pickup_date || "—"}</div>
+            </div>
+            <div>
+              <label style={labelStyle}>NOTES</label>
+              <div style={{ color:"#B0B7BC", fontSize:"13px" }}>{proposal.notes || "—"}</div>
+            </div>
+          </div>
+          <div style={{ marginTop:"14px", paddingTop:"14px", borderTop:"1px solid #002244", fontSize:"12px", color:"#4a6080" }}>
+            Submitted by {proposal.submitted_by_name || proposal.submitted_by_email || "—"} on {proposal.created_at ? new Date(proposal.created_at).toLocaleString() : "—"}
+          </div>
+        </div>
+
+        <div style={sectionStyle}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Pricing</div>
+
+          {proposal.status === "pending_pricing" && !isBruce && (
+            <div style={{ color:"#B0B7BC", fontSize:"13px" }}>Waiting on Bruce to add pricing.</div>
+          )}
+
+          {(canEditPricing || proposal.status !== "pending_pricing") && (
+            <>
+              <table style={{ width:"100%", borderCollapse:"collapse", marginBottom:"14px" }}>
+                <thead>
+                  <tr style={{ borderBottom:"1px solid #002244" }}>
+                    {["Device","Qty","Unit Price","Subtotal",""].map(h => (
+                      <th key={h} style={{ textAlign:"left", padding:"8px", fontSize:"10px", color:"#B0B7BC", fontWeight:700, letterSpacing:"0.05em" }}>{h.toUpperCase()}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {lineItems.map((row, idx) => (
+                    <tr key={idx} style={{ borderBottom:"1px solid #002244" }}>
+                      <td style={{ padding:"6px 8px" }}>
+                        {canEditPricing
+                          ? <input value={row.device} onChange={e=>updateLine(idx,"device",e.target.value)} style={inputStyle} />
+                          : <span style={{ color:"#ffffff", fontSize:"13px" }}>{row.device}</span>}
+                      </td>
+                      <td style={{ padding:"6px 8px", width:"80px" }}>
+                        {canEditPricing
+                          ? <input type="number" min="0" value={row.qty} onChange={e=>updateLine(idx,"qty",e.target.value)} style={inputStyle} />
+                          : <span style={{ color:"#B0B7BC", fontSize:"13px" }}>{row.qty}</span>}
+                      </td>
+                      <td style={{ padding:"6px 8px", width:"110px" }}>
+                        {canEditPricing
+                          ? <input type="number" min="0" step="0.01" value={row.unit_price} onChange={e=>updateLine(idx,"unit_price",e.target.value)} style={inputStyle} />
+                          : <span style={{ color:"#B0B7BC", fontSize:"13px" }}>{money(row.unit_price)}</span>}
+                      </td>
+                      <td style={{ padding:"6px 8px", width:"110px", color:"#ffffff", fontSize:"13px", fontFamily:"monospace" }}>
+                        {money(row.subtotal != null ? row.subtotal : lineSubtotal(row))}
+                      </td>
+                      <td style={{ padding:"6px 8px", width:"32px" }}>
+                        {canEditPricing && (
+                          <button onClick={()=>removeLine(idx)} style={{ background:"transparent", border:"none", color:"#C60C30", cursor:"pointer" }}>
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {canEditPricing && (
+                <button onClick={addLine} style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 12px", borderRadius:"6px", cursor:"pointer", marginBottom:"16px", display:"flex", alignItems:"center", gap:"6px" }}>
+                  <Plus size={12} /> Add Device
+                </button>
+              )}
+
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"12px 0", borderTop:"1px solid #002244" }}>
+                <label style={{ ...labelStyle, marginBottom:0 }}>TOTAL QUALIFIED VALUE</label>
+                {canEditPricing
+                  ? <input type="number" min="0" step="0.01" value={qualifiedValue} onChange={e=>setQualifiedValue(e.target.value)} placeholder={String(computedTotal.toFixed(2))} style={{ ...inputStyle, width:"160px", fontWeight:700 }} />
+                  : <span style={{ color:"#10b981", fontSize:"16px", fontWeight:700, fontFamily:"monospace" }}>{money(proposal.qualified_value)}</span>}
+              </div>
+            </>
+          )}
+
+          {saveError && (
+            <div style={{ marginTop:"14px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
+              {saveError}
+            </div>
+          )}
+
+          {canEditPricing && (
+            <button onClick={sendBackToRep} disabled={saving} style={{
+              marginTop:"16px", width:"100%", padding:"12px 20px", borderRadius:"10px",
+              background: saving ? "#003366" : "linear-gradient(135deg,#C60C30,#9a0a26)",
+              border: saving ? "1px solid #003875" : "none",
+              color: saving ? "#4a6080" : "#ffffff", fontSize:"13px", fontWeight:700,
+              cursor: saving ? "not-allowed" : "pointer"
+            }}>
+              {saving ? "Sending…" : "Send Back to Rep"}
+            </button>
+          )}
+
+          {proposal.status === "review" && isBruce && (
+            <div style={{ marginTop:"14px", fontSize:"12px", color:"#4a6080" }}>Sent back to the rep for approval.</div>
+          )}
+
+          {canApprove && (
+            <button onClick={approveAndSend} disabled={saving} style={{
+              marginTop:"16px", width:"100%", padding:"12px 20px", borderRadius:"10px",
+              background: saving ? "#003366" : "linear-gradient(135deg,#10b981,#0d9488)",
+              border: saving ? "1px solid #003875" : "none",
+              color: saving ? "#4a6080" : "#ffffff", fontSize:"13px", fontWeight:700,
+              cursor: saving ? "not-allowed" : "pointer"
+            }}>
+              {saving ? "Approving…" : "Approve & Send to Customer"}
+            </button>
+          )}
+
+          {proposal.status === "approved" && (
+            <div style={{ marginTop:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.3)", color:"#10b981", fontSize:"13px" }}>
+              Approved. PDF generation and the customer email go out automatically once Phase 3 (email notifications) ships — for now, send the approved pricing to the customer manually.
+            </div>
+          )}
+        </div>
+
+        {timeline.length > 0 && (
+          <div style={sectionStyle}>
+            <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Activity</div>
+            {timeline.map((t, i) => (
+              <div key={i} style={{ display:"flex", gap:"10px", marginBottom: i < timeline.length-1 ? "12px" : 0 }}>
+                <div style={{ width:"6px", height:"6px", borderRadius:"50%", background:"#C60C30", marginTop:"6px", flexShrink:0 }} />
+                <div>
+                  <div style={{ color:"#ffffff", fontSize:"13px" }}><strong>{t.who}</strong> {t.action}</div>
+                  <div style={{ color:"#4a6080", fontSize:"11px", marginTop:"2px" }}>{new Date(t.at).toLocaleString()}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── BUILD PROPOSAL PAGE (router: list / new / edit) ───────────────────────────
+function BuildProposalPage({ currentUser }) {
+  const [mode, setMode] = useState("list");
+  const [activeId, setActiveId] = useState(null);
+
+  if (mode === "new") {
+    return <BuildProposalView currentUser={currentUser} onDone={() => setMode("list")} />;
+  }
+  if (mode === "edit") {
+    return <ProposalEditorView proposalId={activeId} currentUser={currentUser} onBack={() => setMode("list")} />;
+  }
+  return (
+    <ProposalsListView
+      currentUser={currentUser}
+      onNew={() => setMode("new")}
+      onOpen={(id) => { setActiveId(id); setMode("edit"); }}
+    />
   );
 }
 
@@ -6736,7 +7185,7 @@ function App() {
           {page==="dashboard"  && <DashboardView onNavigate={setPage} onRunScan={runScan} scanning={scanning} />}
           {page==="hot_leads"  && <HotLeadsView stateFilter={stateFilter} />}
           {page==="all_bids"   && <HotLeadsView stateFilter={stateFilter} allBids />}
-          {page==="build_proposal" && <BuildProposalView currentUser={currentUser} />}
+          {page==="build_proposal" && <BuildProposalPage currentUser={currentUser} />}
           {page==="sources"    && <SourcesView />}
           {page==="keywords"   && <KeywordsView />}
           {page==="rfp_bids"   && <RFPBidsView />}
