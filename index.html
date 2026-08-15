@@ -128,6 +128,7 @@ const Upload = ({size=16,...p}) => <svg {...svgProps(size,p)}><polyline points="
 const X = ({size=16,...p}) => <svg {...svgProps(size,p)}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
 const Zap = ({size=16,...p}) => <svg {...svgProps(size,p)}><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
 const Mail = ({size=16,...p}) => <svg {...svgProps(size,p)}><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>;
+const DollarSign = ({size=16,...p}) => <svg {...svgProps(size,p)}><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>;
 
 
 
@@ -542,6 +543,7 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose, user
     { key:"dashboard", label:"Dashboard",         icon:Home,  adminOnly:false },
     { key:"hot_leads", label:"Daily Hot Leads",   icon:Flame, adminOnly:false },
     { key:"all_bids",  label:"All Bids",          icon:List,  adminOnly:false },
+    { key:"build_proposal", label:"Build Proposal", icon:DollarSign, adminOnly:false },
     { key:"sources",   label:"Bid Scan Sources",  icon:Globe, adminOnly:false },
     { key:"keywords",  label:"Keywords & Scoring",icon:Key,   adminOnly:false },
   ].filter(n => isAdmin || !n.adminOnly);
@@ -2325,12 +2327,403 @@ function ScanHistoryView() {
   );
 }
 
+// ─── BUILD PROPOSAL (Phase 1: Form) ───────────────────────────────────────────
+// Spec: docs/proposal-automation/BUILD_PLAN.md — Component 1: Proposal Form
+function BuildProposalView({ currentUser }) {
+  const inputStyle = {
+    width:"100%", padding:"9px 12px", background:"#002244",
+    border:"1px solid #003875", borderRadius:"8px", color:"#ffffff",
+    fontSize:"13px", outline:"none", boxSizing:"border-box"
+  };
+  const labelStyle = {
+    fontSize:"11px", color:"#B0B7BC", fontWeight:600,
+    display:"block", marginBottom:"6px", letterSpacing:"0.06em"
+  };
+  const fieldStyle = { marginBottom:"16px", position:"relative" };
+  const hintStyle = { fontSize:"11px", color:"#4a6080", marginTop:"4px", lineHeight:"1.5" };
+
+  const [orgQuery, setOrgQuery] = useState("");
+  const [orgResults, setOrgResults] = useState([]);
+  const [orgSearching, setOrgSearching] = useState(false);
+  const [orgError, setOrgError] = useState("");
+  const [selectedOrg, setSelectedOrg] = useState(null);
+
+  const [contactQuery, setContactQuery] = useState("");
+  const [contactResults, setContactResults] = useState([]);
+  const [contactSearching, setContactSearching] = useState(false);
+  const [contactError, setContactError] = useState("");
+  const [selectedContact, setSelectedContact] = useState(null);
+
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip] = useState("");
+  const [contactEmail, setContactEmail] = useState("");
+  const [contactPhone, setContactPhone] = useState("");
+  const [contactTitle, setContactTitle] = useState("");
+
+  const [devices, setDevices] = useState("");
+  const [pickupDate, setPickupDate] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const orgDebounce = useRef(null);
+  const contactDebounce = useRef(null);
+
+  function hubspotToken() {
+    try { return (localStorage.getItem("HUBSPOT_API_KEY") || "").trim(); } catch(e) { return ""; }
+  }
+
+  async function hubspotFetch(path, options) {
+    const token = hubspotToken();
+    if (!token) throw new Error("No HubSpot API key set. Add one in Settings → API Keys.");
+    const res = await fetch(`https://api.hubapi.com${path}`, {
+      ...options,
+      headers: { "Content-Type":"application/json", "Authorization":`Bearer ${token}`, ...((options && options.headers) || {}) }
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(()=>"");
+      throw new Error(`HubSpot API error ${res.status}: ${body.slice(0,200) || res.statusText}`);
+    }
+    return res.json();
+  }
+
+  async function searchOrgs(q) {
+    setOrgSearching(true); setOrgError("");
+    try {
+      const data = await hubspotFetch("/crm/v3/objects/companies/search", {
+        method:"POST",
+        body: JSON.stringify({ query:q, properties:["name","address","city","state","zip","phone"], limit:6 })
+      });
+      setOrgResults(data.results || []);
+    } catch(e) {
+      setOrgError(e.message);
+      setOrgResults([]);
+    } finally {
+      setOrgSearching(false);
+    }
+  }
+
+  async function searchContacts(q) {
+    setContactSearching(true); setContactError("");
+    try {
+      let results = [];
+      if (selectedOrg) {
+        const assoc = await hubspotFetch(`/crm/v3/objects/companies/${selectedOrg.id}/associations/contacts`);
+        const ids = (assoc.results || []).map(r => r.id || r.toObjectId).filter(Boolean);
+        if (ids.length) {
+          const batch = await hubspotFetch("/crm/v3/objects/contacts/batch/read", {
+            method:"POST",
+            body: JSON.stringify({ properties:["firstname","lastname","email","phone","jobtitle"], inputs: ids.map(id => ({ id })) })
+          });
+          const ql = q.toLowerCase();
+          results = (batch.results || []).filter(c => {
+            const full = `${(c.properties||{}).firstname||""} ${(c.properties||{}).lastname||""}`.toLowerCase();
+            return full.includes(ql);
+          });
+        }
+      }
+      if (!results.length) {
+        const data = await hubspotFetch("/crm/v3/objects/contacts/search", {
+          method:"POST",
+          body: JSON.stringify({ query:q, properties:["firstname","lastname","email","phone","jobtitle"], limit:6 })
+        });
+        results = data.results || [];
+      }
+      setContactResults(results);
+    } catch(e) {
+      setContactError(e.message);
+      setContactResults([]);
+    } finally {
+      setContactSearching(false);
+    }
+  }
+
+  useEffect(() => {
+    clearTimeout(orgDebounce.current);
+    if (selectedOrg && orgQuery === selectedOrg.name) return;
+    if (!orgQuery || orgQuery.trim().length < 2) { setOrgResults([]); return; }
+    orgDebounce.current = setTimeout(() => searchOrgs(orgQuery.trim()), 350);
+    return () => clearTimeout(orgDebounce.current);
+  }, [orgQuery]);
+
+  useEffect(() => {
+    clearTimeout(contactDebounce.current);
+    if (selectedContact && contactQuery === selectedContact.name) return;
+    if (!contactQuery || contactQuery.trim().length < 2) { setContactResults([]); return; }
+    contactDebounce.current = setTimeout(() => searchContacts(contactQuery.trim()), 350);
+    return () => clearTimeout(contactDebounce.current);
+  }, [contactQuery, selectedOrg]);
+
+  function pickOrg(org) {
+    const p = org.properties || {};
+    setSelectedOrg({ id: org.id, name: p.name || orgQuery });
+    setOrgQuery(p.name || "");
+    setOrgResults([]);
+    setAddress(p.address || "");
+    setCity(p.city || "");
+    setState(p.state || "");
+    setZip(p.zip || "");
+  }
+
+  function pickContact(contact) {
+    const p = contact.properties || {};
+    const full = `${p.firstname||""} ${p.lastname||""}`.trim();
+    setSelectedContact({ id: contact.id, name: full });
+    setContactQuery(full);
+    setContactResults([]);
+    setContactEmail(p.email || "");
+    setContactPhone(p.phone || "");
+    setContactTitle(p.jobtitle || "");
+  }
+
+  function resetForm() {
+    setOrgQuery(""); setSelectedOrg(null); setOrgResults([]); setOrgError("");
+    setContactQuery(""); setSelectedContact(null); setContactResults([]); setContactError("");
+    setAddress(""); setCity(""); setState(""); setZip("");
+    setContactEmail(""); setContactPhone(""); setContactTitle("");
+    setDevices(""); setPickupDate(""); setNotes("");
+    setSubmitted(false); setSubmitError("");
+  }
+
+  const canSubmit = orgQuery.trim() && contactQuery.trim() && devices.trim() && !submitting;
+
+  async function handleSubmit() {
+    if (!canSubmit) return;
+    setSubmitting(true); setSubmitError("");
+    const record = {
+      org_name: orgQuery.trim(),
+      org_hubspot_id: selectedOrg ? selectedOrg.id : null,
+      address: address.trim() || null,
+      city: city.trim() || null,
+      state: state.trim() || null,
+      zip: zip.trim() || null,
+      contact_name: contactQuery.trim(),
+      contact_hubspot_id: selectedContact ? selectedContact.id : null,
+      contact_email: contactEmail.trim() || null,
+      contact_phone: contactPhone.trim() || null,
+      contact_title: contactTitle.trim() || null,
+      devices: devices.trim(),
+      pickup_date: pickupDate || null,
+      notes: notes.trim() || null,
+      status: "pending_pricing",
+      submitted_by: (currentUser && currentUser.id) || null,
+      submitted_by_name: (currentUser && (currentUser.user_metadata && currentUser.user_metadata.full_name)) || (currentUser && currentUser.email) || null,
+      submitted_by_email: (currentUser && currentUser.email) || null,
+    };
+    try {
+      if (!window._db) throw new Error("Database connection not ready. Please refresh and try again.");
+      const res = await window._db.from("proposals").insert([record]).select();
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      setSubmitted(true);
+    } catch(e) {
+      setSubmitError(e.message || "Failed to submit proposal.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const dropdownStyle = {
+    position:"absolute", top:"calc(100% + 4px)", left:0, right:0, zIndex:20,
+    background:"#002244", border:"1px solid #003875", borderRadius:"8px",
+    maxHeight:"220px", overflowY:"auto", boxShadow:"0 8px 24px rgba(0,0,0,0.4)"
+  };
+  const dropdownItemStyle = {
+    padding:"9px 12px", cursor:"pointer", fontSize:"13px", color:"#ffffff",
+    borderBottom:"1px solid #003366"
+  };
+
+  if (submitted) {
+    return (
+      <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+        <div style={{ maxWidth:"560px", margin:"60px auto 0", textAlign:"center", background:"#003366", border:"1px solid #003875", borderRadius:"16px", padding:"40px 32px" }}>
+          <CheckCircle size={40} color="#10b981" style={{ marginBottom:"16px" }} />
+          <h2 style={{ margin:"0 0 8px", fontSize:"18px", fontWeight:700, color:"#ffffff" }}>Sent to Bruce for Pricing</h2>
+          <p style={{ color:"#B0B7BC", fontSize:"13px", lineHeight:"1.6", margin:"0 0 24px" }}>
+            You'll be notified when pricing is ready. You can track this proposal's status from this page once status tracking ships.
+          </p>
+          <button onClick={resetForm} style={{
+            padding:"10px 20px", background:"linear-gradient(135deg,#C60C30,#9a0a26)",
+            border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer"
+          }}>
+            Start Another Proposal
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      <WelcomeBanner pageKey="build_proposal" title="Build Proposal" description="Fill in the customer's org and contact info, list the devices, and send it to Bruce for pricing. He'll price it and send it back to you for approval." />
+      <div style={{ marginBottom:"24px" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Build Proposal</h1>
+        <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Step 1 of 3 — submit the request, Bruce adds pricing, then you approve &amp; send.</p>
+      </div>
+
+      <div style={{ maxWidth:"640px" }}>
+        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Organization</div>
+
+          <div style={fieldStyle}>
+            <label style={labelStyle}>ORGANIZATION NAME *</label>
+            <input
+              value={orgQuery}
+              onChange={e => { setOrgQuery(e.target.value); setSelectedOrg(null); }}
+              placeholder="Search HubSpot companies or type a name…"
+              style={inputStyle}
+              autoComplete="off"
+            />
+            {orgSearching && <div style={hintStyle}>Searching HubSpot…</div>}
+            {orgError && <div style={{ ...hintStyle, color:"#C60C30" }}>{orgError}</div>}
+            {orgResults.length > 0 && (
+              <div style={dropdownStyle}>
+                {orgResults.map(org => (
+                  <div key={org.id} style={dropdownItemStyle}
+                    onClick={() => pickOrg(org)}
+                    onMouseEnter={e => e.currentTarget.style.background = "#003366"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <div style={{ fontWeight:600 }}>{(org.properties||{}).name || "Unnamed"}</div>
+                    <div style={{ fontSize:"11px", color:"#B0B7BC" }}>
+                      {[ (org.properties||{}).city, (org.properties||{}).state ].filter(Boolean).join(", ")}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:"14px", marginBottom:"14px" }}>
+            <div>
+              <label style={labelStyle}>ADDRESS</label>
+              <input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Auto-filled from organization" style={inputStyle} />
+            </div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"14px" }}>
+            <div>
+              <label style={labelStyle}>CITY</label>
+              <input value={city} onChange={e=>setCity(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>STATE</label>
+              <input value={state} onChange={e=>setState(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>ZIP</label>
+              <input value={zip} onChange={e=>setZip(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+        </div>
+
+        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Contact</div>
+
+          <div style={fieldStyle}>
+            <label style={labelStyle}>CONTACT NAME *</label>
+            <input
+              value={contactQuery}
+              onChange={e => { setContactQuery(e.target.value); setSelectedContact(null); }}
+              placeholder="Search HubSpot contacts or type a name…"
+              style={inputStyle}
+              autoComplete="off"
+            />
+            {contactSearching && <div style={hintStyle}>Searching HubSpot…</div>}
+            {contactError && <div style={{ ...hintStyle, color:"#C60C30" }}>{contactError}</div>}
+            {contactResults.length > 0 && (
+              <div style={dropdownStyle}>
+                {contactResults.map(c => (
+                  <div key={c.id} style={dropdownItemStyle}
+                    onClick={() => pickContact(c)}
+                    onMouseEnter={e => e.currentTarget.style.background = "#003366"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <div style={{ fontWeight:600 }}>{(c.properties||{}).firstname} {(c.properties||{}).lastname}</div>
+                    <div style={{ fontSize:"11px", color:"#B0B7BC" }}>{(c.properties||{}).email || ""}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px", marginBottom:"14px" }}>
+            <div>
+              <label style={labelStyle}>EMAIL</label>
+              <input value={contactEmail} onChange={e=>setContactEmail(e.target.value)} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>PHONE</label>
+              <input value={contactPhone} onChange={e=>setContactPhone(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+          <div>
+            <label style={labelStyle}>TITLE</label>
+            <input value={contactTitle} onChange={e=>setContactTitle(e.target.value)} style={inputStyle} />
+          </div>
+        </div>
+
+        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Devices &amp; Notes</div>
+
+          <div style={fieldStyle}>
+            <label style={labelStyle}>DEVICES *</label>
+            <textarea
+              value={devices}
+              onChange={e=>setDevices(e.target.value)}
+              placeholder="e.g. 200x ASUS Chromebook C204, 25x Dell Latitude 3120, 200x HP ProBook x360"
+              rows={4}
+              style={{ ...inputStyle, resize:"vertical", fontFamily:"inherit" }}
+            />
+          </div>
+          <div style={fieldStyle}>
+            <label style={labelStyle}>PICKUP DATE (OPTIONAL)</label>
+            <input type="date" value={pickupDate} onChange={e=>setPickupDate(e.target.value)} style={{ ...inputStyle, colorScheme:"dark" }} />
+          </div>
+          <div>
+            <label style={labelStyle}>NOTES (OPTIONAL)</label>
+            <textarea
+              value={notes}
+              onChange={e=>setNotes(e.target.value)}
+              placeholder="Anything Bruce should know before pricing this…"
+              rows={3}
+              style={{ ...inputStyle, resize:"vertical", fontFamily:"inherit" }}
+            />
+          </div>
+        </div>
+
+        {submitError && (
+          <div style={{ marginBottom:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
+            {submitError}
+          </div>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={!canSubmit}
+          style={{
+            width:"100%", padding:"13px 20px", borderRadius:"10px",
+            background: canSubmit ? "linear-gradient(135deg,#C60C30,#9a0a26)" : "#003366",
+            border: canSubmit ? "none" : "1px solid #003875",
+            color: canSubmit ? "#ffffff" : "#4a6080",
+            fontSize:"14px", fontWeight:700, cursor: canSubmit ? "pointer" : "not-allowed",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:"8px"
+          }}>
+          {submitting ? <><RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }} /> Sending…</> : "Send to Bruce for Pricing"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SettingsView() {
   const [emailEnabled, setEmailEnabled] = useState(true);
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem("GEMINI_API_KEY") || "");
   const [geminiSaved, setGeminiSaved] = useState(false);
   const [apolloKey, setApolloKey] = useState(() => localStorage.getItem("APOLLO_API_KEY") || "");
   const [apolloSaved, setApolloSaved] = useState(false);
+  const [hubspotKey, setHubspotKey] = useState(() => localStorage.getItem("HUBSPOT_API_KEY") || "");
+  const [hubspotSaved, setHubspotSaved] = useState(false);
 
   function saveGeminiKey() {
     localStorage.setItem("GEMINI_API_KEY", geminiKey.trim());
@@ -2342,6 +2735,12 @@ function SettingsView() {
     localStorage.setItem("APOLLO_API_KEY", apolloKey.trim());
     setApolloSaved(true);
     setTimeout(() => setApolloSaved(false), 2000);
+  }
+
+  function saveHubspotKey() {
+    localStorage.setItem("HUBSPOT_API_KEY", hubspotKey.trim());
+    setHubspotSaved(true);
+    setTimeout(() => setHubspotSaved(false), 2000);
   }
 
   return (
@@ -2443,6 +2842,27 @@ function SettingsView() {
             </div>
             <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>
               Used for 🚀 Apollo Enrich in RFP School Watch. Searches are free. Reveal email = 1 credit. Stored under <code style={{ color:"#B0B7BC" }}>APOLLO_API_KEY</code>.
+            </div>
+          </div>
+
+          {/* HubSpot API key */}
+          <div style={{ marginBottom:"20px" }}>
+            <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"5px", fontWeight:600, letterSpacing:"0.06em" }}>HUBSPOT PRIVATE APP TOKEN</label>
+            <div style={{ display:"flex", gap:"8px", alignItems:"center" }}>
+              <input
+                type="password"
+                value={hubspotKey}
+                onChange={e => setHubspotKey(e.target.value)}
+                placeholder="Paste your HubSpot private app access token…"
+                style={{ flex:1, padding:"8px 12px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", color:"#ffffff", fontSize:"13px", outline:"none", boxSizing:"border-box" }}
+              />
+              <button onClick={saveHubspotKey}
+                style={{ padding:"8px 16px", background: hubspotSaved ? "#10b981" : "linear-gradient(135deg,#f97316,#ea580c)", border:"none", borderRadius:"8px", color:"#ffffff", fontSize:"13px", fontWeight:700, cursor:"pointer", whiteSpace:"nowrap", transition:"background 0.2s" }}>
+                {hubspotSaved ? "✓ Saved" : "Save Key"}
+              </button>
+            </div>
+            <div style={{ fontSize:"11px", color:"#4a6080", marginTop:"4px" }}>
+              Used for organization/contact search in 💵 Build Proposal. Needs CRM read scopes (crm.objects.companies.read, crm.objects.contacts.read). Stored in localStorage under <code style={{ color:"#B0B7BC" }}>HUBSPOT_API_KEY</code>. Never sent anywhere except HubSpot's API.
             </div>
           </div>
 
@@ -6316,6 +6736,7 @@ function App() {
           {page==="dashboard"  && <DashboardView onNavigate={setPage} onRunScan={runScan} scanning={scanning} />}
           {page==="hot_leads"  && <HotLeadsView stateFilter={stateFilter} />}
           {page==="all_bids"   && <HotLeadsView stateFilter={stateFilter} allBids />}
+          {page==="build_proposal" && <BuildProposalView currentUser={currentUser} />}
           {page==="sources"    && <SourcesView />}
           {page==="keywords"   && <KeywordsView />}
           {page==="rfp_bids"   && <RFPBidsView />}
