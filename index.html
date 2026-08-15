@@ -2525,7 +2525,7 @@ function BuildProposalView({ currentUser, onDone }) {
 
   function pickOrg(org) {
     const p = org.properties || {};
-    setSelectedOrg({ id: org.id, name: p.name || orgQuery });
+    setSelectedOrg({ id: org.id, name: p.name || orgQuery, url: org.url || null });
     setOrgQuery(p.name || "");
     setOrgResults([]);
     setAddress(p.address || "");
@@ -2568,6 +2568,7 @@ function BuildProposalView({ currentUser, onDone }) {
     const record = {
       org_name: orgQuery.trim(),
       org_hubspot_id: selectedOrg ? selectedOrg.id : null,
+      org_hubspot_url: selectedOrg ? selectedOrg.url : null,
       address: address.trim() || null,
       city: city.trim() || null,
       state: state.trim() || null,
@@ -2879,10 +2880,27 @@ function BuildProposalView({ currentUser, onDone }) {
 }
 
 // ─── PROPOSALS LIST (Phase 2) ──────────────────────────────────────────────────
+// Whichever of submit/price/approve happened most recently on a proposal.
+function lastAction(row) {
+  if (row.approved_at) return { label:"Approved", by: row.approved_by_name || row.approved_by_email, at: row.approved_at };
+  if (row.priced_at) return { label:"Priced", by: row.priced_by_name || row.priced_by_email, at: row.priced_at };
+  return { label:"Submitted", by: row.submitted_by_name || row.submitted_by_email, at: row.created_at };
+}
+
+const DATE_FILTERS = {
+  all: () => true,
+  "7d": at => (Date.now() - new Date(at).getTime()) <= 7*24*60*60*1000,
+  "30d": at => (Date.now() - new Date(at).getTime()) <= 30*24*60*60*1000,
+  "90d": at => (Date.now() - new Date(at).getTime()) <= 90*24*60*60*1000,
+};
+
 function ProposalsListView({ currentUser, onOpen, onNew }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [repFilter, setRepFilter] = useState("all");
+  const [dateFilter, setDateFilter] = useState("all");
 
   useEffect(() => { load(); }, []);
 
@@ -2899,6 +2917,20 @@ function ProposalsListView({ currentUser, onOpen, onNew }) {
       setLoading(false);
     }
   }
+
+  const reps = Array.from(new Set(rows.map(r => r.submitted_by_name || r.submitted_by_email).filter(Boolean))).sort();
+
+  const filteredRows = rows.filter(r => {
+    if (statusFilter !== "all" && r.status !== statusFilter) return false;
+    if (repFilter !== "all" && (r.submitted_by_name || r.submitted_by_email) !== repFilter) return false;
+    if (dateFilter !== "all" && !DATE_FILTERS[dateFilter](r.created_at)) return false;
+    return true;
+  });
+
+  const selectStyle = {
+    padding:"7px 10px", background:"#002244", border:"1px solid #003875", borderRadius:"8px",
+    color:"#ffffff", fontSize:"12px", outline:"none"
+  };
 
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
@@ -2917,6 +2949,31 @@ function ProposalsListView({ currentUser, onOpen, onNew }) {
         </button>
       </div>
 
+      {!loading && !error && rows.length > 0 && (
+        <div style={{ display:"flex", gap:"10px", marginBottom:"16px", flexWrap:"wrap" }}>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={selectStyle}>
+            <option value="all">All Statuses</option>
+            {Object.entries(PROPOSAL_STATUS).map(([key, s]) => <option key={key} value={key}>{s.label}</option>)}
+          </select>
+          <select value={repFilter} onChange={e => setRepFilter(e.target.value)} style={selectStyle}>
+            <option value="all">All Reps</option>
+            {reps.map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
+          <select value={dateFilter} onChange={e => setDateFilter(e.target.value)} style={selectStyle}>
+            <option value="all">All Time</option>
+            <option value="7d">Last 7 Days</option>
+            <option value="30d">Last 30 Days</option>
+            <option value="90d">Last 90 Days</option>
+          </select>
+          {(statusFilter !== "all" || repFilter !== "all" || dateFilter !== "all") && (
+            <button onClick={() => { setStatusFilter("all"); setRepFilter("all"); setDateFilter("all"); }}
+              style={{ background:"transparent", border:"none", color:"#B0B7BC", fontSize:"12px", cursor:"pointer", textDecoration:"underline" }}>
+              Clear filters
+            </button>
+          )}
+        </div>
+      )}
+
       {loading && <div style={{ color:"#B0B7BC", fontSize:"13px" }}>Loading…</div>}
       {error && (
         <div style={{ padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
@@ -2928,30 +2985,46 @@ function ProposalsListView({ currentUser, onOpen, onNew }) {
           No proposals yet. Click "New Proposal" to get started.
         </div>
       )}
+      {!loading && !error && rows.length > 0 && filteredRows.length === 0 && (
+        <div style={{ color:"#4a6080", fontSize:"13px", padding:"40px 0", textAlign:"center" }}>
+          No proposals match these filters.
+        </div>
+      )}
 
-      {!loading && rows.length > 0 && (
+      {!loading && filteredRows.length > 0 && (
         <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", overflow:"hidden" }}>
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead>
               <tr style={{ borderBottom:"1px solid #002244" }}>
-                {["Organization","Contact","Status","Qualified Value","Submitted By","Submitted"].map(h => (
+                {["Organization","Contact","Status","Qualified Value","Submitted By","Last Action","Submitted"].map(h => (
                   <th key={h} style={{ textAlign:"left", padding:"12px 16px", fontSize:"11px", color:"#B0B7BC", fontWeight:700, letterSpacing:"0.05em" }}>{h.toUpperCase()}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map(r => (
-                <tr key={r.id} onClick={() => onOpen(r.id)} style={{ cursor:"pointer", borderBottom:"1px solid #002244", transition:"background 0.15s" }}
-                  onMouseEnter={e => e.currentTarget.style.background = "#003875"}
-                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <td style={{ padding:"12px 16px", fontSize:"13px", color:"#ffffff", fontWeight:600 }}>{r.org_name}</td>
-                  <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.contact_name}</td>
-                  <td style={{ padding:"12px 16px" }}><ProposalStatusBadge status={r.status} /></td>
-                  <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC", fontFamily:"monospace" }}>{r.qualified_value != null ? money(r.qualified_value) : "—"}</td>
-                  <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.submitted_by_name || r.submitted_by_email || "—"}</td>
-                  <td style={{ padding:"12px 16px", fontSize:"12px", color:"#4a6080" }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</td>
-                </tr>
-              ))}
+              {filteredRows.map(r => {
+                const la = lastAction(r);
+                return (
+                  <tr key={r.id} onClick={() => onOpen(r.id)} style={{ cursor:"pointer", borderBottom:"1px solid #002244", transition:"background 0.15s" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#003875"}
+                    onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                    <td style={{ padding:"12px 16px", fontSize:"13px", color:"#ffffff", fontWeight:600 }}>
+                      {r.org_hubspot_url
+                        ? <a href={r.org_hubspot_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{ color:"#ffffff", textDecoration:"none" }} onMouseEnter={e=>e.currentTarget.style.textDecoration="underline"} onMouseLeave={e=>e.currentTarget.style.textDecoration="none"}>{r.org_name}</a>
+                        : r.org_name}
+                    </td>
+                    <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.contact_name}</td>
+                    <td style={{ padding:"12px 16px" }}><ProposalStatusBadge status={r.status} /></td>
+                    <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC", fontFamily:"monospace" }}>{r.qualified_value != null ? money(r.qualified_value) : "—"}</td>
+                    <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.submitted_by_name || r.submitted_by_email || "—"}</td>
+                    <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC" }}>
+                      {la.label} by {la.by || "—"}<br/>
+                      <span style={{ color:"#4a6080" }}>{la.at ? new Date(la.at).toLocaleDateString() : "—"}</span>
+                    </td>
+                    <td style={{ padding:"12px 16px", fontSize:"12px", color:"#4a6080" }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
