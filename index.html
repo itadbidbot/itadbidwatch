@@ -4372,7 +4372,7 @@ function SpreadsheetReportView({ reportType, title }) {
       {loading ? (
         <div style={{ color:"#B0B7BC", fontSize:"13px", padding:"12px" }}>Loading…</div>
       ) : (
-        <div style={{ overflowX:"auto", border:"1px solid #003875", borderRadius:"10px" }}>
+        <div style={{ overflow:"auto", maxHeight:"65vh", border:"1px solid #003875", borderRadius:"10px" }}>
           <table style={{ borderCollapse:"collapse", width:"100%", minWidth: columns.length * 160 + "px" }}>
             <thead>
               <tr style={{ background:"#002244" }}>
@@ -4380,7 +4380,7 @@ function SpreadsheetReportView({ reportType, title }) {
                   const active = sortColumn === c;
                   return (
                     <th key={c} onClick={() => handleSort(c)}
-                      style={{ textAlign:"left", padding:"10px 14px", fontSize:"11px", color: active ? "#ffffff" : "#B0B7BC", fontWeight:700, borderBottom:"1px solid #003875", whiteSpace:"nowrap", cursor:"pointer", userSelect:"none" }}>
+                      style={{ textAlign:"left", padding:"10px 14px", fontSize:"11px", color: active ? "#ffffff" : "#B0B7BC", fontWeight:700, borderBottom:"1px solid #003875", whiteSpace:"nowrap", cursor:"pointer", userSelect:"none", position:"sticky", top:0, background:"#002244", zIndex:2 }}>
                       <span style={{ display:"inline-flex", alignItems:"center", gap:"4px" }}>
                         {c}
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
