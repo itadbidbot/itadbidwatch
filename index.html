@@ -4118,11 +4118,58 @@ function ReportsBuildView() {
 }
 
 // ─── REPORTS: EXECUTIVE SUMMARY (Word report) ───────────────────────────────
+function ReportSectionBlock({ section }) {
+  const cardStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"22px 24px", marginBottom:"16px" };
+  function renderTable(t, key) {
+    if (!t || !t.rows) return null;
+    return (
+      <div key={key} style={{ overflowX:"auto", marginTop:"12px", marginBottom:"4px", border:"1px solid #002244", borderRadius:"8px" }}>
+        <table style={{ borderCollapse:"collapse", width:"100%" }}>
+          <thead>
+            <tr style={{ background:"#002244" }}>
+              {t.headers.map((h,i) => <th key={i} style={{ textAlign:"left", padding:"8px 12px", fontSize:"11px", color:"#B0B7BC", fontWeight:700, whiteSpace:"nowrap" }}>{h}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {t.rows.length === 0 && (
+              <tr><td colSpan={t.headers.length} style={{ padding:"14px", textAlign:"center", color:"#4a6080", fontSize:"12px" }}>No rows to display.</td></tr>
+            )}
+            {t.rows.map((row, ri) => (
+              <tr key={ri} style={{ borderTop:"1px solid #002244" }}>
+                {row.map((v,ci) => <td key={ci} style={{ padding:"8px 12px", fontSize:"12px", color:"#ffffff" }}>{v === null || v === undefined ? "" : String(v)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return (
+    <div style={cardStyle}>
+      <h2 style={{ fontSize:"16px", fontWeight:700, color:"#ffffff", margin:"0 0 12px" }}>{section.title}</h2>
+      {(section.paragraphs || []).map((p, i) => (
+        <p key={i} style={{ color:"#B0B7BC", fontSize:"13px", lineHeight:"1.7", margin: i < section.paragraphs.length-1 ? "0 0 10px" : 0 }}>{p}</p>
+      ))}
+      {(section.bullets || []).length > 0 && (
+        <ul style={{ margin:"10px 0 0", paddingLeft:"20px" }}>
+          {section.bullets.map((b, i) => (
+            <li key={i} style={{ color:"#B0B7BC", fontSize:"13px", lineHeight:"1.7", marginBottom:"6px" }}>{b}</li>
+          ))}
+        </ul>
+      )}
+      {renderTable(section.table, "t1")}
+      {renderTable(section.second_table, "t2")}
+    </div>
+  );
+}
+
 function ReportsExecutiveView() {
   const [runs, setRuns] = React.useState([]);
   const [selectedRunId, setSelectedRunId] = React.useState(null);
   const [detail, setDetail] = React.useState(null);
+  const [sections, setSections] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const [qaOpen, setQaOpen] = React.useState(false);
 
   React.useEffect(() => {
     fetch(`${SALES_REPORTS_API}/runs?rep_id=${SALES_REPORTS_REP_ID}&limit=20`)
@@ -4138,22 +4185,25 @@ function ReportsExecutiveView() {
   React.useEffect(() => {
     if (!selectedRunId) return;
     setLoading(true);
-    fetch(`${SALES_REPORTS_API}/runs/${selectedRunId}`)
-      .then(r => r.json())
-      .then(data => { setDetail(data); setLoading(false); })
-      .catch(() => setLoading(false));
+    Promise.all([
+      fetch(`${SALES_REPORTS_API}/runs/${selectedRunId}`).then(r => r.json()),
+      fetch(`${SALES_REPORTS_API}/runs/${selectedRunId}/sections`).then(r => r.ok ? r.json() : null),
+    ]).then(([detailData, sectionsData]) => {
+      setDetail(detailData);
+      setSections(sectionsData);
+      setLoading(false);
+    }).catch(() => setLoading(false));
   }, [selectedRunId]);
 
-  const cardStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" };
+  const cardStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"18px 24px", marginBottom:"16px" };
   const checks = detail?.qa?.checks || [];
   const passCount = checks.filter(c => c.status === "PASS").length;
   const warnCount = checks.filter(c => c.status === "WARN").length;
   const failCount = checks.filter(c => c.status === "FAIL").length;
-  const wordOutput = detail?.outputs?.find(o => o.file_type === "weekly_word");
 
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1, width:"100%" }}>
-      <WelcomeBanner pageKey="reports_executive" title="Executive Summary" description="The generated 21-section weekly Word report. Pick a run below, review the QA summary, and download the full document." />
+      <WelcomeBanner pageKey="reports_executive" title="Executive Summary" description="The generated 21-section weekly Word report, rendered here in full. Pick a run below to switch weeks, or download the .docx/.xlsx files." />
       <div style={{ marginBottom:"24px" }}>
         <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Executive Summary</h1>
         <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Weekly Word report — 21 canonical sections</p>
@@ -4166,63 +4216,66 @@ function ReportsExecutiveView() {
       )}
 
       {runs.length > 0 && (
-        <div style={{ maxWidth:"720px" }}>
-          <div style={cardStyle}>
-            <label style={{ fontSize:"12px", fontWeight:600, color:"#B0B7BC", marginBottom:"6px", display:"block" }}>Run</label>
-            <select value={selectedRunId || ""} onChange={e => setSelectedRunId(e.target.value)}
-              style={{ width:"100%", padding:"9px 12px", borderRadius:"8px", border:"1px solid #003875", background:"#002244", color:"#ffffff", fontSize:"13px" }}>
-              {runs.map(r => (
-                <option key={r.run_id} value={r.run_id}>
-                  {r.period_start} – {r.period_end} (v{r.version}, {r.status}, {new Date(r.created_at).toLocaleDateString()})
-                </option>
-              ))}
-            </select>
+        <div style={{ maxWidth:"900px" }}>
+          <div style={{ ...cardStyle, display:"flex", gap:"12px", alignItems:"center", flexWrap:"wrap" }}>
+            <div style={{ flex:1, minWidth:"260px" }}>
+              <label style={{ fontSize:"11px", fontWeight:600, color:"#B0B7BC", marginBottom:"4px", display:"block" }}>Run</label>
+              <select value={selectedRunId || ""} onChange={e => setSelectedRunId(e.target.value)}
+                style={{ width:"100%", padding:"9px 12px", borderRadius:"8px", border:"1px solid #003875", background:"#002244", color:"#ffffff", fontSize:"13px" }}>
+                {runs.map(r => (
+                  <option key={r.run_id} value={r.run_id}>
+                    {r.period_start} – {r.period_end} (v{r.version}, {r.status}, {new Date(r.created_at).toLocaleDateString()})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {(detail?.outputs || []).map(o => (
+              <a key={o.file_type} href={o.download_url || "#"} target="_blank" rel="noreferrer"
+                style={{
+                  display:"flex", alignItems:"center", gap:"6px", padding:"9px 14px",
+                  borderRadius:"8px", background: o.download_url ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)",
+                  border: o.download_url ? "1px solid rgba(16,185,129,0.25)" : "1px solid #003875",
+                  color: o.download_url ? "#10b981" : "#4a6080", textDecoration:"none", fontSize:"11px", fontWeight:600,
+                  pointerEvents: o.download_url ? "auto" : "none", whiteSpace:"nowrap"
+                }}>
+                <FileText size={13} /> {o.file_name}
+              </a>
+            ))}
           </div>
 
           {loading && <div style={{ color:"#B0B7BC", fontSize:"13px", padding:"12px" }}>Loading…</div>}
 
           {!loading && detail && (
-            <>
-              <div style={cardStyle}>
-                <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"12px" }}>QA Summary</div>
-                <div style={{ display:"flex", gap:"12px", marginBottom:"12px" }}>
-                  <div style={{ background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.3)", borderRadius:"8px", padding:"10px 16px", flex:1, textAlign:"center" }}>
-                    <div style={{ color:"#10b981", fontSize:"20px", fontWeight:700 }}>{passCount}</div>
-                    <div style={{ color:"#B0B7BC", fontSize:"11px" }}>Pass</div>
-                  </div>
-                  <div style={{ background:"rgba(234,179,8,0.1)", border:"1px solid rgba(234,179,8,0.3)", borderRadius:"8px", padding:"10px 16px", flex:1, textAlign:"center" }}>
-                    <div style={{ color:"#eab308", fontSize:"20px", fontWeight:700 }}>{warnCount}</div>
-                    <div style={{ color:"#B0B7BC", fontSize:"11px" }}>Warn</div>
-                  </div>
-                  <div style={{ background:"rgba(198,12,48,0.1)", border:"1px solid rgba(198,12,48,0.3)", borderRadius:"8px", padding:"10px 16px", flex:1, textAlign:"center" }}>
-                    <div style={{ color:"#C60C30", fontSize:"20px", fontWeight:700 }}>{failCount}</div>
-                    <div style={{ color:"#B0B7BC", fontSize:"11px" }}>Fail</div>
-                  </div>
+            <div style={cardStyle}>
+              <div onClick={() => setQaOpen(o => !o)} style={{ display:"flex", alignItems:"center", gap:"12px", cursor:"pointer" }}>
+                <div style={{ fontWeight:700, color:"#ffffff", fontSize:"13px" }}>QA Summary</div>
+                <div style={{ display:"flex", gap:"8px", fontSize:"11px" }}>
+                  <span style={{ color:"#10b981" }}>{passCount} pass</span>
+                  {warnCount > 0 && <span style={{ color:"#eab308" }}>{warnCount} warn</span>}
+                  {failCount > 0 && <span style={{ color:"#ff8080" }}>{failCount} fail</span>}
                 </div>
-                {checks.filter(c => c.status !== "PASS").map(c => (
-                  <div key={c.check_number} style={{ fontSize:"11px", color: c.status==="FAIL" ? "#ff8080" : "#eab308", padding:"4px 0", borderTop:"1px solid #002244" }}>
-                    <strong>#{c.check_number} {c.name}:</strong> {c.detail}
-                  </div>
-                ))}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                  style={{ marginLeft:"auto", color:"#4a6080", transform: qaOpen ? "rotate(180deg)" : "none", transition:"transform 0.2s" }}>
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
               </div>
+              {qaOpen && (
+                <div style={{ marginTop:"12px" }}>
+                  {checks.map(c => (
+                    <div key={c.check_number} style={{ fontSize:"11px", color: c.status==="FAIL" ? "#ff8080" : c.status==="WARN" ? "#eab308" : "#4a6080", padding:"4px 0", borderTop:"1px solid #002244" }}>
+                      <strong>#{c.check_number} {c.name} — {c.status}:</strong> {c.detail}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-              <div style={cardStyle}>
-                <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"12px" }}>Generated Files</div>
-                {(detail.outputs || []).map(o => (
-                  <a key={o.file_type} href={o.download_url || "#"} target="_blank" rel="noreferrer"
-                    style={{
-                      display:"flex", alignItems:"center", gap:"8px", padding:"10px 14px", marginBottom:"8px",
-                      borderRadius:"8px", background: o.download_url ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)",
-                      border: o.download_url ? "1px solid rgba(16,185,129,0.25)" : "1px solid #003875",
-                      color: o.download_url ? "#10b981" : "#4a6080", textDecoration:"none", fontSize:"12px", fontWeight:600,
-                      pointerEvents: o.download_url ? "auto" : "none"
-                    }}>
-                    <FileText size={14} />
-                    {o.file_name}{!o.download_url && " (link unavailable)"}
-                  </a>
-                ))}
-              </div>
-            </>
+          {!loading && sections && sections.map((s, i) => <ReportSectionBlock key={i} section={s} />)}
+          {!loading && detail && !sections && (
+            <div style={cardStyle}>
+              <div style={{ color:"#B0B7BC", fontSize:"13px" }}>No section content stored for this run yet — download the .docx above instead.</div>
+            </div>
           )}
         </div>
       )}
