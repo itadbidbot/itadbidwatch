@@ -4298,6 +4298,8 @@ function SpreadsheetReportView({ reportType, title }) {
   const [rows, setRows] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [sortColumn, setSortColumn] = React.useState(null);
+  const [sortDirection, setSortDirection] = React.useState("asc");
 
   const columns = REPORTS_COLUMNS[reportType];
 
@@ -4311,9 +4313,34 @@ function SpreadsheetReportView({ reportType, title }) {
 
   React.useEffect(load, [reportType]);
 
+  function handleSort(col) {
+    if (sortColumn === col) {
+      setSortDirection(d => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(col);
+      setSortDirection("asc");
+    }
+  }
+
   const filtered = search.trim()
     ? rows.filter(r => (r["Company Name"] || "").toLowerCase().includes(search.trim().toLowerCase()))
     : rows;
+
+  const sorted = React.useMemo(() => {
+    if (!sortColumn) return filtered;
+    const dir = sortDirection === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const av = a[sortColumn], bv = b[sortColumn];
+      const aEmpty = av === null || av === undefined || av === "";
+      const bEmpty = bv === null || bv === undefined || bv === "";
+      if (aEmpty && bEmpty) return 0;
+      if (aEmpty) return 1;
+      if (bEmpty) return -1;
+      const an = Number(av), bn = Number(bv);
+      if (av !== "" && bv !== "" && !isNaN(an) && !isNaN(bn)) return (an - bn) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  }, [filtered, sortColumn, sortDirection]);
 
   const cardStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"16px", marginBottom:"16px" };
   const inputStyle = { padding:"8px 12px", borderRadius:"8px", border:"1px solid #003875", background:"#002244", color:"#ffffff", fontSize:"12px" };
@@ -4349,13 +4376,25 @@ function SpreadsheetReportView({ reportType, title }) {
           <table style={{ borderCollapse:"collapse", width:"100%", minWidth: columns.length * 160 + "px" }}>
             <thead>
               <tr style={{ background:"#002244" }}>
-                {columns.map(c => (
-                  <th key={c} style={{ textAlign:"left", padding:"10px 14px", fontSize:"11px", color:"#B0B7BC", fontWeight:700, borderBottom:"1px solid #003875", whiteSpace:"nowrap" }}>{c}</th>
-                ))}
+                {columns.map(c => {
+                  const active = sortColumn === c;
+                  return (
+                    <th key={c} onClick={() => handleSort(c)}
+                      style={{ textAlign:"left", padding:"10px 14px", fontSize:"11px", color: active ? "#ffffff" : "#B0B7BC", fontWeight:700, borderBottom:"1px solid #003875", whiteSpace:"nowrap", cursor:"pointer", userSelect:"none" }}>
+                      <span style={{ display:"inline-flex", alignItems:"center", gap:"4px" }}>
+                        {c}
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                          style={{ opacity: active ? 1 : 0.3, transform: active && sortDirection === "desc" ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>
+                          <polyline points="18 15 12 9 6 15"/>
+                        </svg>
+                      </span>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row, i) => (
+              {sorted.map((row, i) => (
                 <tr key={i} style={{ borderBottom:"1px solid #002244" }}>
                   {columns.map(c => (
                     <td key={c} style={{ padding:"10px 14px", fontSize:"12px", color:"#ffffff", maxWidth:"320px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace: c.includes("Notes")||c==="What's going on in GA"||c==="Contact Intelligence" ? "normal" : "nowrap" }}>
@@ -4364,7 +4403,7 @@ function SpreadsheetReportView({ reportType, title }) {
                   ))}
                 </tr>
               ))}
-              {filtered.length === 0 && (
+              {sorted.length === 0 && (
                 <tr><td colSpan={columns.length} style={{ padding:"20px", textAlign:"center", color:"#4a6080", fontSize:"12px" }}>No rows for this range.</td></tr>
               )}
             </tbody>
