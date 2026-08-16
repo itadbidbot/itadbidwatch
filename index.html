@@ -3098,7 +3098,11 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
   const [draftError, setDraftError] = useState("");
   const [sendingCustomer, setSendingCustomer] = useState(false);
   const [customerSendError, setCustomerSendError] = useState("");
+  const [revising, setRevising] = useState(false);
+  const [cloning, setCloning] = useState(false);
+  const [cloneError, setCloneError] = useState("");
   const draftEditableRef = useRef(null);
+  const originalPricingRef = useRef(null); // Bruce's pricing as loaded, for the rep price-increase check
 
   const isBruce = ((currentUser && currentUser.email) || "").toLowerCase() === PRICING_EMAIL.toLowerCase();
   const isSubmitter = !!(proposal && currentUser && proposal.submitted_by === currentUser.id);
@@ -3120,6 +3124,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         : seedItems.map(d => ({ device: d.product, qty: d.qty, unit_price: 0, condition: d.condition || "" }));
       setLineItems(items);
       setQualifiedValue(res.data.qualified_value != null ? String(res.data.qualified_value) : "");
+      originalPricingRef.current = (res.data.pricing && res.data.pricing.length) ? res.data.pricing : null;
     } catch(e) {
       setLoadError(e.message || "Failed to load proposal.");
     } finally {
@@ -3140,8 +3145,65 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
     setLineItems(items => items.filter((_,i) => i!==idx));
   }
 
-  const canEditPricing = isBruce && proposal && proposal.status === "pending_pricing";
-  const canApprove = !isBruce && isSubmitter && proposal && proposal.status === "review";
+  const SEND_LIMIT = 5;
+  const atSendLimit = !!(proposal && proposal.send_count >= SEND_LIMIT);
+  const canBrucePrice = isBruce && proposal && proposal.status === "pending_pricing";
+  const canRepAdjustPricing = !isBruce && isSubmitter && proposal &&
+    (proposal.status === "review" || (proposal.status === "sent" && revising));
+  const canEditPricing = canBrucePrice || canRepAdjustPricing;
+  const canApprove = canRepAdjustPricing;
+  const canRevise = !isBruce && isSubmitter && proposal && proposal.status === "sent" && !revising && !atSendLimit;
+
+  // Per-line unit-price check (not the total): a rep bumping a single
+  // device's price >20% above what Bruce quoted is a common typo/fraud
+  // pattern (e.g. $49 -> $490). Only applies to the rep's own adjustments
+  // during review -- Bruce has no "original" to compare against while
+  // pricing it the first time.
+  const PRICE_INCREASE_THRESHOLD = 1.2;
+  const priceWarnings = canRepAdjustPricing && originalPricingRef.current
+    ? lineItems.map((row, idx) => {
+        const orig = originalPricingRef.current[idx];
+        const origPrice = orig ? Number(orig.unit_price) || 0 : 0;
+        const newPrice = Number(row.unit_price) || 0;
+        if (origPrice > 0 && newPrice > origPrice * PRICE_INCREASE_THRESHOLD) {
+          return { index: idx, origPrice, newPrice, pct: Math.round((newPrice / origPrice - 1) * 100) };
+        }
+        return null;
+      }).filter(Boolean)
+    : [];
+
+  function resetFlaggedPrices() {
+    setLineItems(items => items.map((it, i) => {
+      const w = priceWarnings.find(w => w.index === i);
+      return w ? { ...it, unit_price: w.origPrice } : it;
+    }));
+  }
+
+  async function sendBackToBruceForReapproval() {
+    setSaving(true); setSaveError("");
+    try {
+      const payload = {
+        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"" })),
+        qualified_value: qualifiedValue !== "" ? Number(qualifiedValue) : computedTotal,
+        status: "pending_pricing",
+      };
+      const res = await window._db.from("proposals").update(payload).eq("id", proposalId).select().single();
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      setProposal(res.data);
+      sendProposalEmail("bruce_pricing_request", PRICING_EMAIL, {
+        rep_name: res.data.submitted_by_name, org_name: res.data.org_name,
+        address: res.data.address, city: res.data.city, state: res.data.state, zip: res.data.zip,
+        contact_name: res.data.contact_name, contact_email: res.data.contact_email, contact_phone: res.data.contact_phone,
+        devices: res.data.devices, pickup_date: res.data.pickup_date,
+        notes: `Rep flagged a price change for re-approval — see updated pricing in ITAD Bid Watch.`,
+        proposal_url: BUILD_PROPOSAL_URL(),
+      });
+    } catch(e) {
+      setSaveError(e.message || "Failed to send back to Bruce.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function sendBackToRep() {
     setSaving(true); setSaveError("");
@@ -3176,13 +3238,22 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
       org_name: proposal.org_name, address: proposal.address, city: proposal.city, state: proposal.state, zip: proposal.zip,
       contact_name: proposal.contact_name, contact_email: proposal.contact_email,
       contact_phone: proposal.contact_phone, contact_title: proposal.contact_title,
-      qualified_value: proposal.qualified_value, pricing: proposal.pricing || [],
+      qualified_value: qualifiedValue !== "" ? Number(qualifiedValue) : computedTotal,
+      pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"" })),
       rep_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
       rep_email: currentUser.email,
     };
   }
 
   async function openDraft() {
+    if (priceWarnings.length > 0) {
+      setDraftError("Resolve the flagged price change(s) below before sending — send back to Bruce or reset to his numbers.");
+      return;
+    }
+    if (atSendLimit) {
+      setDraftError(`This proposal has already been sent ${SEND_LIMIT} times — clone it into a new proposal to continue.`);
+      return;
+    }
     setDraftLoading(true); setDraftError(""); setCustomerSendError("");
     try {
       const res = await fetch(`${PROPOSALS_EMAIL_API}/proposals/draft`, {
@@ -3220,6 +3291,8 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         approved_by_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
         approved_by_email: currentUser.email,
         pdf_url: pdfUrl,
+        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"" })),
+        qualified_value: qualifiedValue !== "" ? Number(qualifiedValue) : computedTotal,
       };
       let res = await window._db.from("proposals").update(approvePayload).eq("id", proposalId).select().single();
       if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
@@ -3233,7 +3306,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         }, pdfUrl);
 
         res = await window._db.from("proposals")
-          .update({ status: "sent", customer_sent_at: new Date().toISOString() })
+          .update({ status: "sent", customer_sent_at: new Date().toISOString(), send_count: (proposal.send_count || 0) + 1 })
           .eq("id", proposalId).select().single();
         if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
         setProposal(res.data);
@@ -3251,10 +3324,42 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
       }
 
       setDraftMode(false);
+      setRevising(false);
     } catch(e) {
       setCustomerSendError(e.message || "Failed to send to the customer. The proposal is still approved — you can retry from here.");
     } finally {
       setSendingCustomer(false);
+    }
+  }
+
+  async function cloneAsNewProposal() {
+    setCloning(true); setCloneError("");
+    try {
+      const record = {
+        org_name: proposal.org_name, org_hubspot_id: proposal.org_hubspot_id, org_hubspot_url: proposal.org_hubspot_url,
+        address: proposal.address, city: proposal.city, state: proposal.state, zip: proposal.zip,
+        contact_name: proposal.contact_name, contact_hubspot_id: proposal.contact_hubspot_id,
+        contact_email: proposal.contact_email, contact_phone: proposal.contact_phone, contact_title: proposal.contact_title,
+        devices: proposal.devices, device_items: proposal.device_items, pickup_date: null, notes: proposal.notes,
+        status: "pending_pricing",
+        submitted_by: currentUser.id,
+        submitted_by_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
+        submitted_by_email: currentUser.email,
+      };
+      const res = await window._db.from("proposals").insert([record]).select().single();
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      sendProposalEmail("bruce_pricing_request", PRICING_EMAIL, {
+        rep_name: record.submitted_by_name, org_name: record.org_name,
+        address: record.address, city: record.city, state: record.state, zip: record.zip,
+        contact_name: record.contact_name, contact_email: record.contact_email, contact_phone: record.contact_phone,
+        devices: record.devices, notes: `Cloned from a previous proposal that reached its ${SEND_LIMIT}-send limit.`,
+        proposal_url: BUILD_PROPOSAL_URL(),
+      });
+      onBack();
+    } catch(e) {
+      setCloneError(e.message || "Failed to clone this proposal.");
+    } finally {
+      setCloning(false);
     }
   }
 
@@ -3372,7 +3477,19 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         </div>
 
         <div style={sectionStyle}>
-          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Pricing</div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
+            <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px" }}>Pricing</div>
+            {revising && (
+              <button onClick={() => setRevising(false)} style={{ background:"transparent", border:"none", color:"#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
+                Cancel revision
+              </button>
+            )}
+          </div>
+          {revising && (
+            <div style={{ marginBottom:"14px", padding:"8px 12px", borderRadius:"8px", background:"rgba(249,115,22,0.08)", border:"1px solid rgba(249,115,22,0.3)", color:"#f97316", fontSize:"12px" }}>
+              Revising an already-sent proposal (send {(proposal.send_count||0)+1} of {SEND_LIMIT}). Adjust pricing below, then review and resend.
+            </div>
+          )}
 
           {proposal.status === "pending_pricing" && !isBruce && (
             <div style={{ color:"#B0B7BC", fontSize:"13px" }}>Waiting on Bruce to add pricing.</div>
@@ -3405,9 +3522,18 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                           : <span style={{ color:"#B0B7BC", fontSize:"13px" }}>{row.qty}</span>}
                       </td>
                       <td style={{ padding:"6px 8px", width:"110px" }}>
-                        {canEditPricing
-                          ? <input type="number" min="0" step="0.01" value={row.unit_price} onChange={e=>updateLine(idx,"unit_price",e.target.value)} style={inputStyle} />
-                          : <span style={{ color:"#B0B7BC", fontSize:"13px" }}>{money(row.unit_price)}</span>}
+                        {(() => {
+                          const warning = priceWarnings.find(w => w.index === idx);
+                          return canEditPricing
+                            ? <input type="number" min="0" step="0.01" value={row.unit_price} onChange={e=>updateLine(idx,"unit_price",e.target.value)}
+                                style={{ ...inputStyle, borderColor: warning ? "#f97316" : inputStyle.border, boxShadow: warning ? "0 0 0 1px #f97316" : "none" }} />
+                            : <span style={{ color:"#B0B7BC", fontSize:"13px" }}>{money(row.unit_price)}</span>;
+                        })()}
+                        {priceWarnings.find(w => w.index === idx) && (
+                          <div style={{ fontSize:"10px", color:"#f97316", marginTop:"3px" }}>
+                            +{priceWarnings.find(w => w.index === idx).pct}% vs Bruce's ${priceWarnings.find(w => w.index === idx).origPrice.toFixed(2)}
+                          </div>
+                        )}
                       </td>
                       <td style={{ padding:"6px 8px", width:"110px", color:"#ffffff", fontSize:"13px", fontFamily:"monospace" }}>
                         {money(row.subtotal != null ? row.subtotal : lineSubtotal(row))}
@@ -3436,6 +3562,29 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                   ? <input type="number" min="0" step="0.01" value={qualifiedValue} onChange={e=>setQualifiedValue(e.target.value)} placeholder={String(computedTotal.toFixed(2))} style={{ ...inputStyle, width:"160px", fontWeight:700 }} />
                   : <span style={{ color:"#10b981", fontSize:"16px", fontWeight:700, fontFamily:"monospace" }}>{money(proposal.qualified_value)}</span>}
               </div>
+
+              {priceWarnings.length > 0 && (
+                <div style={{ marginTop:"6px", padding:"12px 14px", borderRadius:"8px", background:"rgba(249,115,22,0.08)", border:"1px solid rgba(249,115,22,0.3)" }}>
+                  <div style={{ color:"#f97316", fontSize:"13px", fontWeight:600, marginBottom:"8px" }}>
+                    {priceWarnings.length} price{priceWarnings.length===1?"":"s"} flagged — {priceWarnings.length===1?"it's":"they're"} more than 20% above what Bruce quoted. Resolve before sending.
+                  </div>
+                  <div style={{ display:"flex", gap:"8px" }}>
+                    <button onClick={sendBackToBruceForReapproval} disabled={saving} style={{
+                      flex:1, padding:"9px 14px", borderRadius:"8px", background:"transparent",
+                      border:"1px solid #f97316", color:"#f97316", fontSize:"12px", fontWeight:700,
+                      cursor: saving ? "not-allowed" : "pointer"
+                    }}>
+                      Send Back to Bruce for Re-Approval
+                    </button>
+                    <button onClick={resetFlaggedPrices} style={{
+                      flex:1, padding:"9px 14px", borderRadius:"8px", background:"transparent",
+                      border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", fontWeight:700, cursor:"pointer"
+                    }}>
+                      Reset to Bruce's Prices
+                    </button>
+                  </div>
+                </div>
+              )}
             </>
           )}
 
@@ -3445,7 +3594,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
             </div>
           )}
 
-          {canEditPricing && (
+          {canBrucePrice && (
             <button onClick={sendBackToRep} disabled={saving} style={{
               marginTop:"16px", width:"100%", padding:"12px 20px", borderRadius:"10px",
               background: saving ? "#003366" : "linear-gradient(135deg,#C60C30,#9a0a26)",
@@ -3467,7 +3616,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
             </div>
           )}
 
-          {canApprove && !draftMode && (
+          {canApprove && !draftMode && priceWarnings.length === 0 && (
             <button onClick={openDraft} disabled={draftLoading} style={{
               marginTop:"16px", width:"100%", padding:"12px 20px", borderRadius:"10px",
               background: draftLoading ? "#003366" : "linear-gradient(135deg,#10b981,#0d9488)",
@@ -3540,10 +3689,43 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
             </div>
           )}
 
-          {proposal.status === "sent" && (
+          {proposal.status === "sent" && !revising && (
             <div style={{ marginTop:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.3)", color:"#10b981", fontSize:"13px" }}>
-              Sent to {proposal.contact_email} on {proposal.customer_sent_at ? new Date(proposal.customer_sent_at).toLocaleString() : "—"}.
+              Sent to {proposal.contact_email} on {proposal.customer_sent_at ? new Date(proposal.customer_sent_at).toLocaleString() : "—"}
+              {" "}(send {proposal.send_count || 1} of {SEND_LIMIT}).
               {proposal.pdf_url && <> <a href={proposal.pdf_url} target="_blank" rel="noreferrer" style={{ color:"#10b981" }}>View PDF</a></>}
+            </div>
+          )}
+
+          {canRevise && (
+            <button onClick={() => setRevising(true)} style={{
+              marginTop:"10px", width:"100%", padding:"10px 20px", borderRadius:"10px",
+              background:"transparent", border:"1px solid #003875", color:"#B0B7BC",
+              fontSize:"13px", fontWeight:700, cursor:"pointer"
+            }}>
+              Revise & Resend
+            </button>
+          )}
+
+          {proposal.status === "sent" && !revising && atSendLimit && (
+            <div style={{ marginTop:"10px" }}>
+              <div style={{ padding:"10px 16px", borderRadius:"8px", background:"rgba(249,115,22,0.08)", border:"1px solid rgba(249,115,22,0.3)", color:"#f97316", fontSize:"13px", marginBottom:"10px" }}>
+                This proposal has reached its {SEND_LIMIT}-send limit. Clone it to keep revising for this customer.
+              </div>
+              {cloneError && (
+                <div style={{ marginBottom:"10px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
+                  {cloneError}
+                </div>
+              )}
+              <button onClick={cloneAsNewProposal} disabled={cloning} style={{
+                width:"100%", padding:"12px 20px", borderRadius:"10px",
+                background: cloning ? "#003366" : "linear-gradient(135deg,#C60C30,#9a0a26)",
+                border: cloning ? "1px solid #003875" : "none",
+                color: cloning ? "#4a6080" : "#ffffff", fontSize:"13px", fontWeight:700,
+                cursor: cloning ? "not-allowed" : "pointer"
+              }}>
+                {cloning ? "Cloning…" : "Clone as New Proposal"}
+              </button>
             </div>
           )}
         </div>
