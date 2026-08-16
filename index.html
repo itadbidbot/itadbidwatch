@@ -2932,6 +2932,18 @@ function ProposalsListView({ currentUser, onOpen, onNew }) {
     }
   }
 
+  async function updatePickupDate(proposalId, newDate) {
+    const prevRows = rows;
+    setRows(rs => rs.map(r => r.id === proposalId ? { ...r, pickup_date: newDate } : r));
+    try {
+      const res = await window._db.from("proposals").update({ pickup_date: newDate }).eq("id", proposalId);
+      if (res.error) throw new Error(res.error.message);
+    } catch(e) {
+      console.warn("Failed to update pickup date:", e.message);
+      setRows(prevRows);
+    }
+  }
+
   const reps = Array.from(new Set(rows.map(r => r.submitted_by_name || r.submitted_by_email).filter(Boolean))).sort();
 
   const filteredRows = rows.filter(r => {
@@ -3010,7 +3022,7 @@ function ProposalsListView({ currentUser, onOpen, onNew }) {
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead>
               <tr style={{ borderBottom:"1px solid #002244" }}>
-                {["Organization","Contact","Status","Qualified Value","Submitted By","Last Action","Submitted"].map(h => (
+                {["Organization","Contact","Status","Qualified Value","Pick Up Date","Submitted By","Last Action","Submitted"].map(h => (
                   <th key={h} style={{ textAlign:"left", padding:"12px 16px", fontSize:"11px", color:"#B0B7BC", fontWeight:700, letterSpacing:"0.05em" }}>{h.toUpperCase()}</th>
                 ))}
               </tr>
@@ -3030,6 +3042,18 @@ function ProposalsListView({ currentUser, onOpen, onNew }) {
                     <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.contact_name}</td>
                     <td style={{ padding:"12px 16px" }}><ProposalStatusBadge status={r.status} /></td>
                     <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC", fontFamily:"monospace" }}>{r.qualified_value != null ? money(r.qualified_value) : "—"}</td>
+                    <td style={{ padding:"8px 16px" }} onClick={e => e.stopPropagation()}>
+                      <input
+                        type="date"
+                        value={r.pickup_date || ""}
+                        onChange={e => updatePickupDate(r.id, e.target.value || null)}
+                        style={{
+                          background:"#002244", border:"1px solid #003875", borderRadius:"6px",
+                          color: r.pickup_date ? "#ffffff" : "#B0B7BC", fontSize:"12px", padding:"5px 6px",
+                          colorScheme:"dark"
+                        }}
+                      />
+                    </td>
                     <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.submitted_by_name || r.submitted_by_email || "—"}</td>
                     <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC" }}>
                       {la.label} by {la.by || "—"}<br/>
