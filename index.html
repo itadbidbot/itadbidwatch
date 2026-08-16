@@ -2358,6 +2358,20 @@ async function sendProposalEmail(type, to, fields) {
 
 const BUILD_PROPOSAL_URL = () => `${window.location.origin}${window.location.pathname}#build_proposal`;
 
+// Not fire-and-forget: this is the customer-facing email, so the caller
+// needs to know if it actually went out (and be able to retry).
+async function sendCustomerProposalEmail(to, fields, pdfUrl) {
+  const res = await fetch(`${PROPOSALS_EMAIL_API}/notify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "customer_proposal", to, fields, pdfUrl })
+  });
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok || data.status === "error") {
+    throw new Error(data.message || `Customer email failed (${res.status})`);
+  }
+}
+
 const PROPOSAL_STATUS = {
   pending_pricing: { label:"Pending Pricing", color:"#f97316" },
   review:          { label:"Ready for Review", color:"#eab308" },
@@ -3054,6 +3068,14 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  const [draftMode, setDraftMode] = useState(false);
+  const [draftHtml, setDraftHtml] = useState("");
+  const [draftLoading, setDraftLoading] = useState(false);
+  const [draftError, setDraftError] = useState("");
+  const [sendingCustomer, setSendingCustomer] = useState(false);
+  const [customerSendError, setCustomerSendError] = useState("");
+  const draftEditableRef = useRef(null);
+
   const isBruce = ((currentUser && currentUser.email) || "").toLowerCase() === PRICING_EMAIL.toLowerCase();
   const isSubmitter = !!(proposal && currentUser && proposal.submitted_by === currentUser.id);
 
@@ -3125,20 +3147,74 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
     }
   }
 
-  async function approveAndSend() {
-    setSaving(true); setSaveError("");
+  function proposalDraftFields() {
+    return {
+      org_name: proposal.org_name, address: proposal.address, city: proposal.city, state: proposal.state, zip: proposal.zip,
+      contact_name: proposal.contact_name, contact_email: proposal.contact_email,
+      contact_phone: proposal.contact_phone, contact_title: proposal.contact_title,
+      qualified_value: proposal.qualified_value, pricing: proposal.pricing || [],
+      rep_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
+      rep_email: currentUser.email,
+    };
+  }
+
+  async function openDraft() {
+    setDraftLoading(true); setDraftError(""); setCustomerSendError("");
     try {
-      const payload = {
+      const res = await fetch(`${PROPOSALS_EMAIL_API}/proposals/draft`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fields: proposalDraftFields() })
+      });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok || data.status === "error") throw new Error(data.message || `Failed to build draft (${res.status})`);
+      setDraftHtml(data.html);
+      setDraftMode(true);
+    } catch(e) {
+      setDraftError(e.message || "Failed to load the proposal draft.");
+    } finally {
+      setDraftLoading(false);
+    }
+  }
+
+  async function sendToCustomer() {
+    setSendingCustomer(true); setCustomerSendError("");
+    try {
+      const finalHtml = draftEditableRef.current ? draftEditableRef.current.innerHTML : draftHtml;
+
+      const pdfRes = await fetch(`${PROPOSALS_EMAIL_API}/proposals/pdf`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposalId, html: finalHtml })
+      });
+      const pdfData = await pdfRes.json().catch(()=>({}));
+      if (!pdfRes.ok || pdfData.status === "error") throw new Error(pdfData.message || "Failed to generate the PDF.");
+      const pdfUrl = pdfData.url;
+
+      const approvePayload = {
         status: "approved",
         approved_at: new Date().toISOString(),
         approved_by: currentUser.id,
         approved_by_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
         approved_by_email: currentUser.email,
+        pdf_url: pdfUrl,
       };
-      const res = await window._db.from("proposals").update(payload).eq("id", proposalId).select().single();
+      let res = await window._db.from("proposals").update(approvePayload).eq("id", proposalId).select().single();
       if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
       setProposal(res.data);
       const d = res.data;
+
+      if (d.contact_email) {
+        await sendCustomerProposalEmail(d.contact_email, {
+          contact_name: d.contact_name, org_name: d.org_name, address: d.address, city: d.city, state: d.state, zip: d.zip,
+          qualified_value: d.qualified_value, rep_name: d.approved_by_name, rep_email: currentUser.email, rep_phone: "",
+        }, pdfUrl);
+
+        res = await window._db.from("proposals")
+          .update({ status: "sent", customer_sent_at: new Date().toISOString() })
+          .eq("id", proposalId).select().single();
+        if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+        setProposal(res.data);
+      }
+
       sendProposalEmail("bruce_approved", PRICING_EMAIL, {
         org_name: d.org_name, address: d.address, city: d.city, state: d.state, zip: d.zip,
         contact_name: d.contact_name, contact_email: d.contact_email, contact_phone: d.contact_phone,
@@ -3149,10 +3225,35 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
           rep_name: d.submitted_by_name, org_name: d.org_name, contact_email: d.contact_email,
         });
       }
+
+      setDraftMode(false);
     } catch(e) {
-      setSaveError(e.message || "Failed to approve.");
+      setCustomerSendError(e.message || "Failed to send to the customer. The proposal is still approved — you can retry from here.");
     } finally {
-      setSaving(false);
+      setSendingCustomer(false);
+    }
+  }
+
+  async function retrySendToCustomer() {
+    setSendingCustomer(true); setCustomerSendError("");
+    try {
+      if (!proposal.pdf_url) throw new Error("No PDF on file for this proposal yet — reopen the draft to generate one.");
+      if (!proposal.contact_email) throw new Error("This proposal has no contact email on file.");
+      await sendCustomerProposalEmail(proposal.contact_email, {
+        contact_name: proposal.contact_name, org_name: proposal.org_name,
+        address: proposal.address, city: proposal.city, state: proposal.state, zip: proposal.zip,
+        qualified_value: proposal.qualified_value, rep_name: proposal.approved_by_name,
+        rep_email: currentUser.email, rep_phone: "",
+      }, proposal.pdf_url);
+      const res = await window._db.from("proposals")
+        .update({ status: "sent", customer_sent_at: new Date().toISOString() })
+        .eq("id", proposalId).select().single();
+      if (res.error) throw new Error(res.error.message || JSON.stringify(res.error));
+      setProposal(res.data);
+    } catch(e) {
+      setCustomerSendError(e.message || "Failed to send to the customer.");
+    } finally {
+      setSendingCustomer(false);
     }
   }
 
@@ -3173,7 +3274,8 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
   const timeline = [];
   if (proposal.created_at) timeline.push({ who: proposal.submitted_by_name || proposal.submitted_by_email || "Rep", action:"submitted this proposal", at: proposal.created_at });
   if (proposal.priced_at) timeline.push({ who: proposal.priced_by_name || proposal.priced_by_email || "Bruce", action:`added pricing — qualified value ${money(proposal.qualified_value)}`, at: proposal.priced_at });
-  if (proposal.approved_at) timeline.push({ who: proposal.approved_by_name || proposal.approved_by_email || "Rep", action:"approved and sent to customer", at: proposal.approved_at });
+  if (proposal.approved_at) timeline.push({ who: proposal.approved_by_name || proposal.approved_by_email || "Rep", action:"approved this proposal", at: proposal.approved_at });
+  if (proposal.customer_sent_at) timeline.push({ who: "System", action:`emailed the PDF proposal to ${proposal.contact_email || "the customer"}`, at: proposal.customer_sent_at });
 
   const sectionStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" };
 
@@ -3335,21 +3437,89 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
             <div style={{ marginTop:"14px", fontSize:"12px", color:"#4a6080" }}>Sent back to the rep for approval.</div>
           )}
 
-          {canApprove && (
-            <button onClick={approveAndSend} disabled={saving} style={{
+          {draftError && (
+            <div style={{ marginTop:"14px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
+              {draftError}
+            </div>
+          )}
+
+          {canApprove && !draftMode && (
+            <button onClick={openDraft} disabled={draftLoading} style={{
               marginTop:"16px", width:"100%", padding:"12px 20px", borderRadius:"10px",
-              background: saving ? "#003366" : "linear-gradient(135deg,#10b981,#0d9488)",
-              border: saving ? "1px solid #003875" : "none",
-              color: saving ? "#4a6080" : "#ffffff", fontSize:"13px", fontWeight:700,
-              cursor: saving ? "not-allowed" : "pointer"
+              background: draftLoading ? "#003366" : "linear-gradient(135deg,#10b981,#0d9488)",
+              border: draftLoading ? "1px solid #003875" : "none",
+              color: draftLoading ? "#4a6080" : "#ffffff", fontSize:"13px", fontWeight:700,
+              cursor: draftLoading ? "not-allowed" : "pointer"
             }}>
-              {saving ? "Approving…" : "Approve & Send to Customer"}
+              {draftLoading ? "Loading draft…" : "Review & Send to Customer"}
             </button>
           )}
 
-          {proposal.status === "approved" && (
+          {draftMode && (
+            <div style={{ marginTop:"16px" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"10px" }}>
+                <div style={{ fontSize:"12px", color:"#B0B7BC" }}>
+                  <Edit2 size={11} style={{ verticalAlign:"middle", marginRight:"5px" }} />
+                  Click into the document to edit anything before sending — wording, terms, whatever needs it.
+                </div>
+                <button onClick={() => { setDraftMode(false); setCustomerSendError(""); }} style={{ background:"transparent", border:"none", color:"#B0B7BC", fontSize:"12px", cursor:"pointer" }}>
+                  Cancel
+                </button>
+              </div>
+              <div
+                ref={draftEditableRef}
+                contentEditable
+                suppressContentEditableWarning
+                dangerouslySetInnerHTML={{ __html: draftHtml }}
+                style={{
+                  background:"#ffffff", borderRadius:"8px", padding:"24px",
+                  maxHeight:"600px", overflowY:"auto", outline:"none",
+                  boxShadow:"0 4px 20px rgba(0,0,0,0.3)"
+                }}
+              />
+              {customerSendError && (
+                <div style={{ marginTop:"14px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
+                  {customerSendError}
+                </div>
+              )}
+              <button onClick={sendToCustomer} disabled={sendingCustomer} style={{
+                marginTop:"14px", width:"100%", padding:"12px 20px", borderRadius:"10px",
+                background: sendingCustomer ? "#003366" : "linear-gradient(135deg,#10b981,#0d9488)",
+                border: sendingCustomer ? "1px solid #003875" : "none",
+                color: sendingCustomer ? "#4a6080" : "#ffffff", fontSize:"13px", fontWeight:700,
+                cursor: sendingCustomer ? "not-allowed" : "pointer"
+              }}>
+                {sendingCustomer ? "Sending…" : "Send to Customer"}
+              </button>
+            </div>
+          )}
+
+          {proposal.status === "approved" && !proposal.customer_sent_at && !draftMode && (
+            <div style={{ marginTop:"16px" }}>
+              <div style={{ padding:"10px 16px", borderRadius:"8px", background:"rgba(249,115,22,0.08)", border:"1px solid rgba(249,115,22,0.3)", color:"#f97316", fontSize:"13px", marginBottom:"10px" }}>
+                Approved, but the customer email hasn't gone out yet.
+              </div>
+              {customerSendError && (
+                <div style={{ marginBottom:"10px", padding:"10px 16px", borderRadius:"8px", background:"rgba(198,12,48,0.07)", border:"1px solid rgba(198,12,48,0.25)", color:"#C60C30", fontSize:"13px" }}>
+                  {customerSendError}
+                </div>
+              )}
+              <button onClick={retrySendToCustomer} disabled={sendingCustomer} style={{
+                width:"100%", padding:"12px 20px", borderRadius:"10px",
+                background: sendingCustomer ? "#003366" : "linear-gradient(135deg,#f97316,#ea580c)",
+                border: sendingCustomer ? "1px solid #003875" : "none",
+                color: sendingCustomer ? "#4a6080" : "#ffffff", fontSize:"13px", fontWeight:700,
+                cursor: sendingCustomer ? "not-allowed" : "pointer"
+              }}>
+                {sendingCustomer ? "Sending…" : "Retry Sending to Customer"}
+              </button>
+            </div>
+          )}
+
+          {proposal.status === "sent" && (
             <div style={{ marginTop:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.3)", color:"#10b981", fontSize:"13px" }}>
-              Approved. PDF generation and the customer email go out automatically once Phase 3 (email notifications) ships — for now, send the approved pricing to the customer manually.
+              Sent to {proposal.contact_email} on {proposal.customer_sent_at ? new Date(proposal.customer_sent_at).toLocaleString() : "—"}.
+              {proposal.pdf_url && <> <a href={proposal.pdf_url} target="_blank" rel="noreferrer" style={{ color:"#10b981" }}>View PDF</a></>}
             </div>
           )}
         </div>
