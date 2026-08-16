@@ -48,6 +48,15 @@ input:focus,textarea:focus{border-color:#C60C30 !important}
   div[style*="gridTemplateColumns"] { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
   #mobile-nav { display: flex !important; }
   main[style] > div { padding-bottom: 70px !important; }
+
+  /* Build Proposal: less wasted padding, bigger tap targets on narrow screens */
+  .bp-card { padding: 16px !important; }
+  .bp-filters { flex-direction: column !important; align-items: stretch !important; }
+  .bp-filters select { width: 100% !important; }
+  input[type="date"], input[type="number"], input[type="text"], input[type="password"], select, textarea {
+    min-height: 40px !important; font-size: 14px !important;
+  }
+  .bp-draft-editable { padding: 14px !important; max-height: 60vh !important; }
 }
 @media (min-width: 769px) { #mobile-nav { display: none !important; } }
 </style>
@@ -2394,8 +2403,10 @@ function ProposalStatusBadge({ status }) {
 // Handles, in order of preference per line:
 //  - a tab-separated paste from Excel/Sheets: "200\tChromebook C204\tUsed - Good"
 //  - a comma-separated column line: "200, Chromebook C204, Used - Good"
-//  - the legacy inline format, one segment or the whole line: "200x Chromebook C204"
-//  - a bare description line (qty defaults to 1, no condition)
+//  - any line that just starts with a number, however it's punctuated:
+//    "200x Chromebook C204", "200 Chromebook C204", "200 - Chromebook C204",
+//    "200 units Chromebook C204" all extract qty=200
+//  - a bare description line with no leading number (qty defaults to 1)
 // A single line with several comma-joined "NNx ..." segments (the original
 // single-line format) is split back out into one row per segment first.
 function parseDeviceLines(text) {
@@ -2406,12 +2417,17 @@ function parseDeviceLines(text) {
     lines = rawLines[0].split(",").map(s => s.trim()).filter(Boolean);
   }
   return lines.map(line => {
-    const cols = (line.includes("\t") ? line.split("\t") : line.split(",")).map(c => c.trim());
-    if (cols.length >= 2 && /^\d+$/.test(cols[0])) {
-      return { qty: parseInt(cols[0], 10) || 1, product: cols[1] || "", condition: cols[2] || "" };
+    if (line.includes("\t")) {
+      const cols = line.split("\t").map(c => c.trim());
+      const qtyMatch = cols[0].match(/^(\d+)/);
+      if (qtyMatch) return { qty: parseInt(qtyMatch[1], 10) || 1, product: cols[1] || "", condition: cols[2] || "" };
     }
-    const m = line.match(/^(\d+)\s*x\s*(.+)$/i);
-    if (m) return { qty: parseInt(m[1], 10) || 1, product: m[2].trim(), condition: "" };
+    if (line.includes(",")) {
+      const cols = line.split(",").map(c => c.trim());
+      if (/^\d+$/.test(cols[0])) return { qty: parseInt(cols[0], 10) || 1, product: cols[1] || "", condition: cols[2] || "" };
+    }
+    const m = line.match(/^(\d+)\s*(?:x|units?(?:\s+of)?)?\s*[-:]?\s*(.+)$/i);
+    if (m && m[2].trim()) return { qty: parseInt(m[1], 10) || 1, product: m[2].trim(), condition: "" };
     return { qty: 1, product: line, condition: "" };
   });
 }
@@ -2674,7 +2690,7 @@ function BuildProposalView({ currentUser, onDone }) {
       </div>
 
       <div style={{ maxWidth:"640px" }}>
-        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+        <div className="bp-card" style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
           <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Organization</div>
 
           <div style={fieldStyle}>
@@ -2731,7 +2747,7 @@ function BuildProposalView({ currentUser, onDone }) {
           </div>
         </div>
 
-        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+        <div className="bp-card" style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
           <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Contact</div>
 
           <div style={fieldStyle}>
@@ -2815,7 +2831,7 @@ function BuildProposalView({ currentUser, onDone }) {
           </div>
         </div>
 
-        <div style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
+        <div className="bp-card" style={{ background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" }}>
           <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Devices &amp; Notes</div>
 
           <div style={fieldStyle}>
@@ -2896,6 +2912,7 @@ function BuildProposalView({ currentUser, onDone }) {
 // ─── PROPOSALS LIST (Phase 2) ──────────────────────────────────────────────────
 // Whichever of submit/price/approve happened most recently on a proposal.
 function lastAction(row) {
+  if (row.customer_sent_at) return { label:"Sent", by: null, at: row.customer_sent_at };
   if (row.approved_at) return { label:"Approved", by: row.approved_by_name || row.approved_by_email, at: row.approved_at };
   if (row.priced_at) return { label:"Priced", by: row.priced_by_name || row.priced_by_email, at: row.priced_at };
   return { label:"Submitted", by: row.submitted_by_name || row.submitted_by_email, at: row.created_at };
@@ -2976,7 +2993,7 @@ function ProposalsListView({ currentUser, onOpen, onNew }) {
       </div>
 
       {!loading && !error && rows.length > 0 && (
-        <div style={{ display:"flex", gap:"10px", marginBottom:"16px", flexWrap:"wrap" }}>
+        <div className="bp-filters" style={{ display:"flex", gap:"10px", marginBottom:"16px", flexWrap:"wrap" }}>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={selectStyle}>
             <option value="all">All Statuses</option>
             {Object.entries(PROPOSAL_STATUS).map(([key, s]) => <option key={key} value={key}>{s.label}</option>)}
@@ -3056,7 +3073,17 @@ function ProposalsListView({ currentUser, onOpen, onNew }) {
                     </td>
                     <td style={{ padding:"12px 16px", fontSize:"13px", color:"#B0B7BC" }}>{r.submitted_by_name || r.submitted_by_email || "—"}</td>
                     <td style={{ padding:"12px 16px", fontSize:"12px", color:"#B0B7BC" }}>
-                      {la.label} by {la.by || "—"}<br/>
+                      {r.pdf_url ? (
+                        <a href={r.pdf_url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} style={{
+                          background:"#10b981", color:"#ffffff", fontWeight:700, fontSize:"11px",
+                          padding:"4px 10px", borderRadius:"6px", textDecoration:"none", display:"inline-block"
+                        }}>
+                          Approved – View PDF
+                        </a>
+                      ) : (
+                        <>{la.label}{la.by ? ` by ${la.by}` : ""}</>
+                      )}
+                      <br/>
                       <span style={{ color:"#4a6080" }}>{la.at ? new Date(la.at).toLocaleDateString() : "—"}</span>
                     </td>
                     <td style={{ padding:"12px 16px", fontSize:"12px", color:"#4a6080" }}>{r.created_at ? new Date(r.created_at).toLocaleDateString() : "—"}</td>
@@ -3418,7 +3445,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
       </div>
 
       <div style={{ maxWidth:"720px" }}>
-        <div style={sectionStyle}>
+        <div className="bp-card" style={sectionStyle}>
           <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Request Details</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"14px", marginBottom:"14px" }}>
             <div>
@@ -3476,7 +3503,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
           </div>
         </div>
 
-        <div style={sectionStyle}>
+        <div className="bp-card" style={sectionStyle}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"16px" }}>
             <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px" }}>Pricing</div>
             {revising && (
@@ -3641,6 +3668,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
               </div>
               <div
                 ref={draftEditableRef}
+                className="bp-draft-editable"
                 contentEditable
                 suppressContentEditableWarning
                 dangerouslySetInnerHTML={{ __html: draftHtml }}
@@ -3690,10 +3718,19 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
           )}
 
           {proposal.status === "sent" && !revising && (
-            <div style={{ marginTop:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.3)", color:"#10b981", fontSize:"13px" }}>
-              Sent to {proposal.contact_email} on {proposal.customer_sent_at ? new Date(proposal.customer_sent_at).toLocaleString() : "—"}
-              {" "}(send {proposal.send_count || 1} of {SEND_LIMIT}).
-              {proposal.pdf_url && <> <a href={proposal.pdf_url} target="_blank" rel="noreferrer" style={{ color:"#10b981" }}>View PDF</a></>}
+            <div style={{ marginTop:"16px", padding:"10px 16px", borderRadius:"8px", background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.3)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"10px" }}>
+              <span style={{ color:"#10b981", fontSize:"13px" }}>
+                Sent to {proposal.contact_email} on {proposal.customer_sent_at ? new Date(proposal.customer_sent_at).toLocaleString() : "—"}
+                {" "}(send {proposal.send_count || 1} of {SEND_LIMIT}).
+              </span>
+              {proposal.pdf_url && (
+                <a href={proposal.pdf_url} target="_blank" rel="noreferrer" style={{
+                  background:"#10b981", color:"#ffffff", fontWeight:700, fontSize:"12px",
+                  padding:"6px 14px", borderRadius:"6px", textDecoration:"none", whiteSpace:"nowrap"
+                }}>
+                  View PDF
+                </a>
+              )}
             </div>
           )}
 
@@ -3731,7 +3768,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         </div>
 
         {timeline.length > 0 && (
-          <div style={sectionStyle}>
+          <div className="bp-card" style={sectionStyle}>
             <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Activity</div>
             {timeline.map((t, i) => (
               <div key={i} style={{ display:"flex", gap:"10px", marginBottom: i < timeline.length-1 ? "12px" : 0 }}>
