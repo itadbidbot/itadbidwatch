@@ -547,6 +547,8 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose, user
   const isAdmin = userRole === 'admin';
   const integrationKeys = ["rfp_bids","bidprime","samgov"];
   const [intOpen, setIntOpen] = React.useState(() => integrationKeys.includes(active));
+  const reportsKeys = ["reports_build","reports_executive","reports_progressive","reports_georgia","reports_rfp"];
+  const [reportsOpen, setReportsOpen] = React.useState(() => reportsKeys.includes(active));
 
   const topNav = [
     { key:"dashboard", label:"Dashboard",         icon:Home,  adminOnly:false },
@@ -562,6 +564,15 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose, user
     { key:"bidprime", label:"BidPrime",         icon:Mail     },
     { key:"samgov",   label:"SAM.gov",          icon:Search   },
   ];
+
+  const reports = [
+    { key:"reports_build",       label:"Build Reports",             icon:Upload    },
+    { key:"reports_executive",   label:"Executive Summary",         icon:FileText  },
+    { key:"reports_progressive", label:"Sales Progressive Reporting", icon:BarChart2 },
+    { key:"reports_georgia",     label:"Georgia Summary",           icon:BarChart2 },
+    { key:"reports_rfp",         label:"RFP Summary",               icon:BarChart2 },
+  ];
+  const reportsGroupActive = reportsKeys.includes(active);
 
   const intGroupActive = integrationKeys.includes(active);
 
@@ -628,6 +639,28 @@ function Sidebar({ active, setActive, onRunScan, scanning, isOpen, onClose, user
         </svg>
       </button>
       {intOpen && integrations.map(({ key, label, icon: Icon }) => navBtn(key, label, Icon, true))}
+
+      {/* Reports group */}
+      <button
+        onClick={() => setReportsOpen(o => !o)}
+        style={{
+          display:"flex", alignItems:"center", gap:"10px",
+          padding:"10px 20px", margin:"1px 12px", borderRadius:"8px",
+          WebkitTapHighlightColor:"transparent", touchAction:"manipulation",
+          background: reportsGroupActive && !reportsOpen ? "linear-gradient(90deg,rgba(198,12,48,0.08),transparent)" : "transparent",
+          border: "1px solid transparent",
+          color: reportsGroupActive ? "#C60C30" : "#B0B7BC",
+          cursor:"pointer", textAlign:"left", fontSize:"13px", fontWeight: reportsGroupActive ? 600 : 400,
+          transition:"all 0.15s"
+        }}>
+        <Database size={15} />
+        <span>Reports</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+          style={{ marginLeft:"auto", transform: reportsOpen ? "rotate(180deg)" : "none", transition:"transform 0.2s" }}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      {reportsOpen && reports.map(({ key, label, icon: Icon }) => navBtn(key, label, Icon, true))}
 
       {/* Settings — visible to all users */}
       {navBtn("settings", "Settings", Settings)}
@@ -2347,6 +2380,14 @@ const PRICING_EMAIL = "itadbidbot@gmail.com";
 // Source: https://github.com/itadbidbot/bidbot-proposals-api
 const PROPOSALS_EMAIL_API = "https://bidbot-proposals-api-378239271278.us-central1.run.app";
 
+// Cloud Run service that ingests weekly wizard uploads + live HubSpot pulls
+// and generates the Word/Excel sales reports.
+// Source: https://github.com/itadbidbot/bidbot-sales-reports-api
+const SALES_REPORTS_API = "https://bidbot-sales-reports-api-378239271278.us-central1.run.app";
+// Only one rep exists in reps.rep_id today (Michael Stott) -- hardcoded
+// until there's a reason to make this a picker.
+const SALES_REPORTS_REP_ID = "85375424";
+
 // TechReboot's guaranteed buyback price sheet — reference pricing shown to
 // the rep while building a proposal. Informational only: Bruce still sets
 // the real deal price during his pricing pass. Source: Sales/Pricing Sheet/
@@ -3909,6 +3950,375 @@ function BuildProposalPage({ currentUser }) {
       onNew={() => setMode("new")}
       onOpen={(id) => { setActiveId(id); setMode("edit"); }}
     />
+  );
+}
+
+// ─── REPORTS: BUILD REPORTS (upload wizard) ─────────────────────────────────
+// Source: https://github.com/itadbidbot/bidbot-sales-reports-api -- POST /ingest
+const REPORTS_EXPECTED_FILES = [
+  { label: "Core: Calls", hint: "hubspot-core-report-call-*.csv" },
+  { label: "Core: Tasks", hint: "hubspot-core-report-task-*.csv" },
+  { label: "Core: Emails", hint: "hubspot-core-report-email-sent-to-contact-*.csv" },
+  { label: "Core: Notes", hint: "hubspot-core-report-note-*.csv" },
+  { label: "Sales Weekly Report", hint: "hubspot-custom-report-sales-weekly-report-*.zip" },
+  { label: "Georgia District", hint: "hubspot-custom-report-georgia-district-*.zip" },
+  { label: "RFP School Watch", hint: "hubspot-custom-report-rfp-school-watch-*.zip" },
+  { label: "Notes and Call Notes", hint: "hubspot-custom-report-notes-and-call-notes-*.zip" },
+  { label: "Marketing Email Activity", hint: "hubspot-custom-report-stott-marketing-email-activity-*.zip" },
+  { label: "Website Traffic (optional)", hint: "Traffic_acquisition_*.csv" },
+];
+
+function ReportsBuildView() {
+  const fileInputRef = React.useRef(null);
+  const [files, setFiles] = React.useState([]);
+  const [periodStart, setPeriodStart] = React.useState("");
+  const [periodEnd, setPeriodEnd] = React.useState("");
+  const [uploading, setUploading] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+  const [error, setError] = React.useState(null);
+
+  function addFiles(fileList) {
+    const incoming = Array.from(fileList);
+    setFiles(prev => {
+      const byName = new Map(prev.map(f => [f.name, f]));
+      incoming.forEach(f => byName.set(f.name, f));
+      return Array.from(byName.values());
+    });
+  }
+
+  function removeFile(name) {
+    setFiles(prev => prev.filter(f => f.name !== name));
+  }
+
+  async function submit() {
+    if (!periodStart || !periodEnd) { setError("Set the reporting period start and end dates."); return; }
+    if (files.length === 0) { setError("Add the wizard export files before submitting."); return; }
+    setError(null);
+    setResult(null);
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("rep_id", SALES_REPORTS_REP_ID);
+      form.append("period_start", periodStart);
+      form.append("period_end", periodEnd);
+      form.append("created_by", window._currentUser?.email || "itad-bid-watch");
+      files.forEach(f => form.append("files", f, f.name));
+
+      const res = await fetch(`${SALES_REPORTS_API}/ingest`, { method: "POST", body: form });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+      setResult(data);
+      setFiles([]);
+    } catch (e) {
+      setError(e.message || "Ingest failed.");
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const cardStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" };
+  const labelStyle = { fontSize:"12px", fontWeight:600, color:"#B0B7BC", marginBottom:"6px", display:"block" };
+  const inputStyle = { width:"100%", padding:"9px 12px", borderRadius:"8px", border:"1px solid #003875", background:"#002244", color:"#ffffff", fontSize:"13px" };
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1 }}>
+      <WelcomeBanner pageKey="reports_build" title="Build Reports" description="Upload this week's HubSpot wizard exports and we'll pull in live Georgia District, Contact Intelligence, and Deals data, then generate the Word report and all 3 Excel reports." />
+      <div style={{ marginBottom:"24px" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Build Reports</h1>
+        <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Weekly wizard upload — generates the Executive Summary and all 3 spreadsheet reports</p>
+      </div>
+
+      <div style={{ maxWidth:"720px" }}>
+        <div style={cardStyle}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"16px" }}>Reporting Period</div>
+          <div style={{ display:"flex", gap:"16px" }}>
+            <div style={{ flex:1 }}>
+              <label style={labelStyle}>Week Start</label>
+              <input type="date" value={periodStart} onChange={e=>setPeriodStart(e.target.value)} style={inputStyle} />
+            </div>
+            <div style={{ flex:1 }}>
+              <label style={labelStyle}>Week End</label>
+              <input type="date" value={periodEnd} onChange={e=>setPeriodEnd(e.target.value)} style={inputStyle} />
+            </div>
+          </div>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"4px" }}>Wizard Export Files</div>
+          <p style={{ color:"#B0B7BC", fontSize:"12px", margin:"0 0 16px" }}>Drop in the HubSpot exports for this week. Filenames are matched by prefix, so upload them as downloaded — no renaming needed.</p>
+
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); addFiles(e.dataTransfer.files); }}
+            style={{
+              border:"2px dashed #003875", borderRadius:"10px", padding:"28px",
+              textAlign:"center", cursor:"pointer", marginBottom:"16px",
+              background:"rgba(0,34,68,0.4)"
+            }}>
+            <Upload size={22} color="#4a6080" />
+            <div style={{ color:"#ffffff", fontSize:"13px", fontWeight:600, marginTop:"8px" }}>Click to browse or drag files here</div>
+            <div style={{ color:"#4a6080", fontSize:"11px", marginTop:"4px" }}>9 required files + 1 optional GA4 traffic export</div>
+          </div>
+          <input ref={fileInputRef} type="file" multiple accept=".csv,.zip,.png,.jpg,.jpeg"
+            onChange={e => { addFiles(e.target.files); e.target.value = ""; }} style={{ display:"none" }} />
+
+          {files.length > 0 && (
+            <div style={{ marginBottom:"16px" }}>
+              {files.map(f => (
+                <div key={f.name} style={{ display:"flex", alignItems:"center", gap:"8px", padding:"6px 0", borderBottom:"1px solid #002244" }}>
+                  <FileText size={13} color="#4a6080" />
+                  <span style={{ color:"#ffffff", fontSize:"12px", flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</span>
+                  <span style={{ color:"#4a6080", fontSize:"11px" }}>{(f.size/1024).toFixed(0)} KB</span>
+                  <button onClick={() => removeFile(f.name)} style={{ background:"none", border:"none", cursor:"pointer", color:"#4a6080", padding:"2px" }}><X size={13} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <details style={{ marginBottom:"16px" }}>
+            <summary style={{ color:"#B0B7BC", fontSize:"11px", cursor:"pointer" }}>Expected files</summary>
+            <div style={{ marginTop:"8px" }}>
+              {REPORTS_EXPECTED_FILES.map(f => (
+                <div key={f.label} style={{ fontSize:"11px", color:"#4a6080", padding:"2px 0" }}>
+                  <span style={{ color:"#B0B7BC" }}>{f.label}</span> — {f.hint}
+                </div>
+              ))}
+            </div>
+          </details>
+
+          {error && (
+            <div style={{ background:"rgba(198,12,48,0.1)", border:"1px solid rgba(198,12,48,0.3)", borderRadius:"8px", padding:"10px 14px", marginBottom:"16px", color:"#ff8080", fontSize:"12px" }}>
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <div style={{ background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.3)", borderRadius:"8px", padding:"14px", marginBottom:"16px" }}>
+              <div style={{ color:"#10b981", fontSize:"13px", fontWeight:700, marginBottom:"4px" }}>Run complete</div>
+              <div style={{ color:"#B0B7BC", fontSize:"12px" }}>{result.company_count} companies processed. Run ID: {result.run_id}</div>
+              <div style={{ color:"#4a6080", fontSize:"11px", marginTop:"4px" }}>See Executive Summary or the spreadsheet reports to view results.</div>
+            </div>
+          )}
+
+          <button onClick={submit} disabled={uploading}
+            style={{
+              width:"100%", padding:"12px 16px", borderRadius:"10px",
+              background: uploading ? "#003366" : "linear-gradient(135deg,#C60C30,#9a0a26)",
+              border:"none", color: uploading ? "#B0B7BC" : "#ffffff",
+              fontSize:"13px", fontWeight:700, cursor: uploading ? "not-allowed" : "pointer",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:"8px"
+            }}>
+            {uploading ? <><RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }} /> Processing (this can take about a minute)...</> : <><Upload size={14} /> Build Reports</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── REPORTS: EXECUTIVE SUMMARY (Word report) ───────────────────────────────
+function ReportsExecutiveView() {
+  const [runs, setRuns] = React.useState([]);
+  const [selectedRunId, setSelectedRunId] = React.useState(null);
+  const [detail, setDetail] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    fetch(`${SALES_REPORTS_API}/runs?rep_id=${SALES_REPORTS_REP_ID}&limit=20`)
+      .then(r => r.json())
+      .then(data => {
+        setRuns(data);
+        if (data.length > 0) setSelectedRunId(data[0].run_id);
+        else setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  React.useEffect(() => {
+    if (!selectedRunId) return;
+    setLoading(true);
+    fetch(`${SALES_REPORTS_API}/runs/${selectedRunId}`)
+      .then(r => r.json())
+      .then(data => { setDetail(data); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [selectedRunId]);
+
+  const cardStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"24px", marginBottom:"16px" };
+  const checks = detail?.qa?.checks || [];
+  const passCount = checks.filter(c => c.status === "PASS").length;
+  const warnCount = checks.filter(c => c.status === "WARN").length;
+  const failCount = checks.filter(c => c.status === "FAIL").length;
+  const wordOutput = detail?.outputs?.find(o => o.file_type === "weekly_word");
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1, width:"100%" }}>
+      <WelcomeBanner pageKey="reports_executive" title="Executive Summary" description="The generated 21-section weekly Word report. Pick a run below, review the QA summary, and download the full document." />
+      <div style={{ marginBottom:"24px" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Executive Summary</h1>
+        <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Weekly Word report — 21 canonical sections</p>
+      </div>
+
+      {runs.length === 0 && !loading && (
+        <div style={cardStyle}>
+          <div style={{ color:"#B0B7BC", fontSize:"13px" }}>No reports have been generated yet. Head to Build Reports to run the first one.</div>
+        </div>
+      )}
+
+      {runs.length > 0 && (
+        <div style={{ maxWidth:"720px" }}>
+          <div style={cardStyle}>
+            <label style={{ fontSize:"12px", fontWeight:600, color:"#B0B7BC", marginBottom:"6px", display:"block" }}>Run</label>
+            <select value={selectedRunId || ""} onChange={e => setSelectedRunId(e.target.value)}
+              style={{ width:"100%", padding:"9px 12px", borderRadius:"8px", border:"1px solid #003875", background:"#002244", color:"#ffffff", fontSize:"13px" }}>
+              {runs.map(r => (
+                <option key={r.run_id} value={r.run_id}>
+                  {r.period_start} – {r.period_end} (v{r.version}, {r.status}, {new Date(r.created_at).toLocaleDateString()})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {loading && <div style={{ color:"#B0B7BC", fontSize:"13px", padding:"12px" }}>Loading…</div>}
+
+          {!loading && detail && (
+            <>
+              <div style={cardStyle}>
+                <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"12px" }}>QA Summary</div>
+                <div style={{ display:"flex", gap:"12px", marginBottom:"12px" }}>
+                  <div style={{ background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.3)", borderRadius:"8px", padding:"10px 16px", flex:1, textAlign:"center" }}>
+                    <div style={{ color:"#10b981", fontSize:"20px", fontWeight:700 }}>{passCount}</div>
+                    <div style={{ color:"#B0B7BC", fontSize:"11px" }}>Pass</div>
+                  </div>
+                  <div style={{ background:"rgba(234,179,8,0.1)", border:"1px solid rgba(234,179,8,0.3)", borderRadius:"8px", padding:"10px 16px", flex:1, textAlign:"center" }}>
+                    <div style={{ color:"#eab308", fontSize:"20px", fontWeight:700 }}>{warnCount}</div>
+                    <div style={{ color:"#B0B7BC", fontSize:"11px" }}>Warn</div>
+                  </div>
+                  <div style={{ background:"rgba(198,12,48,0.1)", border:"1px solid rgba(198,12,48,0.3)", borderRadius:"8px", padding:"10px 16px", flex:1, textAlign:"center" }}>
+                    <div style={{ color:"#C60C30", fontSize:"20px", fontWeight:700 }}>{failCount}</div>
+                    <div style={{ color:"#B0B7BC", fontSize:"11px" }}>Fail</div>
+                  </div>
+                </div>
+                {checks.filter(c => c.status !== "PASS").map(c => (
+                  <div key={c.check_number} style={{ fontSize:"11px", color: c.status==="FAIL" ? "#ff8080" : "#eab308", padding:"4px 0", borderTop:"1px solid #002244" }}>
+                    <strong>#{c.check_number} {c.name}:</strong> {c.detail}
+                  </div>
+                ))}
+              </div>
+
+              <div style={cardStyle}>
+                <div style={{ fontWeight:700, color:"#ffffff", fontSize:"14px", marginBottom:"12px" }}>Generated Files</div>
+                {(detail.outputs || []).map(o => (
+                  <a key={o.file_type} href={o.download_url || "#"} target="_blank" rel="noreferrer"
+                    style={{
+                      display:"flex", alignItems:"center", gap:"8px", padding:"10px 14px", marginBottom:"8px",
+                      borderRadius:"8px", background: o.download_url ? "rgba(16,185,129,0.08)" : "rgba(255,255,255,0.03)",
+                      border: o.download_url ? "1px solid rgba(16,185,129,0.25)" : "1px solid #003875",
+                      color: o.download_url ? "#10b981" : "#4a6080", textDecoration:"none", fontSize:"12px", fontWeight:600,
+                      pointerEvents: o.download_url ? "auto" : "none"
+                    }}>
+                    <FileText size={14} />
+                    {o.file_name}{!o.download_url && " (link unavailable)"}
+                  </a>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── REPORTS: SPREADSHEET VIEWS (Progressive / Georgia / RFP) ───────────────
+const REPORTS_COLUMNS = {
+  progressive: ["Company Name","Contact Name","Number of Calls","Number of Tasks Scheduled","Company Notes","Call Notes","Activity Date(s)","Lead Status","Sales Status","Lifecycle Stage"],
+  rfp: ["Company Name","Calls","Tasks","Company Notes","Call Notes","Lead Status","Sales Status","Lifecycle Stage"],
+  georgia: ["Company Name","Calls","Tasks","Company Notes","Call Notes","Activity Date(s)","Lead Status","Sales Status","Lifecycle Stage","In Bid Now","Bid Source","Bid Platform","Bid Platform Type","Vendor Registration Required","Current Vendor Name","Disposition Method","Surplus Readiness","Refresh Cadence","Last Bid Product Type","Last Bid Date","Apple Distinguished School","Contact Intelligence","What's going on in GA"],
+};
+const REPORTS_DEFAULT_START = "2026-04-27"; // Progressive reporting period start
+
+function SpreadsheetReportView({ reportType, title }) {
+  const today = new Date().toISOString().slice(0,10);
+  const [startDate, setStartDate] = React.useState(REPORTS_DEFAULT_START);
+  const [endDate, setEndDate] = React.useState(today);
+  const [rows, setRows] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [search, setSearch] = React.useState("");
+
+  const columns = REPORTS_COLUMNS[reportType];
+
+  function load() {
+    setLoading(true);
+    fetch(`${SALES_REPORTS_API}/reports/${reportType}?start=${startDate}&end=${endDate}&rep_id=${SALES_REPORTS_REP_ID}`)
+      .then(r => r.json())
+      .then(data => { setRows(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  }
+
+  React.useEffect(load, [reportType]);
+
+  const filtered = search.trim()
+    ? rows.filter(r => (r["Company Name"] || "").toLowerCase().includes(search.trim().toLowerCase()))
+    : rows;
+
+  const cardStyle = { background:"#003366", border:"1px solid #003875", borderRadius:"12px", padding:"16px", marginBottom:"16px" };
+  const inputStyle = { padding:"8px 12px", borderRadius:"8px", border:"1px solid #003875", background:"#002244", color:"#ffffff", fontSize:"12px" };
+
+  return (
+    <div style={{ padding:"28px", overflowY:"auto", flex:1, width:"100%" }}>
+      <div style={{ marginBottom:"20px" }}>
+        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>{title}</h1>
+        <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>{filtered.length} of {rows.length} companies</p>
+      </div>
+
+      <div style={{ ...cardStyle, display:"flex", gap:"12px", alignItems:"flex-end", flexWrap:"wrap" }}>
+        <div>
+          <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"4px" }}>Start</label>
+          <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)} style={inputStyle} />
+        </div>
+        <div>
+          <label style={{ fontSize:"11px", color:"#B0B7BC", display:"block", marginBottom:"4px" }}>End</label>
+          <input type="date" value={endDate} onChange={e=>setEndDate(e.target.value)} style={inputStyle} />
+        </div>
+        <button onClick={load} style={{ padding:"9px 16px", borderRadius:"8px", border:"none", background:"linear-gradient(135deg,#C60C30,#9a0a26)", color:"#fff", fontSize:"12px", fontWeight:700, cursor:"pointer" }}>Apply</button>
+        <div style={{ flex:1, minWidth:"200px", display:"flex", alignItems:"center", gap:"8px", background:"#002244", border:"1px solid #003875", borderRadius:"8px", padding:"0 12px" }}>
+          <Search size={13} color="#4a6080" />
+          <input placeholder="Search company name…" value={search} onChange={e=>setSearch(e.target.value)}
+            style={{ border:"none", background:"transparent", color:"#ffffff", fontSize:"12px", padding:"9px 0", flex:1, outline:"none" }} />
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ color:"#B0B7BC", fontSize:"13px", padding:"12px" }}>Loading…</div>
+      ) : (
+        <div style={{ overflowX:"auto", border:"1px solid #003875", borderRadius:"10px" }}>
+          <table style={{ borderCollapse:"collapse", width:"100%", minWidth: columns.length * 160 + "px" }}>
+            <thead>
+              <tr style={{ background:"#002244" }}>
+                {columns.map(c => (
+                  <th key={c} style={{ textAlign:"left", padding:"10px 14px", fontSize:"11px", color:"#B0B7BC", fontWeight:700, borderBottom:"1px solid #003875", whiteSpace:"nowrap" }}>{c}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((row, i) => (
+                <tr key={i} style={{ borderBottom:"1px solid #002244" }}>
+                  {columns.map(c => (
+                    <td key={c} style={{ padding:"10px 14px", fontSize:"12px", color:"#ffffff", maxWidth:"320px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace: c.includes("Notes")||c==="What's going on in GA"||c==="Contact Intelligence" ? "normal" : "nowrap" }}>
+                      {row[c] === null || row[c] === undefined ? "" : String(row[c])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              {filtered.length === 0 && (
+                <tr><td colSpan={columns.length} style={{ padding:"20px", textAlign:"center", color:"#4a6080", fontSize:"12px" }}>No rows for this range.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -7917,6 +8327,11 @@ function App() {
           {page==="rfp_bids"   && <RFPBidsView />}
           {page==="bidprime"   && <BidPrimeView />}
           {page==="samgov"     && <SamGovView />}
+          {page==="reports_build"       && <ReportsBuildView />}
+          {page==="reports_executive"   && <ReportsExecutiveView />}
+          {page==="reports_progressive" && <SpreadsheetReportView reportType="progressive" title="Sales Progressive Reporting" />}
+          {page==="reports_georgia"     && <SpreadsheetReportView reportType="georgia" title="Georgia Summary" />}
+          {page==="reports_rfp"         && <SpreadsheetReportView reportType="rfp" title="RFP Summary" />}
           {page==="settings"   && <SettingsView />}
         </main>
       </div>
