@@ -2347,6 +2347,55 @@ const PRICING_EMAIL = "itadbidbot@gmail.com";
 // Source: https://github.com/itadbidbot/bidbot-proposals-api
 const PROPOSALS_EMAIL_API = "https://bidbot-proposals-api-378239271278.us-central1.run.app";
 
+// TechReboot's guaranteed buyback price sheet — reference pricing shown to
+// the rep while building a proposal. Informational only: Bruce still sets
+// the real deal price during his pricing pass. Source: Sales/Pricing Sheet/
+// tech-reboot-pricing-sheet.pdf (Mike Stott).
+const DEVICE_PRICE_SHEET = [
+  { category:"iPad Buyback", device:"iPad Gen 1–4", listPriceDisplay:"$15" },
+  { category:"iPad Buyback", device:"iPad 5th Gen", listPriceDisplay:"$65" },
+  { category:"iPad Buyback", device:"iPad 6th Gen", listPriceDisplay:"$75" },
+  { category:"iPad Buyback", device:"iPad 7th Gen", listPriceDisplay:"$85" },
+  { category:"iPad Buyback", device:"iPad 8th Gen", listPriceDisplay:"$115" },
+  { category:"iPad Buyback", device:"iPad 9th Gen", listPriceDisplay:"$145" },
+  { category:"iPad Buyback", device:"iPad Air 1", listPriceDisplay:"$35" },
+  { category:"iPad Buyback", device:"iPad Air 2", listPriceDisplay:"$45" },
+  { category:"iPad Buyback", device:"iPad Air 3", listPriceDisplay:"$65" },
+  { category:"iPad Buyback", device:"iPad Mini 1", listPriceDisplay:"$15" },
+  { category:"iPad Buyback", device:"iPad Mini 2", listPriceDisplay:"$45" },
+  { category:"iPad Buyback", device:"iPad Pro 12.9\"", listPriceDisplay:"$175" },
+  { category:"iPad Buyback", device:"iPad — Damaged / Cracked / iCloud Locked", listPriceDisplay:"$10" },
+  { category:"Chromebook Buyback", device:"Chromebook (Dell 3100 & similar)", listPriceDisplay:"$35–$45" },
+  { category:"Desktop PC Buyback", device:"i3 Desktop", listPriceDisplay:"$45" },
+  { category:"Desktop PC Buyback", device:"i5 Desktop", listPriceDisplay:"$65" },
+  { category:"Desktop PC Buyback", device:"i7 Desktop", listPriceDisplay:"$85" },
+  { category:"Laptop Buyback", device:"i3 Laptop", listPriceDisplay:"$45" },
+  { category:"Laptop Buyback", device:"i5 Laptop", listPriceDisplay:"$65" },
+  { category:"Laptop Buyback", device:"i7 Laptop", listPriceDisplay:"$85" },
+  { category:"Laptop Buyback", device:"MacBook Pro / MacBook Air (2016 & Newer)", listPriceDisplay:"$225" },
+  { category:"Additional Items (priced after pickup)", device:"Monitors", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"TVs", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Projectors", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Smartboards / Panels", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Keyboards & Mice", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Power Adapters", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Network Cables", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Misc. Peripherals", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Server Room Equipment", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Switches / Routers / SFP Modules / UPS Battery Units", listPriceDisplay:"Priced after pickup" },
+  { category:"Additional Items (priced after pickup)", device:"Mixed IT/Electronics Pallet", listPriceDisplay:"Priced after pickup" },
+];
+const DEVICE_PRICE_SHEET_GROUPED = DEVICE_PRICE_SHEET.reduce((acc, d) => {
+  (acc[d.category] = acc[d.category] || []).push(d);
+  return acc;
+}, {});
+function listPriceFor(deviceName) {
+  const entry = DEVICE_PRICE_SHEET.find(d => d.device === deviceName);
+  return entry ? entry.listPriceDisplay : "";
+}
+
+const DEVICE_CONDITIONS = ["New", "Used - Good", "Used - Fair", "Used - Poor", "Damaged / Cracked / Locked"];
+
 // Fire-and-forget: email delivery failure shouldn't block the underlying
 // status change, which has already been saved to Supabase by the caller.
 async function sendProposalEmail(type, to, fields) {
@@ -2472,7 +2521,7 @@ function BuildProposalView({ currentUser, onDone }) {
   const [contactPhone, setContactPhone] = useState("");
   const [contactTitle, setContactTitle] = useState("");
 
-  const [devices, setDevices] = useState("");
+  const [deviceRows, setDeviceRows] = useState([{ id:1, type:"dropdown", device:"", condition:"", qty:1 }]);
   const [pickupDate, setPickupDate] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -2482,6 +2531,20 @@ function BuildProposalView({ currentUser, onDone }) {
 
   const orgDebounce = useRef(null);
   const contactDebounce = useRef(null);
+  const nextRowId = useRef(2);
+
+  function addDropdownRow() {
+    setDeviceRows(rows => [...rows, { id: nextRowId.current++, type:"dropdown", device:"", condition:"", qty:1 }]);
+  }
+  function addManualRow() {
+    setDeviceRows(rows => [...rows, { id: nextRowId.current++, type:"manual", device:"", condition:"", qty:1 }]);
+  }
+  function updateDeviceRow(id, field, value) {
+    setDeviceRows(rows => rows.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }
+  function removeDeviceRow(id) {
+    setDeviceRows(rows => rows.filter(r => r.id !== id));
+  }
 
   async function hubspotProxySearch(objectType, query, companyId) {
     const res = await fetch(`${PROPOSALS_EMAIL_API}/hubspot/search`, {
@@ -2585,12 +2648,20 @@ function BuildProposalView({ currentUser, onDone }) {
     setContactQuery(""); setSelectedContact(null); setContactResults([]); setContactError(""); setManualContact(false);
     setAddress(""); setCity(""); setState(""); setZip("");
     setContactEmail(""); setContactPhone(""); setContactTitle("");
-    setDevices(""); setPickupDate(""); setNotes("");
+    setDeviceRows([{ id: nextRowId.current++, type:"dropdown", device:"", condition:"", qty:1 }]);
+    setPickupDate(""); setNotes("");
     setSubmitted(false); setSubmitError("");
   }
 
-  const canSubmit = orgQuery.trim() && contactQuery.trim() && devices.trim() && !submitting;
-  const deviceLines = parseDeviceLines(devices);
+  const deviceLines = deviceRows
+    .filter(r => r.device.trim() && Number(r.qty) > 0)
+    .map(r => ({
+      qty: Number(r.qty) || 1,
+      product: r.device.trim(),
+      condition: r.condition || "",
+      list_price: r.type === "dropdown" ? listPriceFor(r.device) : "",
+    }));
+  const canSubmit = orgQuery.trim() && contactQuery.trim() && deviceLines.length > 0 && !submitting;
 
   async function handleSubmit() {
     if (!canSubmit) return;
@@ -2608,8 +2679,8 @@ function BuildProposalView({ currentUser, onDone }) {
       contact_email: contactEmail.trim() || null,
       contact_phone: contactPhone.trim() || null,
       contact_title: contactTitle.trim() || null,
-      devices: devices.trim(),
-      device_items: parseDeviceLines(devices.trim()),
+      devices: deviceLines.map(d => `${d.qty}x ${d.product}${d.condition ? ` (${d.condition})` : ""}`).join(", "),
+      device_items: deviceLines,
       pickup_date: pickupDate || null,
       notes: notes.trim() || null,
       status: "pending_pricing",
@@ -2836,38 +2907,69 @@ function BuildProposalView({ currentUser, onDone }) {
 
           <div style={fieldStyle}>
             <label style={labelStyle}>DEVICES *</label>
-            <textarea
-              value={devices}
-              onChange={e=>setDevices(e.target.value)}
-              placeholder={"Paste straight from a spreadsheet, or type one device per line as Qty, Product, Condition:\n200, ASUS Chromebook C204, Used - Good\n25, Dell Latitude 3120, New"}
-              rows={5}
-              style={{ ...inputStyle, resize:"vertical", fontFamily:"inherit" }}
-            />
-            {deviceLines.length > 0 && (
-              <div style={{ marginTop:"8px", border:"1px solid #003875", borderRadius:"8px", overflow:"hidden", maxHeight:"220px", overflowY:"auto" }}>
-                <table style={{ width:"100%", borderCollapse:"collapse" }}>
-                  <thead>
-                    <tr style={{ borderBottom:"1px solid #002244" }}>
-                      {["Qty","Product","Condition"].map(h => (
-                        <th key={h} style={{ position:"sticky", top:0, background:"#002244", textAlign:"left", padding:"6px 10px", fontSize:"10px", color:"#B0B7BC", fontWeight:700, letterSpacing:"0.05em" }}>{h.toUpperCase()}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {deviceLines.map((d, i) => (
-                      <tr key={i} style={{ borderBottom: i < deviceLines.length-1 ? "1px solid #002244" : "none" }}>
-                        <td style={{ padding:"6px 10px", fontSize:"12px", color:"#ffffff", fontFamily:"monospace" }}>{d.qty}</td>
-                        <td style={{ padding:"6px 10px", fontSize:"12px", color:"#ffffff" }}>{d.product}</td>
-                        <td style={{ padding:"6px 10px", fontSize:"12px", color:"#B0B7BC" }}>{d.condition || "—"}</td>
-                      </tr>
+            <div style={{ border:"1px solid #003875", borderRadius:"8px", overflow:"hidden", marginBottom:"10px" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                <thead>
+                  <tr style={{ borderBottom:"1px solid #002244" }}>
+                    {["Device","Condition","Qty","List Price",""].map(h => (
+                      <th key={h} style={{ textAlign:"left", padding:"8px", fontSize:"10px", color:"#B0B7BC", fontWeight:700, letterSpacing:"0.05em" }}>{h.toUpperCase()}</th>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            <div style={hintStyle}>
-              Detected {deviceLines.length} device line{deviceLines.length===1?"":"s"}. Works with a pasted spreadsheet block, or "Qty, Product, Condition" typed one per line.
+                  </tr>
+                </thead>
+                <tbody>
+                  {deviceRows.map(row => (
+                    <tr key={row.id} style={{ borderBottom:"1px solid #002244" }}>
+                      <td style={{ padding:"6px 8px" }}>
+                        {row.type === "dropdown" ? (
+                          <select value={row.device} onChange={e=>updateDeviceRow(row.id,"device",e.target.value)} style={{ ...inputStyle, color: row.device ? "#ffffff" : "#B0B7BC" }}>
+                            <option value="">Select a device…</option>
+                            {Object.entries(DEVICE_PRICE_SHEET_GROUPED).map(([cat, items]) => (
+                              <optgroup key={cat} label={cat}>
+                                {items.map(d => <option key={d.device} value={d.device}>{d.device}</option>)}
+                              </optgroup>
+                            ))}
+                          </select>
+                        ) : (
+                          <input value={row.device} onChange={e=>updateDeviceRow(row.id,"device",e.target.value)} placeholder="Device name" style={inputStyle} />
+                        )}
+                      </td>
+                      <td style={{ padding:"6px 8px", width:"160px" }}>
+                        {row.type === "dropdown" ? (
+                          <select value={row.condition} onChange={e=>updateDeviceRow(row.id,"condition",e.target.value)} style={{ ...inputStyle, color: row.condition ? "#ffffff" : "#B0B7BC" }}>
+                            <option value="">—</option>
+                            {DEVICE_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                        ) : (
+                          <input value={row.condition} onChange={e=>updateDeviceRow(row.id,"condition",e.target.value)} placeholder="Optional" style={inputStyle} />
+                        )}
+                      </td>
+                      <td style={{ padding:"6px 8px", width:"70px" }}>
+                        <input type="number" min="1" value={row.qty} onChange={e=>updateDeviceRow(row.id,"qty",e.target.value)} style={inputStyle} />
+                      </td>
+                      <td style={{ padding:"6px 8px", width:"110px", color:"#B0B7BC", fontSize:"12px" }}>
+                        {row.type === "dropdown" ? (listPriceFor(row.device) || "—") : "—"}
+                      </td>
+                      <td style={{ padding:"6px 8px", width:"32px" }}>
+                        {deviceRows.length > 1 && (
+                          <button type="button" onClick={()=>removeDeviceRow(row.id)} style={{ background:"transparent", border:"none", color:"#C60C30", cursor:"pointer" }}>
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+            <div style={{ display:"flex", gap:"10px" }}>
+              <button type="button" onClick={addDropdownRow} style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 12px", borderRadius:"6px", cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+                <Plus size={12} /> Add Row
+              </button>
+              <button type="button" onClick={addManualRow} style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 12px", borderRadius:"6px", cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+                <Plus size={12} /> Manual Entry
+              </button>
+            </div>
+            <div style={hintStyle}>List Price is a reference from TechReboot's buyback sheet — Bruce still sets the actual deal price. Condition is optional.</div>
           </div>
           <div style={fieldStyle}>
             <label style={labelStyle}>PICKUP DATE (OPTIONAL)</label>
@@ -3148,7 +3250,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         : parseDeviceLines(res.data.devices);
       const items = (res.data.pricing && res.data.pricing.length)
         ? res.data.pricing
-        : seedItems.map(d => ({ device: d.product, qty: d.qty, unit_price: 0, condition: d.condition || "" }));
+        : seedItems.map(d => ({ device: d.product, qty: d.qty, unit_price: 0, condition: d.condition || "", list_price: d.list_price || "" }));
       setLineItems(items);
       setQualifiedValue(res.data.qualified_value != null ? String(res.data.qualified_value) : "");
       originalPricingRef.current = (res.data.pricing && res.data.pricing.length) ? res.data.pricing : null;
@@ -3469,7 +3571,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
               <table style={{ width:"100%", borderCollapse:"collapse", marginTop:"4px" }}>
                 <thead>
                   <tr style={{ borderBottom:"1px solid #002244" }}>
-                    {["Qty","Product","Condition"].map(h => (
+                    {["Qty","Product","Condition","List Price"].map(h => (
                       <th key={h} style={{ textAlign:"left", padding:"4px 8px 4px 0", fontSize:"10px", color:"#B0B7BC", fontWeight:700, letterSpacing:"0.05em" }}>{h.toUpperCase()}</th>
                     ))}
                   </tr>
@@ -3480,6 +3582,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                       <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#ffffff", fontFamily:"monospace" }}>{d.qty}</td>
                       <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#ffffff" }}>{d.product}</td>
                       <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#B0B7BC" }}>{d.condition || "—"}</td>
+                      <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#B0B7BC" }}>{d.list_price || "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -3560,6 +3663,9 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                           <div style={{ fontSize:"10px", color:"#f97316", marginTop:"3px" }}>
                             +{priceWarnings.find(w => w.index === idx).pct}% vs Bruce's ${priceWarnings.find(w => w.index === idx).origPrice.toFixed(2)}
                           </div>
+                        )}
+                        {canBrucePrice && row.list_price && (
+                          <div style={{ fontSize:"10px", color:"#4a6080", marginTop:"3px" }}>List: {row.list_price}</div>
                         )}
                       </td>
                       <td style={{ padding:"6px 8px", width:"110px", color:"#ffffff", fontSize:"13px", fontFamily:"monospace" }}>
