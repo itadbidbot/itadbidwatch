@@ -4200,13 +4200,29 @@ function ReportsExecutiveView() {
   const passCount = checks.filter(c => c.status === "PASS").length;
   const warnCount = checks.filter(c => c.status === "WARN").length;
   const failCount = checks.filter(c => c.status === "FAIL").length;
+  const hubspotVerified = detail?.run?.hubspot_live_status === "connected";
+  const reportModeCheck = checks.find(c => c.name === "Report mode documented");
 
   return (
     <div style={{ padding:"28px", overflowY:"auto", flex:1, width:"100%" }}>
       <WelcomeBanner pageKey="reports_executive" title="Executive Summary" description="The generated 21-section weekly Word report, rendered here in full. Pick a run below to switch weeks, or download the .docx/.xlsx files." />
-      <div style={{ marginBottom:"24px" }}>
-        <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Executive Summary</h1>
-        <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Weekly Word report — 21 canonical sections</p>
+      <div style={{ marginBottom:"24px", display:"flex", alignItems:"center", gap:"12px", flexWrap:"wrap" }}>
+        <div>
+          <h1 style={{ fontSize:"22px", fontWeight:700, color:"#ffffff", margin:"0 0 4px" }}>Executive Summary</h1>
+          <p style={{ color:"#B0B7BC", fontSize:"13px", margin:0 }}>Weekly Word report — 21 canonical sections</p>
+        </div>
+        {!loading && detail && (
+          <div title={reportModeCheck ? reportModeCheck.detail : ""}
+            style={{
+              display:"flex", alignItems:"center", gap:"6px", padding:"6px 12px", borderRadius:"999px",
+              background: hubspotVerified ? "rgba(16,185,129,0.15)" : "rgba(198,12,48,0.15)",
+              border: `1px solid ${hubspotVerified ? "rgba(16,185,129,0.4)" : "rgba(198,12,48,0.4)"}`,
+              color: hubspotVerified ? "#10b981" : "#ff8080", fontSize:"12px", fontWeight:700
+            }}>
+            {hubspotVerified ? <CheckCircle size={13} /> : <AlertTriangle size={13} />}
+            HubSpot Verified
+          </div>
+        )}
       </div>
 
       {runs.length === 0 && !loading && (
