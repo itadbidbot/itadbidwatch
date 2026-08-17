@@ -4300,8 +4300,32 @@ function SpreadsheetReportView({ reportType, title }) {
   const [search, setSearch] = React.useState("");
   const [sortColumn, setSortColumn] = React.useState(null);
   const [sortDirection, setSortDirection] = React.useState("asc");
+  const [colWidths, setColWidths] = React.useState({});
 
   const columns = REPORTS_COLUMNS[reportType];
+  const DEFAULT_COL_WIDTH = 160;
+  const MIN_COL_WIDTH = 70;
+
+  function startResize(e, col) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = colWidths[col] || DEFAULT_COL_WIDTH;
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    function onMove(ev) {
+      const newWidth = Math.max(MIN_COL_WIDTH, startWidth + (ev.clientX - startX));
+      setColWidths(prev => ({ ...prev, [col]: newWidth }));
+    }
+    function onUp() {
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  }
 
   function load() {
     setLoading(true);
@@ -4373,21 +4397,32 @@ function SpreadsheetReportView({ reportType, title }) {
         <div style={{ color:"#B0B7BC", fontSize:"13px", padding:"12px" }}>Loading…</div>
       ) : (
         <div style={{ overflow:"auto", maxHeight:"65vh", border:"1px solid #003875", borderRadius:"10px" }}>
-          <table style={{ borderCollapse:"collapse", width:"100%", minWidth: columns.length * 160 + "px" }}>
+          <table style={{ borderCollapse:"collapse", tableLayout:"fixed", width: columns.reduce((sum,c) => sum + (colWidths[c] || DEFAULT_COL_WIDTH), 0) + "px" }}>
+            <colgroup>
+              {columns.map(c => <col key={c} style={{ width: (colWidths[c] || DEFAULT_COL_WIDTH) + "px" }} />)}
+            </colgroup>
             <thead>
               <tr style={{ background:"#002244" }}>
-                {columns.map(c => {
+                {columns.map((c, ci) => {
                   const active = sortColumn === c;
+                  const isFrozen = ci === 0;
                   return (
-                    <th key={c} onClick={() => handleSort(c)}
-                      style={{ textAlign:"left", padding:"10px 14px", fontSize:"11px", color: active ? "#ffffff" : "#B0B7BC", fontWeight:700, borderBottom:"1px solid #003875", whiteSpace:"nowrap", cursor:"pointer", userSelect:"none", position:"sticky", top:0, background:"#002244", zIndex:2 }}>
-                      <span style={{ display:"inline-flex", alignItems:"center", gap:"4px" }}>
-                        {c}
+                    <th key={c} onClick={() => handleSort(c)} title={c}
+                      style={{
+                        textAlign:"left", padding:"10px 14px", fontSize:"11px", color: active ? "#ffffff" : "#B0B7BC", fontWeight:700,
+                        borderBottom:"1px solid #003875", cursor:"pointer", userSelect:"none", position:"sticky", top:0,
+                        left: isFrozen ? 0 : undefined, background:"#002244", zIndex: isFrozen ? 3 : 2,
+                        boxShadow: isFrozen ? "1px 0 0 #003875" : "none"
+                      }}>
+                      <span style={{ display:"flex", alignItems:"center", gap:"4px" }}>
+                        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, minWidth:0 }}>{c}</span>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
-                          style={{ opacity: active ? 1 : 0.3, transform: active && sortDirection === "desc" ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>
+                          style={{ flexShrink:0, opacity: active ? 1 : 0.3, transform: active && sortDirection === "desc" ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>
                           <polyline points="18 15 12 9 6 15"/>
                         </svg>
                       </span>
+                      <div onMouseDown={e => startResize(e, c)} onClick={e => e.stopPropagation()}
+                        style={{ position:"absolute", top:0, right:0, bottom:0, width:"6px", cursor:"col-resize" }} />
                     </th>
                   );
                 })}
@@ -4396,11 +4431,19 @@ function SpreadsheetReportView({ reportType, title }) {
             <tbody>
               {sorted.map((row, i) => (
                 <tr key={i} style={{ borderBottom:"1px solid #002244" }}>
-                  {columns.map(c => (
-                    <td key={c} style={{ padding:"10px 14px", fontSize:"12px", color:"#ffffff", maxWidth:"320px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace: c.includes("Notes")||c==="What's going on in GA"||c==="Contact Intelligence" ? "normal" : "nowrap" }}>
-                      {row[c] === null || row[c] === undefined ? "" : String(row[c])}
-                    </td>
-                  ))}
+                  {columns.map((c, ci) => {
+                    const isFrozen = ci === 0;
+                    return (
+                      <td key={c} style={{
+                        padding:"10px 14px", fontSize:"12px", color:"#ffffff", whiteSpace:"normal", wordBreak:"break-word",
+                        position: isFrozen ? "sticky" : "static", left: isFrozen ? 0 : undefined,
+                        background: isFrozen ? "#001a33" : "transparent", zIndex: isFrozen ? 1 : "auto",
+                        boxShadow: isFrozen ? "1px 0 0 #003875" : "none"
+                      }}>
+                        {row[c] === null || row[c] === undefined ? "" : String(row[c])}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))}
               {sorted.length === 0 && (
