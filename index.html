@@ -3991,10 +3991,10 @@ function ReportsBuildView() {
   }
 
   async function submit() {
-    if (!periodStart || !periodEnd) { setError("Set the reporting period start and end dates."); return; }
-    if (files.length === 0) { setError("Add the wizard export files before submitting."); return; }
     setError(null);
     setResult(null);
+    if (!periodStart || !periodEnd) { setError("Set the reporting period start and end dates."); return; }
+    if (files.length === 0) { setError("Add the wizard export files before submitting."); return; }
     setUploading(true);
     try {
       const form = new FormData();
