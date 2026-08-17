@@ -4284,10 +4284,30 @@ function ReportsExecutiveView() {
 }
 
 // ─── REPORTS: SPREADSHEET VIEWS (Progressive / Georgia / RFP) ───────────────
+// Each column is {key, label, compute?}: `key` looks up the raw API field
+// (row[key]), `label` is the (possibly shorter/renamed) header text, and an
+// optional `compute(row)` derives a value that isn't a direct API field.
+function countActivityTouches(row) {
+  const v = row["Activity Date(s)"];
+  if (!v) return 0;
+  return String(v).split("/").map(s => s.trim()).filter(Boolean).length;
+}
 const REPORTS_COLUMNS = {
-  progressive: ["Company Name","Contact Name","Number of Calls","Number of Tasks Scheduled","Company Notes","Call Notes","Activity Date(s)","Lead Status","Sales Status","Lifecycle Stage"],
-  rfp: ["Company Name","Calls","Tasks","Company Notes","Call Notes","Lead Status","Sales Status","Lifecycle Stage"],
-  georgia: ["Company Name","Calls","Tasks","Company Notes","Call Notes","Activity Date(s)","Lead Status","Sales Status","Lifecycle Stage","In Bid Now","Bid Source","Bid Platform","Bid Platform Type","Vendor Registration Required","Current Vendor Name","Disposition Method","Surplus Readiness","Refresh Cadence","Last Bid Product Type","Last Bid Date","Apple Distinguished School","Contact Intelligence","What's going on in GA"],
+  progressive: [
+    { key:"Company Name", label:"Company" },
+    { key:"Contact Name", label:"Contact" },
+    { key:"Number of Calls", label:"Calls" },
+    { key:"Number of Tasks Scheduled", label:"Tasks" },
+    { key:"Company Notes", label:"Company Notes" },
+    { key:"Call Notes", label:"Call Notes" },
+    { key:"Activity Date(s)", label:"Activity Date(s)" },
+    { key:"__touches__", label:"Touches", compute: countActivityTouches },
+    { key:"Lead Status", label:"Lead Status" },
+    { key:"Sales Status", label:"Sales Status" },
+    { key:"Lifecycle Stage", label:"Lifecycle Stage" },
+  ],
+  rfp: ["Company Name","Calls","Tasks","Company Notes","Call Notes","Lead Status","Sales Status","Lifecycle Stage"].map(k => ({ key:k, label:k })),
+  georgia: ["Company Name","Calls","Tasks","Company Notes","Call Notes","Activity Date(s)","Lead Status","Sales Status","Lifecycle Stage","In Bid Now","Bid Source","Bid Platform","Bid Platform Type","Vendor Registration Required","Current Vendor Name","Disposition Method","Surplus Readiness","Refresh Cadence","Last Bid Product Type","Last Bid Date","Apple Distinguished School"].map(k => ({ key:k, label:k })),
 };
 const REPORTS_DEFAULT_START = "2026-04-27"; // Progressive reporting period start
 
@@ -4352,9 +4372,11 @@ function SpreadsheetReportView({ reportType, title }) {
 
   const sorted = React.useMemo(() => {
     if (!sortColumn) return filtered;
+    const sortCol = columns.find(c => c.key === sortColumn);
+    const getVal = sortCol && sortCol.compute ? sortCol.compute : (row => row[sortColumn]);
     const dir = sortDirection === "asc" ? 1 : -1;
     return [...filtered].sort((a, b) => {
-      const av = a[sortColumn], bv = b[sortColumn];
+      const av = getVal(a), bv = getVal(b);
       const aEmpty = av === null || av === undefined || av === "";
       const bEmpty = bv === null || bv === undefined || bv === "";
       if (aEmpty && bEmpty) return 0;
@@ -4397,17 +4419,17 @@ function SpreadsheetReportView({ reportType, title }) {
         <div style={{ color:"#B0B7BC", fontSize:"13px", padding:"12px" }}>Loading…</div>
       ) : (
         <div style={{ overflow:"auto", maxHeight:"65vh", border:"1px solid #003875", borderRadius:"10px" }}>
-          <table style={{ borderCollapse:"collapse", tableLayout:"fixed", width: columns.reduce((sum,c) => sum + (colWidths[c] || DEFAULT_COL_WIDTH), 0) + "px" }}>
+          <table style={{ borderCollapse:"collapse", tableLayout:"fixed", width: columns.reduce((sum,c) => sum + (colWidths[c.key] || DEFAULT_COL_WIDTH), 0) + "px" }}>
             <colgroup>
-              {columns.map(c => <col key={c} style={{ width: (colWidths[c] || DEFAULT_COL_WIDTH) + "px" }} />)}
+              {columns.map(c => <col key={c.key} style={{ width: (colWidths[c.key] || DEFAULT_COL_WIDTH) + "px" }} />)}
             </colgroup>
             <thead>
               <tr style={{ background:"#002244" }}>
                 {columns.map((c, ci) => {
-                  const active = sortColumn === c;
+                  const active = sortColumn === c.key;
                   const isFrozen = ci === 0;
                   return (
-                    <th key={c} onClick={() => handleSort(c)} title={c}
+                    <th key={c.key} onClick={() => handleSort(c.key)} title={c.label}
                       style={{
                         textAlign:"left", padding:"10px 14px", fontSize:"11px", color: active ? "#ffffff" : "#B0B7BC", fontWeight:700,
                         borderBottom:"1px solid #003875", cursor:"pointer", userSelect:"none", position:"sticky", top:0,
@@ -4415,13 +4437,13 @@ function SpreadsheetReportView({ reportType, title }) {
                         boxShadow: isFrozen ? "1px 0 0 #003875" : "none"
                       }}>
                       <span style={{ display:"flex", alignItems:"center", gap:"4px" }}>
-                        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, minWidth:0 }}>{c}</span>
+                        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, minWidth:0 }}>{c.label}</span>
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
                           style={{ flexShrink:0, opacity: active ? 1 : 0.3, transform: active && sortDirection === "desc" ? "rotate(180deg)" : "none", transition:"transform 0.15s" }}>
                           <polyline points="18 15 12 9 6 15"/>
                         </svg>
                       </span>
-                      <div onMouseDown={e => startResize(e, c)} onClick={e => e.stopPropagation()}
+                      <div onMouseDown={e => startResize(e, c.key)} onClick={e => e.stopPropagation()}
                         style={{ position:"absolute", top:0, right:0, bottom:0, width:"6px", cursor:"col-resize" }} />
                     </th>
                   );
@@ -4433,14 +4455,15 @@ function SpreadsheetReportView({ reportType, title }) {
                 <tr key={i} style={{ borderBottom:"1px solid #002244" }}>
                   {columns.map((c, ci) => {
                     const isFrozen = ci === 0;
+                    const value = c.compute ? c.compute(row) : row[c.key];
                     return (
-                      <td key={c} style={{
+                      <td key={c.key} style={{
                         padding:"10px 14px", fontSize:"12px", color:"#ffffff", whiteSpace:"normal", wordBreak:"break-word",
                         position: isFrozen ? "sticky" : "static", left: isFrozen ? 0 : undefined,
                         background: isFrozen ? "#001a33" : "transparent", zIndex: isFrozen ? 1 : "auto",
                         boxShadow: isFrozen ? "1px 0 0 #003875" : "none"
                       }}>
-                        {row[c] === null || row[c] === undefined ? "" : String(row[c])}
+                        {value === null || value === undefined ? "" : String(value)}
                       </td>
                     );
                   })}
