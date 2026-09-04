@@ -2429,6 +2429,10 @@ const DEVICE_PRICE_SHEET = [
   { category:"Laptop Buyback", device:"i7 Laptop", listPriceDisplay:"$85" },
   { category:"Laptop Buyback", device:"MacBook Air (Pre-2016)", listPriceDisplay:"TBD — needs pricing" },
   { category:"Laptop Buyback", device:"MacBook Pro / MacBook Air (2016 & Newer)", listPriceDisplay:"$225" },
+  // Mirrors iPad's damaged tier -- added so a unit flagged as damaged
+  // (e.g. "LCD Repair", "Logic Board Repair") doesn't reference the full
+  // working-condition price. See DAMAGED_TIER_BY_CATEGORY below.
+  { category:"Laptop Buyback", device:"MacBook — Damaged / Cracked / Screen or Logic Board Issue", listPriceDisplay:"TBD — needs pricing" },
   { category:"Additional Items (priced after pickup)", device:"Monitors", listPriceDisplay:"Priced after pickup" },
   { category:"Additional Items (priced after pickup)", device:"TVs", listPriceDisplay:"Priced after pickup" },
   { category:"Additional Items (priced after pickup)", device:"Projectors", listPriceDisplay:"Priced after pickup" },
@@ -2515,6 +2519,30 @@ function matchDeviceToTier(rawName) {
   if (/printer|speaker|soundstick|external\s*drive|lacie|aircard|air\s*card|battery/.test(s)) return find("Misc. Peripherals");
 
   return null;
+}
+
+// Category -> its damaged-tier device name, for matchDeviceToTierPriced()
+// below. A category not listed here has no damaged tier (e.g. Desktop PC
+// Buyback), so a damaged unit in that category still shows its normal
+// tier's price as the closest available reference.
+const DAMAGED_TIER_BY_CATEGORY = {
+  "iPad Buyback": "iPad — Damaged / Cracked / iCloud Locked",
+  "iMac Buyback": "iMac — Damaged / Cracked / Locked",
+  "Laptop Buyback": "MacBook — Damaged / Cracked / Screen or Logic Board Issue",
+};
+
+// Combines device-name matching with condition: a damaged unit should
+// reference its family's damaged-tier price, not the full working-condition
+// price for its generation -- showing "iPad 9th Gen, $145" next to a
+// "Damaged" condition is actively misleading (the real reference is the
+// $10 damaged tier). Falls back to the plain generational match if the
+// unit isn't damaged, or if that device family has no damaged tier.
+function matchDeviceToTierPriced(rawName, matchedConditionLabel) {
+  const generational = matchDeviceToTier(rawName);
+  if (!generational || matchedConditionLabel !== "Damaged / Cracked / Locked") return generational;
+  const damagedDevice = DAMAGED_TIER_BY_CATEGORY[generational.category];
+  if (!damagedDevice) return generational; // no damaged tier for this family
+  return DEVICE_PRICE_SHEET.find(d => d.device === damagedDevice) || generational;
 }
 
 // Maps a free-text condition description (as submitted by a prospect) onto
@@ -3389,12 +3417,13 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
       const items = (res.data.pricing && res.data.pricing.length)
         ? res.data.pricing
         : seedItems.map(d => {
-            const matched = matchDeviceToTier(d.product);
+            const condition = matchConditionToLabel(d.condition || "");
+            const matched = matchDeviceToTierPriced(d.product, condition);
             return {
               device: d.product, // kept exactly as the prospect/rep submitted it
               qty: d.qty,
               unit_price: 0,
-              condition: matchConditionToLabel(d.condition || ""),
+              condition,
               list_price: matched ? matched.listPriceDisplay : "Not Found",
             };
           });
