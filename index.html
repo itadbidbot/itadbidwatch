@@ -2406,13 +2406,28 @@ const DEVICE_PRICE_SHEET = [
   { category:"iPad Buyback", device:"iPad Mini 2", listPriceDisplay:"$45" },
   { category:"iPad Buyback", device:"iPad Pro 12.9\"", listPriceDisplay:"$175" },
   { category:"iPad Buyback", device:"iPad — Damaged / Cracked / iCloud Locked", listPriceDisplay:"$10" },
+  // iMac tiers added 2026-08-17 (mirroring the iPad generational pattern) --
+  // prices are placeholders pending real buyback figures from Bruce/Michael,
+  // same convention as "Priced after pickup" below. Update listPriceDisplay
+  // once real numbers are set; matchDeviceToTier() below maps real-world
+  // customer-submitted names (e.g. "iMac (21.5-inch, Late 2015)", "Sliver
+  // iMac - Age unknown - 21"") onto these tiers.
+  { category:"iMac Buyback", device:"iMac (21.5-inch, 2013-2014)", listPriceDisplay:"TBD — needs pricing" },
+  { category:"iMac Buyback", device:"iMac (21.5-inch, 2015-2016)", listPriceDisplay:"TBD — needs pricing" },
+  { category:"iMac Buyback", device:"iMac (21.5-inch Retina 4K, 2017-2019)", listPriceDisplay:"TBD — needs pricing" },
+  { category:"iMac Buyback", device:"iMac (27-inch Retina 5K, 2014-2017)", listPriceDisplay:"TBD — needs pricing" },
+  { category:"iMac Buyback", device:"iMac (21.5-inch, Age Unknown)", listPriceDisplay:"TBD — needs pricing" },
+  { category:"iMac Buyback", device:"iMac — Damaged / Cracked / Locked", listPriceDisplay:"TBD — needs pricing" },
   { category:"Chromebook Buyback", device:"Chromebook (Dell 3100 & similar)", listPriceDisplay:"$35–$45" },
   { category:"Desktop PC Buyback", device:"i3 Desktop", listPriceDisplay:"$45" },
   { category:"Desktop PC Buyback", device:"i5 Desktop", listPriceDisplay:"$65" },
   { category:"Desktop PC Buyback", device:"i7 Desktop", listPriceDisplay:"$85" },
+  // Single flat tier, no generational split, per explicit instruction.
+  { category:"Desktop PC Buyback", device:"Mac Mini", listPriceDisplay:"TBD — needs pricing" },
   { category:"Laptop Buyback", device:"i3 Laptop", listPriceDisplay:"$45" },
   { category:"Laptop Buyback", device:"i5 Laptop", listPriceDisplay:"$65" },
   { category:"Laptop Buyback", device:"i7 Laptop", listPriceDisplay:"$85" },
+  { category:"Laptop Buyback", device:"MacBook Air (Pre-2016)", listPriceDisplay:"TBD — needs pricing" },
   { category:"Laptop Buyback", device:"MacBook Pro / MacBook Air (2016 & Newer)", listPriceDisplay:"$225" },
   { category:"Additional Items (priced after pickup)", device:"Monitors", listPriceDisplay:"Priced after pickup" },
   { category:"Additional Items (priced after pickup)", device:"TVs", listPriceDisplay:"Priced after pickup" },
@@ -2436,6 +2451,88 @@ function listPriceFor(deviceName) {
 }
 
 const DEVICE_CONDITIONS = ["New", "Used - Good", "Used - Fair", "Used - Poor", "Damaged / Cracked / Locked"];
+
+// Maps a free-text device name (as submitted by a prospect, e.g. in a
+// pasted inventory spreadsheet) onto a DEVICE_PRICE_SHEET tier, so Bruce
+// gets a reference list price instead of pricing every line from scratch.
+// Deliberately does NOT factor in condition -- a damaged unit still shows
+// its normal generational tier as a reference price, with the matched
+// condition label shown alongside so Bruce can judge the discount himself,
+// rather than this function silently picking a lower tier for him.
+// Returns the matched DEVICE_PRICE_SHEET entry, or null if nothing fits
+// (caller shows "Not Found" so Bruce knows to price it manually).
+function matchDeviceToTier(rawName) {
+  const s = (rawName || "").toLowerCase();
+  const find = device => DEVICE_PRICE_SHEET.find(d => d.device === device);
+  if (!s.trim()) return null;
+
+  if (/\bipad\b/.test(s)) {
+    if (/\b9th\b|gen\.?\s*9\b/.test(s)) return find("iPad 9th Gen");
+    if (/\b8th\b|gen\.?\s*8\b/.test(s)) return find("iPad 8th Gen");
+    if (/\b7th\b|gen\.?\s*7\b/.test(s)) return find("iPad 7th Gen");
+    if (/\b6th\b|gen\.?\s*6\b/.test(s)) return find("iPad 6th Gen");
+    if (/\b5th\b|gen\.?\s*5\b/.test(s)) return find("iPad 5th Gen");
+    if (/\bair\b/.test(s)) {
+      if (/\b3\b/.test(s)) return find("iPad Air 3");
+      if (/\b2\b/.test(s)) return find("iPad Air 2");
+      return find("iPad Air 1");
+    }
+    if (/\bmini\b/.test(s)) return /\b2\b/.test(s) ? find("iPad Mini 2") : find("iPad Mini 1");
+    if (/\bpro\b/.test(s)) return find("iPad Pro 12.9\"");
+    if (/gen\.?\s*[1-4]\b/.test(s)) return find("iPad Gen 1–4");
+    return null; // bare "iPad" with no generation info -- don't guess
+  }
+
+  if (/\bimac\b/.test(s)) {
+    if (/retina\s*5k|27[\s-]?inch|27"/.test(s)) return find("iMac (27-inch Retina 5K, 2014-2017)");
+    if (/age unknown|unknown|^imac$|\bsilver\b/.test(s)) return find("iMac (21.5-inch, Age Unknown)");
+    if (/early\s*201[34]|\b201[34]\b/.test(s)) return find("iMac (21.5-inch, 2013-2014)");
+    if (/retina\s*4k|201[789]/.test(s)) return find("iMac (21.5-inch Retina 4K, 2017-2019)");
+    if (/201[56]/.test(s)) return find("iMac (21.5-inch, 2015-2016)");
+    return find("iMac (21.5-inch, Age Unknown)"); // generic "iMac" mention, no other signal
+  }
+
+  if (/mac\s*mini/.test(s)) return find("Mac Mini");
+
+  if (/macbook\s*(air|pro)/.test(s)) {
+    const yearMatch = s.match(/\b(19|20)\d{2}\b/);
+    const year = yearMatch ? parseInt(yearMatch[0], 10) : null;
+    if (year && year < 2016) return find("MacBook Air (Pre-2016)");
+    return find("MacBook Pro / MacBook Air (2016 & Newer)");
+  }
+
+  if (/chromebook/.test(s)) return find("Chromebook (Dell 3100 & similar)");
+  if (/monitor|cinema\s*display/.test(s)) return find("Monitors");
+  if (/\btv\b|television/.test(s)) return find("TVs");
+  if (/projector/.test(s)) return find("Projectors");
+  if (/smartboard|smart\s*panel/.test(s)) return find("Smartboards / Panels");
+  if (/keyboard|\bmouse\b/.test(s)) return find("Keyboards & Mice");
+  if (/network\s*cable|ethernet\s*cable/.test(s)) return find("Network Cables");
+  if (/\bups\b|\bapc\b/.test(s)) return find("Switches / Routers / SFP Modules / UPS Battery Units");
+  if (/router|wireless|broadband|airport|aiport|switch\b/.test(s)) return find("Switches / Routers / SFP Modules / UPS Battery Units");
+  if (/adapter|charger|transformer|power\s*supply/.test(s)) return find("Power Adapters");
+  if (/server|\brack\b/.test(s)) return find("Server Room Equipment");
+  if (/printer|speaker|soundstick|external\s*drive|lacie|aircard|air\s*card|battery/.test(s)) return find("Misc. Peripherals");
+
+  return null;
+}
+
+// Maps a free-text condition description (as submitted by a prospect) onto
+// one of the DEVICE_CONDITIONS canonical labels via keyword matching. If
+// nothing matches, returns the original text unchanged (still useful
+// context for Bruce) rather than discarding it -- unlike device matching,
+// there's no "Not Found" case here since the raw description is never
+// worse than showing nothing.
+function matchConditionToLabel(rawCondition) {
+  const s = (rawCondition || "").toLowerCase();
+  if (!s.trim()) return "";
+  if (/broken|crack|shatter|\block\b|locked|damag|repair|\blcd\b|logic\s*board|top\s*case/.test(s)) return "Damaged / Cracked / Locked";
+  if (/\bnew\b/.test(s)) return "New";
+  if (/\bpoor\b/.test(s)) return "Used - Poor";
+  if (/\bfair\b/.test(s)) return "Used - Fair";
+  if (/working|good/.test(s)) return "Used - Good";
+  return rawCondition; // no confident match -- keep the original text as-is
+}
 
 // Fire-and-forget: email delivery failure shouldn't block the underlying
 // status change, which has already been saved to Supabase by the caller.
@@ -3291,7 +3388,16 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         : parseDeviceLines(res.data.devices);
       const items = (res.data.pricing && res.data.pricing.length)
         ? res.data.pricing
-        : seedItems.map(d => ({ device: d.product, qty: d.qty, unit_price: 0, condition: d.condition || "", list_price: d.list_price || "" }));
+        : seedItems.map(d => {
+            const matched = matchDeviceToTier(d.product);
+            return {
+              device: d.product, // kept exactly as the prospect/rep submitted it
+              qty: d.qty,
+              unit_price: 0,
+              condition: matchConditionToLabel(d.condition || ""),
+              list_price: matched ? matched.listPriceDisplay : "Not Found",
+            };
+          });
       setLineItems(items);
       setQualifiedValue(res.data.qualified_value != null ? String(res.data.qualified_value) : "");
       originalPricingRef.current = (res.data.pricing && res.data.pricing.length) ? res.data.pricing : null;
