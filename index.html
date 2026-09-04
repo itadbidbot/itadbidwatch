@@ -2551,6 +2551,17 @@ function matchConditionToLabel(rawCondition) {
   return rawCondition; // no confident match -- keep the original text as-is
 }
 
+// Classifies one line item for display: "dropdown" when the device name
+// matches a real DEVICE_PRICE_SHEET tier (list price comes from that
+// tier/condition), "manual" otherwise -- a free-text item with no tier to
+// reference, priced the same way the sheet already prices anything
+// negotiated at pickup rather than off a fixed tier.
+function deviceMatchInfo(deviceName, condition) {
+  const matched = matchDeviceToTier(deviceName);
+  if (!matched) return { classification: "manual", listPrice: "Priced after pickup" };
+  return { classification: "dropdown", listPrice: priceForCondition(matched, condition) || "TBD — needs pricing" };
+}
+
 // Fire-and-forget: email delivery failure shouldn't block the underlying
 // status change, which has already been saved to Supabase by the caller.
 async function sendProposalEmail(type, to, fields) {
@@ -3405,22 +3416,18 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         : parseDeviceLines(res.data.devices);
       const items = (res.data.pricing && res.data.pricing.length)
         ? res.data.pricing
-        : seedItems.map(d => {
-            const condition = matchConditionToLabel(d.condition || "");
-            const matched = matchDeviceToTier(d.product);
-            // Distinguish "we don't know this product at all" (Not Found)
-            // from "we know this product, just not this condition's price
-            // yet" (TBD) -- both need Bruce's attention, but for different
-            // reasons.
-            const list_price = !matched ? "Not Found" : (priceForCondition(matched, condition) || "TBD — needs pricing");
-            return {
-              device: d.product, // kept exactly as the prospect/rep submitted it
-              qty: d.qty,
-              unit_price: 0,
-              condition,
-              list_price,
-            };
-          });
+        : seedItems.map(d => ({
+            device: d.product, // kept exactly as the prospect/rep submitted it
+            qty: d.qty,
+            unit_price: 0,
+            condition: matchConditionToLabel(d.condition || ""),
+            // list_price is deliberately NOT stored here -- it isn't
+            // persisted by the pricing save payload below, so a stored
+            // value would silently vanish after the first save/reload.
+            // deviceMatchInfo() computes it fresh at render time instead,
+            // from device+condition, so it's always current even if Bruce
+            // edits the device name or condition later.
+          }));
       setLineItems(items);
       setQualifiedValue(res.data.qualified_value != null ? String(res.data.qualified_value) : "");
       originalPricingRef.current = (res.data.pricing && res.data.pricing.length) ? res.data.pricing : null;
@@ -3747,14 +3754,22 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {proposal.device_items.map((d, i) => (
+                  {proposal.device_items.map((d, i) => {
+                    const condition = matchConditionToLabel(d.condition || "");
+                    const matchInfo = deviceMatchInfo(d.product, condition);
+                    return (
                     <tr key={i}>
                       <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#ffffff", fontFamily:"monospace" }}>{d.qty}</td>
-                      <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#ffffff" }}>{d.product}</td>
-                      <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#B0B7BC" }}>{d.condition || "—"}</td>
-                      <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#B0B7BC" }}>{d.list_price || "—"}</td>
+                      <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#ffffff" }}>
+                        {d.product}
+                        {matchInfo.classification === "manual" && (
+                          <div style={{ fontSize:"10px", color:"#4a6080", fontStyle:"italic" }}>Manual Entry</div>
+                        )}
+                      </td>
+                      <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#B0B7BC" }}>{condition || "—"}</td>
+                      <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#B0B7BC" }}>{matchInfo.listPrice}</td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             ) : (
@@ -3806,12 +3821,17 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {lineItems.map((row, idx) => (
+                  {lineItems.map((row, idx) => {
+                    const matchInfo = deviceMatchInfo(row.device, row.condition);
+                    return (
                     <tr key={idx} style={{ borderBottom:"1px solid #002244" }}>
                       <td style={{ padding:"6px 8px" }}>
                         {canEditPricing
                           ? <input value={row.device} onChange={e=>updateLine(idx,"device",e.target.value)} style={inputStyle} />
                           : <span style={{ color:"#ffffff", fontSize:"13px" }}>{row.device}</span>}
+                        {matchInfo.classification === "manual" && (
+                          <div style={{ fontSize:"10px", color:"#4a6080", marginTop:"3px", fontStyle:"italic" }}>Manual Entry</div>
+                        )}
                       </td>
                       <td style={{ padding:"6px 8px", width:"110px", color:"#B0B7BC", fontSize:"13px" }}>
                         {row.condition || "—"}
@@ -3834,8 +3854,8 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                             +{priceWarnings.find(w => w.index === idx).pct}% vs Bruce's ${priceWarnings.find(w => w.index === idx).origPrice.toFixed(2)}
                           </div>
                         )}
-                        {canBrucePrice && row.list_price && (
-                          <div style={{ fontSize:"10px", color:"#4a6080", marginTop:"3px" }}>List: {row.list_price}</div>
+                        {canBrucePrice && (
+                          <div style={{ fontSize:"10px", color:"#4a6080", marginTop:"3px" }}>List: {matchInfo.listPrice}</div>
                         )}
                       </td>
                       <td style={{ padding:"6px 8px", width:"110px", color:"#ffffff", fontSize:"13px", fontFamily:"monospace" }}>
@@ -3849,7 +3869,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
 
