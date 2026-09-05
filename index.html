@@ -2558,8 +2558,13 @@ function matchConditionToLabel(rawCondition) {
 // negotiated at pickup rather than off a fixed tier.
 function deviceMatchInfo(deviceName, condition) {
   const matched = matchDeviceToTier(deviceName);
-  if (!matched) return { classification: "manual", listPrice: "Priced after pickup" };
-  return { classification: "dropdown", listPrice: priceForCondition(matched, condition) || "TBD — needs pricing" };
+  if (!matched) return { classification: "manual", listPrice: "Priced after pickup", matchedTier: null, matchedCategory: null };
+  return {
+    classification: "dropdown",
+    listPrice: priceForCondition(matched, condition) || "TBD — needs pricing",
+    matchedTier: matched.device,
+    matchedCategory: matched.category,
+  };
 }
 
 // Fire-and-forget: email delivery failure shouldn't block the underlying
@@ -3762,8 +3767,10 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                       <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#ffffff", fontFamily:"monospace" }}>{d.qty}</td>
                       <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#ffffff" }}>
                         {d.product}
-                        {matchInfo.classification === "manual" && (
+                        {matchInfo.classification === "manual" ? (
                           <div style={{ fontSize:"10px", color:"#4a6080", fontStyle:"italic" }}>Manual Entry</div>
+                        ) : (
+                          <div style={{ fontSize:"10px", color:"#4a6080" }}>{matchInfo.matchedCategory} — {matchInfo.matchedTier}</div>
                         )}
                       </td>
                       <td style={{ padding:"3px 8px 3px 0", fontSize:"13px", color:"#B0B7BC" }}>{condition || "—"}</td>
@@ -3829,8 +3836,10 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                         {canEditPricing
                           ? <input value={row.device} onChange={e=>updateLine(idx,"device",e.target.value)} style={inputStyle} />
                           : <span style={{ color:"#ffffff", fontSize:"13px" }}>{row.device}</span>}
-                        {matchInfo.classification === "manual" && (
+                        {matchInfo.classification === "manual" ? (
                           <div style={{ fontSize:"10px", color:"#4a6080", marginTop:"3px", fontStyle:"italic" }}>Manual Entry</div>
+                        ) : (
+                          <div style={{ fontSize:"10px", color:"#4a6080", marginTop:"3px" }}>{matchInfo.matchedCategory} — {matchInfo.matchedTier}</div>
                         )}
                       </td>
                       <td style={{ padding:"6px 8px", width:"110px", color:"#B0B7BC", fontSize:"13px" }}>
