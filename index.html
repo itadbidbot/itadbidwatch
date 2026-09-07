@@ -2567,6 +2567,40 @@ function deviceMatchInfo(deviceName, condition) {
   };
 }
 
+// Consolidates raw {product, qty, condition} lines (one per prospect-
+// submitted row) into one line item per (matched tier, condition) pair --
+// e.g. 14 different peripheral names that all match "Misc. Peripherals"
+// become a single "Misc. Peripherals" row with qty summed across all of
+// them, plus a `notes` breakdown so the original detail isn't lost. All
+// unmatched ("manual") items are grouped into one "Manual Entry" row the
+// same way, since none of them have a real tier price either. `notes` is
+// a clean copy/paste-able list, one item per line: "26x <original name>".
+function groupSeedItemsForPricing(seedItems) {
+  const groups = new Map();
+  for (const d of seedItems) {
+    const condition = matchConditionToLabel(d.condition || "");
+    const info = deviceMatchInfo(d.product, condition);
+    const device = info.classification === "manual" ? "Manual Entry" : info.matchedTier;
+    const key = `${device}||${condition}`;
+    if (!groups.has(key)) groups.set(key, { device, condition, qty: 0, breakdown: new Map() });
+    const g = groups.get(key);
+    const qty = Number(d.qty) || 0;
+    g.qty += qty;
+    // Aggregate by exact raw product text first -- a source spreadsheet
+    // with one row per physical unit (qty=1 each) would otherwise produce
+    // e.g. 126 separate "1x iPad Gen 9" lines instead of one "126x iPad
+    // Gen 9" line.
+    g.breakdown.set(d.product, (g.breakdown.get(d.product) || 0) + qty);
+  }
+  return Array.from(groups.values()).map(g => ({
+    device: g.device,
+    condition: g.condition,
+    qty: g.qty,
+    unit_price: 0,
+    notes: Array.from(g.breakdown.entries()).map(([product, q]) => `${q}x ${product}`).join("\n"),
+  }));
+}
+
 // Fire-and-forget: email delivery failure shouldn't block the underlying
 // status change, which has already been saved to Supabase by the caller.
 async function sendProposalEmail(type, to, fields) {
@@ -3421,18 +3455,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         : parseDeviceLines(res.data.devices);
       const items = (res.data.pricing && res.data.pricing.length)
         ? res.data.pricing
-        : seedItems.map(d => ({
-            device: d.product, // kept exactly as the prospect/rep submitted it
-            qty: d.qty,
-            unit_price: 0,
-            condition: matchConditionToLabel(d.condition || ""),
-            // list_price is deliberately NOT stored here -- it isn't
-            // persisted by the pricing save payload below, so a stored
-            // value would silently vanish after the first save/reload.
-            // deviceMatchInfo() computes it fresh at render time instead,
-            // from device+condition, so it's always current even if Bruce
-            // edits the device name or condition later.
-          }));
+        : groupSeedItemsForPricing(seedItems);
       setLineItems(items);
       setQualifiedValue(res.data.qualified_value != null ? String(res.data.qualified_value) : "");
       originalPricingRef.current = (res.data.pricing && res.data.pricing.length) ? res.data.pricing : null;
@@ -3494,7 +3517,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
     setSaving(true); setSaveError("");
     try {
       const payload = {
-        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"" })),
+        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"", notes:r.notes||"" })),
         qualified_value: qualifiedValue !== "" ? Number(qualifiedValue) : computedTotal,
         status: "pending_pricing",
       };
@@ -3520,7 +3543,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
     setSaving(true); setSaveError("");
     try {
       const payload = {
-        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"" })),
+        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"", notes:r.notes||"" })),
         qualified_value: qualifiedValue !== "" ? Number(qualifiedValue) : computedTotal,
         status: "review",
         priced_at: new Date().toISOString(),
@@ -3550,7 +3573,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
       contact_name: proposal.contact_name, contact_email: proposal.contact_email,
       contact_phone: proposal.contact_phone, contact_title: proposal.contact_title,
       qualified_value: qualifiedValue !== "" ? Number(qualifiedValue) : computedTotal,
-      pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"" })),
+      pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"", notes:r.notes||"" })),
       rep_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
       rep_email: currentUser.email,
     };
@@ -3602,7 +3625,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         approved_by_name: (currentUser.user_metadata && currentUser.user_metadata.full_name) || currentUser.email,
         approved_by_email: currentUser.email,
         pdf_url: pdfUrl,
-        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"" })),
+        pricing: lineItems.map(r => ({ device:r.device, qty:Number(r.qty)||0, unit_price:Number(r.unit_price)||0, subtotal:lineSubtotal(r), condition:r.condition||"", notes:r.notes||"" })),
         qualified_value: qualifiedValue !== "" ? Number(qualifiedValue) : computedTotal,
       };
       let res = await window._db.from("proposals").update(approvePayload).eq("id", proposalId).select().single();
@@ -3841,6 +3864,12 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
                         ) : (
                           <div style={{ fontSize:"10px", color:"#4a6080", marginTop:"3px" }}>{matchInfo.matchedCategory} — {matchInfo.matchedTier}</div>
                         )}
+                        {canEditPricing ? (
+                          <textarea value={row.notes || ""} onChange={e=>updateLine(idx,"notes",e.target.value)} placeholder="Notes (optional) — item breakdown"
+                            rows={2} style={{ ...inputStyle, marginTop:"6px", fontSize:"11px", resize:"vertical", fontFamily:"inherit" }} />
+                        ) : row.notes ? (
+                          <div style={{ fontSize:"11px", color:"#B0B7BC", marginTop:"6px", whiteSpace:"pre-line" }}>{row.notes}</div>
+                        ) : null}
                       </td>
                       <td style={{ padding:"6px 8px", width:"110px", color:"#B0B7BC", fontSize:"13px" }}>
                         {row.condition || "—"}
