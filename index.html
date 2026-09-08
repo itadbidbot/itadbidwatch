@@ -2702,6 +2702,38 @@ function money(n) {
   return isFinite(v) ? `$${v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—";
 }
 
+// Parses a pasted "Device / Condition / Qty" list -- the exact format
+// this app hands back as a reference table (markdown pipe table copied
+// straight from chat) or a spreadsheet copy-paste (tab- or comma-
+// separated). One row per device+condition group, in that column order.
+// Skips header rows ("Device"/"Qty" literal text) and markdown separator
+// rows ("|---|---|---|"). "-" or "—" in the Condition column means blank.
+function parseDeviceQtyList(text) {
+  if (!text) return [];
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const results = [];
+  for (const line of lines) {
+    if (/^\|?[\s:|-]+\|?$/.test(line)) continue; // markdown separator row
+    let cells;
+    if (line.includes("|")) {
+      cells = line.split("|").map(c => c.trim()).filter((c, i, arr) => !(c === "" && (i === 0 || i === arr.length - 1)));
+    } else if (line.includes("\t")) {
+      cells = line.split("\t").map(c => c.trim());
+    } else if (line.includes(",")) {
+      cells = line.split(",").map(c => c.trim());
+    } else {
+      continue; // not a recognizable delimited row
+    }
+    if (cells.length < 3) continue;
+    const [device, condition, qtyRaw] = cells;
+    if (/^device$/i.test(device)) continue; // header row
+    const qty = parseInt(String(qtyRaw).replace(/[^\d]/g, ""), 10);
+    if (!device || !qty) continue;
+    results.push({ device, condition: /^[-—]$/.test(condition) ? "" : condition, qty });
+  }
+  return results;
+}
+
 function BuildProposalView({ currentUser, onDone }) {
   const inputStyle = {
     width:"100%", padding:"9px 12px", background:"#002244",
@@ -2740,6 +2772,9 @@ function BuildProposalView({ currentUser, onDone }) {
   const [deviceRows, setDeviceRows] = useState([{ id:1, type:"dropdown", device:"", condition:"", qty:1 }]);
   const [pickupDate, setPickupDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [pasteImportOpen, setPasteImportOpen] = useState(false);
+  const [pasteImportText, setPasteImportText] = useState("");
+  const [pasteImportSummary, setPasteImportSummary] = useState(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -2754,6 +2789,28 @@ function BuildProposalView({ currentUser, onDone }) {
   }
   function addManualRow() {
     setDeviceRows(rows => [...rows, { id: nextRowId.current++, type:"manual", device:"", condition:"", qty:1 }]);
+  }
+  function importPastedDeviceList() {
+    const parsed = parseDeviceQtyList(pasteImportText);
+    if (parsed.length === 0) {
+      setPasteImportSummary("No rows recognized -- expected a Device / Condition / Qty table (pipe, tab, or comma separated).");
+      return;
+    }
+    const newRows = parsed.map(p => {
+      // Exact match only: this list already holds resolved tier names
+      // (e.g. from the app's own reference table), not raw free text
+      // needing fuzzy matching -- an exact hit means the dropdown's exact
+      // price tier applies, anything else is priced manually.
+      const isKnownTier = DEVICE_PRICE_SHEET.some(d => d.device === p.device);
+      return { id: nextRowId.current++, type: isKnownTier ? "dropdown" : "manual", device: p.device, condition: p.condition, qty: p.qty };
+    });
+    setDeviceRows(rows => {
+      const onlyDefaultRow = rows.length === 1 && !rows[0].device.trim();
+      return onlyDefaultRow ? newRows : [...rows, ...newRows];
+    });
+    const matchedCount = newRows.filter(r => r.type === "dropdown").length;
+    setPasteImportSummary(`Added ${newRows.length} row${newRows.length===1?"":"s"} (${matchedCount} matched a price tier, ${newRows.length - matchedCount} need manual pricing).`);
+    setPasteImportText("");
   }
   function updateDeviceRow(id, field, value) {
     setDeviceRows(rows => rows.map(r => r.id === id ? { ...r, [field]: value } : r));
@@ -3184,7 +3241,28 @@ function BuildProposalView({ currentUser, onDone }) {
               <button type="button" onClick={addManualRow} style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 12px", borderRadius:"6px", cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
                 <Plus size={12} /> Manual Entry
               </button>
+              <button type="button" onClick={() => { setPasteImportOpen(o => !o); setPasteImportSummary(null); }}
+                style={{ background:"transparent", border:"1px solid #003875", color:"#B0B7BC", fontSize:"12px", padding:"6px 12px", borderRadius:"6px", cursor:"pointer", display:"flex", alignItems:"center", gap:"6px" }}>
+                <Upload size={12} /> Paste a Device List
+              </button>
             </div>
+            {pasteImportOpen && (
+              <div style={{ marginTop:"12px", padding:"14px", background:"#002244", border:"1px solid #003875", borderRadius:"8px" }}>
+                <div style={{ fontSize:"11px", color:"#B0B7BC", marginBottom:"8px" }}>
+                  Paste a Device / Condition / Qty table — pipe, tab, or comma separated (e.g. copied straight from a chat reference table or a spreadsheet). One row per line.
+                </div>
+                <textarea value={pasteImportText} onChange={e=>setPasteImportText(e.target.value)}
+                  placeholder={"iPad 6th Gen\tEngraved / Personalized\t132\nMacBook Pro / MacBook Air (2016 & Newer)\t\t34\n..."}
+                  rows={6} style={{ ...inputStyle, fontSize:"12px", fontFamily:"monospace", resize:"vertical" }} />
+                <div style={{ display:"flex", alignItems:"center", gap:"10px", marginTop:"8px" }}>
+                  <button type="button" onClick={importPastedDeviceList}
+                    style={{ background:"linear-gradient(135deg,#C60C30,#9a0a26)", border:"none", color:"#fff", fontSize:"12px", fontWeight:700, padding:"7px 14px", borderRadius:"6px", cursor:"pointer" }}>
+                    Import
+                  </button>
+                  {pasteImportSummary && <div style={{ fontSize:"11px", color:"#B0B7BC" }}>{pasteImportSummary}</div>}
+                </div>
+              </div>
+            )}
             <div style={hintStyle}>List Price is a reference from TechReboot's buyback sheet — Bruce still sets the actual deal price. Condition is optional.</div>
           </div>
           <div style={fieldStyle}>
