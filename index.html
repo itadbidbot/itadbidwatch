@@ -2902,7 +2902,7 @@ function BuildProposalView({ currentUser, onDone }) {
         rep_name: record.submitted_by_name, org_name: record.org_name,
         address: record.address, city: record.city, state: record.state, zip: record.zip,
         contact_name: record.contact_name, contact_email: record.contact_email, contact_phone: record.contact_phone,
-        devices: record.devices, pickup_date: record.pickup_date, notes: record.notes,
+        devices: record.devices, device_items: record.device_items, pickup_date: record.pickup_date, notes: record.notes,
         proposal_url: BUILD_PROPOSAL_URL(),
       });
     } catch(e) {
@@ -3528,7 +3528,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         rep_name: res.data.submitted_by_name, org_name: res.data.org_name,
         address: res.data.address, city: res.data.city, state: res.data.state, zip: res.data.zip,
         contact_name: res.data.contact_name, contact_email: res.data.contact_email, contact_phone: res.data.contact_phone,
-        devices: res.data.devices, pickup_date: res.data.pickup_date,
+        devices: res.data.devices, device_items: res.data.device_items, pickup_date: res.data.pickup_date,
         notes: `Rep flagged a price change for re-approval — see updated pricing in ITAD Bid Watch.`,
         proposal_url: BUILD_PROPOSAL_URL(),
       });
@@ -3686,7 +3686,7 @@ function ProposalEditorView({ proposalId, currentUser, onBack }) {
         rep_name: record.submitted_by_name, org_name: record.org_name,
         address: record.address, city: record.city, state: record.state, zip: record.zip,
         contact_name: record.contact_name, contact_email: record.contact_email, contact_phone: record.contact_phone,
-        devices: record.devices, notes: `Cloned from a previous proposal that reached its ${SEND_LIMIT}-send limit.`,
+        devices: record.devices, device_items: record.device_items, notes: `Cloned from a previous proposal that reached its ${SEND_LIMIT}-send limit.`,
         proposal_url: BUILD_PROPOSAL_URL(),
       });
       onBack();
