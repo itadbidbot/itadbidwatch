@@ -152,15 +152,24 @@ level status here as authoritative, not the individual boxes above).
   string) from all 3 `sendProposalEmail("bruce_pricing_request", ...)` call
   sites in `index.html` — done.
 
+### Known issues fixed (2026-09-09)
+
+- **Bulk-paste device list built** — "New Proposal" was one-row-at-a-time
+  only, which made a real prospect device list slow enough that the user
+  found emailing Bruce directly faster than using the tool. Added a
+  "Paste a Device List" button that parses a pasted Device/Condition/Qty
+  table (`parseDeviceQtyList()` in `index.html` — pipe/tab/comma
+  separated, matching the exact reference-table format this app/session
+  already hands back) and auto-populates rows via `importPastedDeviceList()`,
+  matching each device name exactly against `DEVICE_PRICE_SHEET` to decide
+  dropdown vs. manual-entry row type. Verified end-to-end against a real
+  4-row mixed table.
+
 ### Known gaps (not yet built)
 
-- **No bulk-paste device list** in the "New Proposal" form — devices are
-  added one row at a time (dropdown or manual entry). `parseDeviceLines()`
-  exists in `index.html` and can parse a pasted multi-line list, but nothing
-  in the New Proposal UI calls it yet. Workaround for now: build a manual
-  Device/Condition/Qty breakdown first (tier-matching helpers `matchDeviceToTier()`
-  / `deviceMatchInfo()` / `groupSeedItemsForPricing()` in `index.html` can
-  generate this from a raw spreadsheet), then add rows by hand.
 - **New pricing tiers added 2026-09 still need real prices**: iMac tiers (6),
   Mac Mini, MacBook Air (Pre-2016) all show "TBD — needs pricing" in
   `DEVICE_PRICE_SHEET` until Bruce/Michael supply real buyback figures.
+  "Engraved / Personalized" condition (added 2026-09-08) also has no price
+  set on any tier yet -- undecided whether it should default to Used-Good
+  pricing or always be priced manually.
