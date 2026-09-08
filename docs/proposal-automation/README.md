@@ -1,6 +1,7 @@
 # TechReboot Proposal Automation
 
-**Status:** Specification complete. Ready to build.
+**Status:** Live and in production use (as of 2026-09). See `MVP_CHECKLIST.md`
+for current phase status and recent fixes.
 
 ## What This Does
 

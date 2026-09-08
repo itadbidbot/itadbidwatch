@@ -126,9 +126,41 @@
 
 ## Current Status
 
+**As of 2026-09-08: all 4 components are built and in active production use**
+(real proposals submitted, priced by Bruce, and emailed — this checklist's
+per-box items below predate that and were never updated; treat the phase-
+level status here as authoritative, not the individual boxes above).
+
 - [x] Specification complete (BUILD_PLAN.md)
-- [ ] Phase 1 — Form component
-- [ ] Phase 2 — Proposal editor
-- [ ] Phase 3 — Email notifications
-- [ ] Phase 4 — Status tracking
-- [ ] Phase 5 — Testing & launch
+- [x] Phase 1 — Form component (org/contact/device rows, dropdown or manual entry, HubSpot autocomplete)
+- [x] Phase 2 — Proposal editor (Bruce prices, rep reviews/approves, PDF generation via `bidbot-proposals-api`)
+- [x] Phase 3 — Email notifications (bruce_pricing_request, rep_pricing_ready, bruce_approved, customer_proposal, rep_congrats all wired and sending)
+- [x] Phase 4 — Status tracking (`ProposalsListView` table + per-proposal activity)
+- [ ] Phase 5 — Testing & launch — no formal end-to-end test pass has been run against this checklist; confidence instead comes from real production use plus the specific bugs below, found and fixed via that real use rather than systematic testing
+
+### Known issues fixed (2026-09-08)
+
+- **Email device list rendered as one unreadable blob.** `tpl_bruce_pricing_request`'s
+  Devices row escaped and dumped the whole comma-joined device string into a
+  single table cell with no line breaks. Fixed: renders `device_items` as one
+  line per device via `<br>` (`devices_list_html()` in `bidbot-proposals-api/app.py`).
+- **Notes field silently collapsed to one line.** Same root cause (HTML ignores
+  literal `\n`) — a pasted multi-line/itemized note looked like it "didn't come
+  through" because it rendered as one run-on line. Fixed via `multiline_html()`,
+  same file.
+- Both required passing `device_items` (not just the flattened `devices`
+  string) from all 3 `sendProposalEmail("bruce_pricing_request", ...)` call
+  sites in `index.html` — done.
+
+### Known gaps (not yet built)
+
+- **No bulk-paste device list** in the "New Proposal" form — devices are
+  added one row at a time (dropdown or manual entry). `parseDeviceLines()`
+  exists in `index.html` and can parse a pasted multi-line list, but nothing
+  in the New Proposal UI calls it yet. Workaround for now: build a manual
+  Device/Condition/Qty breakdown first (tier-matching helpers `matchDeviceToTier()`
+  / `deviceMatchInfo()` / `groupSeedItemsForPricing()` in `index.html` can
+  generate this from a raw spreadsheet), then add rows by hand.
+- **New pricing tiers added 2026-09 still need real prices**: iMac tiers (6),
+  Mac Mini, MacBook Air (Pre-2016) all show "TBD — needs pricing" in
+  `DEVICE_PRICE_SHEET` until Bruce/Michael supply real buyback figures.
