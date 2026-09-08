@@ -2467,7 +2467,7 @@ function listPriceFor(deviceName, condition) {
   return priceForCondition(entry, condition);
 }
 
-const DEVICE_CONDITIONS = ["New", "Used - Good", "Used - Fair", "Used - Poor", "Damaged / Cracked / Locked"];
+const DEVICE_CONDITIONS = ["New", "Used - Good", "Used - Fair", "Used - Poor", "Damaged / Cracked / Locked", "Engraved / Personalized"];
 
 // Maps a free-text device name (as submitted by a prospect, e.g. in a
 // pasted inventory spreadsheet) onto a DEVICE_PRICE_SHEET tier, so Bruce
@@ -2554,6 +2554,7 @@ function matchConditionToLabel(rawCondition) {
   const s = (rawCondition || "").toLowerCase();
   if (!s.trim()) return "";
   if (/broken|crack|shatter|\block\b|locked|damag|repair|\blcd\b|logic\s*board|top\s*case|boot\s*loop|will\s*not\s*boot|won'?t\s*boot|unable\s*to\s*wipe|daughter\s*board|sticky|parts\s*only|no\s*lid/.test(s)) return "Damaged / Cracked / Locked";
+  if (/engrav|personalized/.test(s)) return "Engraved / Personalized";
   if (/\bnew\b/.test(s)) return "New";
   if (/\bpoor\b/.test(s)) return "Used - Poor";
   if (/\bfair\b/.test(s)) return "Used - Fair";
