@@ -2483,6 +2483,25 @@ function matchDeviceToTier(rawName) {
   const find = device => DEVICE_PRICE_SHEET.find(d => d.device === device);
   if (!s.trim()) return null;
 
+  // Accessory/peripheral keywords are checked FIRST, before any device-
+  // family branch below. An accessory's own description routinely mentions
+  // a device family by name -- "iPad Chargers", "MacBook Air Battery" --
+  // without being a unit of that device; checking device families first
+  // would misroute 154 chargers as unmatched "iPad" units (or worse, 2
+  // battery packs as 2 additional full-price MacBook Air laptops).
+  if (/chromebook/.test(s)) return find("Chromebook (Dell 3100 & similar)");
+  if (/monitor|cinema\s*display/.test(s)) return find("Monitors");
+  if (/\btv\b|television/.test(s)) return find("TVs");
+  if (/projector/.test(s)) return find("Projectors");
+  if (/smartboard|smart\s*panel/.test(s)) return find("Smartboards / Panels");
+  if (/keyboard|\bmouse\b/.test(s)) return find("Keyboards & Mice");
+  if (/network\s*cable|ethernet\s*cable/.test(s)) return find("Network Cables");
+  if (/\bups\b|\bapc\b/.test(s)) return find("Switches / Routers / SFP Modules / UPS Battery Units");
+  if (/router|wireless|broadband|airport|aiport|switch\b/.test(s)) return find("Switches / Routers / SFP Modules / UPS Battery Units");
+  if (/adapter|charger|transformer|power\s*supply/.test(s)) return find("Power Adapters");
+  if (/server|\brack\b/.test(s)) return find("Server Room Equipment");
+  if (/printer|speaker|soundstick|external\s*drive|lacie|aircard|air\s*card|battery/.test(s)) return find("Misc. Peripherals");
+
   if (/\bipad\b/.test(s)) {
     if (/\b9th\b|gen\.?\s*9\b/.test(s)) return find("iPad 9th Gen");
     if (/\b8th\b|gen\.?\s*8\b/.test(s)) return find("iPad 8th Gen");
@@ -2497,6 +2516,10 @@ function matchDeviceToTier(rawName) {
     if (/\bmini\b/.test(s)) return /\b2\b/.test(s) ? find("iPad Mini 2") : find("iPad Mini 1");
     if (/\bpro\b/.test(s)) return find("iPad Pro 12.9\"");
     if (/gen\.?\s*[1-4]\b/.test(s)) return find("iPad Gen 1–4");
+    // Bare "iPad 2"/"iPad 3"/"iPad 4" (no "Gen" word) also means 1st-4th
+    // generation -- checked after air/mini above so "iPad Air 2"/"iPad
+    // Mini 2" never reach here.
+    if (/\b[1-4]\b/.test(s)) return find("iPad Gen 1–4");
     return null; // bare "iPad" with no generation info -- don't guess
   }
 
@@ -2518,19 +2541,6 @@ function matchDeviceToTier(rawName) {
     return find("MacBook Pro / MacBook Air (2016 & Newer)");
   }
 
-  if (/chromebook/.test(s)) return find("Chromebook (Dell 3100 & similar)");
-  if (/monitor|cinema\s*display/.test(s)) return find("Monitors");
-  if (/\btv\b|television/.test(s)) return find("TVs");
-  if (/projector/.test(s)) return find("Projectors");
-  if (/smartboard|smart\s*panel/.test(s)) return find("Smartboards / Panels");
-  if (/keyboard|\bmouse\b/.test(s)) return find("Keyboards & Mice");
-  if (/network\s*cable|ethernet\s*cable/.test(s)) return find("Network Cables");
-  if (/\bups\b|\bapc\b/.test(s)) return find("Switches / Routers / SFP Modules / UPS Battery Units");
-  if (/router|wireless|broadband|airport|aiport|switch\b/.test(s)) return find("Switches / Routers / SFP Modules / UPS Battery Units");
-  if (/adapter|charger|transformer|power\s*supply/.test(s)) return find("Power Adapters");
-  if (/server|\brack\b/.test(s)) return find("Server Room Equipment");
-  if (/printer|speaker|soundstick|external\s*drive|lacie|aircard|air\s*card|battery/.test(s)) return find("Misc. Peripherals");
-
   return null;
 }
 
@@ -2543,7 +2553,7 @@ function matchDeviceToTier(rawName) {
 function matchConditionToLabel(rawCondition) {
   const s = (rawCondition || "").toLowerCase();
   if (!s.trim()) return "";
-  if (/broken|crack|shatter|\block\b|locked|damag|repair|\blcd\b|logic\s*board|top\s*case/.test(s)) return "Damaged / Cracked / Locked";
+  if (/broken|crack|shatter|\block\b|locked|damag|repair|\blcd\b|logic\s*board|top\s*case|boot\s*loop|will\s*not\s*boot|won'?t\s*boot|unable\s*to\s*wipe|daughter\s*board|sticky|parts\s*only|no\s*lid/.test(s)) return "Damaged / Cracked / Locked";
   if (/\bnew\b/.test(s)) return "New";
   if (/\bpoor\b/.test(s)) return "Used - Poor";
   if (/\bfair\b/.test(s)) return "Used - Fair";
